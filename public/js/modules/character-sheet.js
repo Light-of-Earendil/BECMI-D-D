@@ -161,7 +161,7 @@ class CharacterSheetModule {
                 
                 <div class="character-session">
                     <i class="fas fa-calendar"></i>
-                    <span>${character.session_title}</span>
+                    <span>${character.session_title || 'Unassigned'}</span>
                 </div>
                 
                 <div class="character-actions">
