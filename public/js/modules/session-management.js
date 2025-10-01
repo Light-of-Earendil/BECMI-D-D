@@ -424,6 +424,28 @@ class SessionManagementModule {
             e.preventDefault();
             this.app.navigateToView('sessions');
         });
+        
+        // DM HP Control actions
+        $(document).on('click', '[data-action="dm-damage-character"]', (e) => {
+            e.preventDefault();
+            const characterId = $(e.currentTarget).data('character-id');
+            const characterName = $(e.currentTarget).data('character-name');
+            this.dmDamageCharacter(characterId, characterName);
+        });
+        
+        $(document).on('click', '[data-action="dm-heal-character"]', (e) => {
+            e.preventDefault();
+            const characterId = $(e.currentTarget).data('character-id');
+            const characterName = $(e.currentTarget).data('character-name');
+            this.dmHealCharacter(characterId, characterName);
+        });
+        
+        $(document).on('click', '[data-action="dm-set-hp"]', (e) => {
+            e.preventDefault();
+            const characterId = $(e.currentTarget).data('character-id');
+            const characterName = $(e.currentTarget).data('character-name');
+            this.dmSetHP(characterId, characterName);
+        });
     }
     
     /**
@@ -1218,6 +1240,36 @@ class SessionManagementModule {
                             <span class="hp-value ${hpStatus}">${character.hp.current}/${character.hp.max}</span>
                             ${character.hp.is_dead ? '<span class="dead-indicator"><i class="fas fa-skull"></i> DEAD</span>' : ''}
                         </div>
+                        <div class="dm-hp-controls">
+                            <button class="btn btn-xs btn-danger" 
+                                    data-action="dm-damage-character" 
+                                    data-character-id="${character.character_id}"
+                                    data-character-name="${character.character_name}"
+                                    title="Apply damage">
+                                <i class="fas fa-heart-broken"></i> Damage
+                            </button>
+                            <input type="number" 
+                                   class="hp-quick-input" 
+                                   id="dm-hp-input-${character.character_id}" 
+                                   min="1" 
+                                   max="999" 
+                                   value="5" 
+                                   placeholder="HP">
+                            <button class="btn btn-xs btn-success" 
+                                    data-action="dm-heal-character" 
+                                    data-character-id="${character.character_id}"
+                                    data-character-name="${character.character_name}"
+                                    title="Heal character">
+                                <i class="fas fa-heart"></i> Heal
+                            </button>
+                            <button class="btn btn-xs btn-warning" 
+                                    data-action="dm-set-hp" 
+                                    data-character-id="${character.character_id}"
+                                    data-character-name="${character.character_name}"
+                                    title="Set exact HP">
+                                <i class="fas fa-edit"></i> Set
+                            </button>
+                        </div>
                     </div>
                 </div>
                 
@@ -1262,6 +1314,141 @@ class SessionManagementModule {
                 </div>
             </div>
         `;
+    }
+    
+    /**
+     * DM applies damage to character
+     * 
+     * @param {number} characterId - ID of character
+     * @param {string} characterName - Name of character
+     */
+    async dmDamageCharacter(characterId, characterName) {
+        try {
+            const hpInput = $(`#dm-hp-input-${characterId}`);
+            const damageAmount = parseInt(hpInput.val()) || 0;
+            
+            if (damageAmount <= 0) {
+                this.app.showError('Please enter a valid damage amount');
+                return;
+            }
+            
+            console.log(`DM applying ${damageAmount} damage to ${characterName} (ID: ${characterId})`);
+            
+            // Call HP update API
+            const response = await this.apiClient.post('/api/character/update-hp.php', {
+                character_id: characterId,
+                hp_change: -damageAmount,
+                reason: `DM applied ${damageAmount} damage`
+            });
+            
+            if (response.status === 'success') {
+                const isDead = response.data.is_dead;
+                if (isDead) {
+                    this.app.showError(`${characterName} has been killed! (HP: ${response.data.new_hp}/${response.data.max_hp})`);
+                } else {
+                    this.app.showSuccess(`${characterName} took ${damageAmount} damage (HP: ${response.data.new_hp}/${response.data.max_hp})`);
+                }
+                
+                // Reload DM dashboard to update HP display
+                await this.viewDMDashboard(this.currentSession.session_id);
+            } else {
+                this.app.showError(response.message || 'Failed to apply damage');
+            }
+            
+        } catch (error) {
+            console.error('Failed to apply damage:', error);
+            this.app.showError('Failed to apply damage: ' + error.message);
+        }
+    }
+    
+    /**
+     * DM heals character
+     * 
+     * @param {number} characterId - ID of character
+     * @param {string} characterName - Name of character
+     */
+    async dmHealCharacter(characterId, characterName) {
+        try {
+            const hpInput = $(`#dm-hp-input-${characterId}`);
+            const healAmount = parseInt(hpInput.val()) || 0;
+            
+            if (healAmount <= 0) {
+                this.app.showError('Please enter a valid heal amount');
+                return;
+            }
+            
+            console.log(`DM healing ${healAmount} HP to ${characterName} (ID: ${characterId})`);
+            
+            // Call HP update API
+            const response = await this.apiClient.post('/api/character/update-hp.php', {
+                character_id: characterId,
+                hp_change: healAmount,
+                reason: `DM healed ${healAmount} HP`
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess(`${characterName} healed ${healAmount} HP (HP: ${response.data.new_hp}/${response.data.max_hp})`);
+                
+                // Reload DM dashboard to update HP display
+                await this.viewDMDashboard(this.currentSession.session_id);
+            } else {
+                this.app.showError(response.message || 'Failed to heal');
+            }
+            
+        } catch (error) {
+            console.error('Failed to heal character:', error);
+            this.app.showError('Failed to heal character: ' + error.message);
+        }
+    }
+    
+    /**
+     * DM sets exact HP value
+     * 
+     * @param {number} characterId - ID of character
+     * @param {string} characterName - Name of character
+     */
+    async dmSetHP(characterId, characterName) {
+        try {
+            const newHP = prompt(`Set exact HP for ${characterName}:`, '');
+            
+            if (newHP === null) {
+                return; // User cancelled
+            }
+            
+            const hpValue = parseInt(newHP);
+            
+            if (isNaN(hpValue) || hpValue < -10) {
+                this.app.showError('Please enter a valid HP value (-10 to max)');
+                return;
+            }
+            
+            console.log(`DM setting HP to ${hpValue} for ${characterName} (ID: ${characterId})`);
+            
+            // Call HP update API
+            const response = await this.apiClient.post('/api/character/update-hp.php', {
+                character_id: characterId,
+                new_hp: hpValue,
+                reason: `DM set HP to ${hpValue}`
+            });
+            
+            if (response.status === 'success') {
+                const isDead = response.data.is_dead;
+                if (isDead) {
+                    this.app.showError(`${characterName} HP set to ${hpValue} (DEAD)`);
+                } else {
+                    this.app.showSuccess(`${characterName} HP set to ${hpValue}/${response.data.max_hp}`);
+                }
+                
+                // Reload DM dashboard to update HP display
+                await this.viewDMDashboard(this.currentSession.session_id);
+            } else {
+                this.app.showError(response.message || 'Failed to set HP');
+            }
+            
+        } catch (error) {
+            console.error('Failed to set HP:', error);
+            this.app.showError('Failed to set HP: ' + error.message);
+        }
     }
     
     /**
