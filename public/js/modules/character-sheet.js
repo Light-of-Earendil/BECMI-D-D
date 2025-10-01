@@ -462,21 +462,13 @@ class CharacterSheetModule {
      */
     async deleteCharacter(characterId) {
         try {
-            // Load character to get name for confirmation
-            let character;
-            if (this.currentCharacter && this.currentCharacter.character_id == characterId) {
-                character = this.currentCharacter;
-            } else {
-                character = await this.loadCharacter(characterId);
-            }
-            
-            // Confirm deletion
-            const confirmMessage = `Are you sure you want to delete "${character.character_name}"?\n\nThis action cannot be undone.`;
+            // Simple confirmation (we don't need to load the character)
+            const confirmMessage = `Are you sure you want to delete this character?\n\nThis action cannot be undone.`;
             if (!confirm(confirmMessage)) {
                 return;
             }
             
-            console.log(`Deleting character ${characterId}: ${character.character_name}`);
+            console.log(`Deleting character ${characterId}`);
             
             // Call delete API
             const response = await this.apiClient.post('/api/character/delete.php', {
@@ -484,7 +476,7 @@ class CharacterSheetModule {
             });
             
             if (response.status === 'success') {
-                this.app.showSuccess(`Character "${character.character_name}" deleted successfully`);
+                this.app.showSuccess('Character deleted successfully');
                 
                 // Emit event
                 if (this.app.eventBus && window.BECMI_EVENTS) {
