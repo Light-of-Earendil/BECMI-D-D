@@ -325,4 +325,4 @@ class NotificationsModule {
 }
 
 // Export to window for use in app.js
-window.NotificationModule = NotificationModule;
+window.NotificationModule = NotificationsModule;
