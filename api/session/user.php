@@ -87,6 +87,7 @@ try {
             'status' => $session['status'],
             'max_players' => (int) ($session['max_players'] ?? 0),
             'dm_username' => $session['dm_username'],
+            'is_dm' => ((int) $session['is_dm']) === 1,
             'user_role' => ((int) $session['is_dm']) === 1 ? 'dm' : 'player',
             'invitation_status' => $session['invitation_status'] ?? null,
             'current_players' => $stats['accepted'],
