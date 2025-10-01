@@ -378,6 +378,52 @@ class SessionManagementModule {
             e.preventDefault();
             this.showCreationModal();
         });
+        
+        // Player invitation actions
+        $(document).on('click', '[data-action="invite-player"]', (e) => {
+            e.preventDefault();
+            const sessionId = $(e.currentTarget).data('session-id');
+            this.showInvitePlayerModal(sessionId);
+        });
+        
+        $(document).on('submit', '#invite-player-form', (e) => {
+            e.preventDefault();
+            const sessionId = parseInt($('#invite-session-id').val());
+            const userId = parseInt($('#invite-user-id').val());
+            this.invitePlayer(sessionId, userId);
+        });
+        
+        $(document).on('click', '[data-action="remove-player"]', (e) => {
+            e.preventDefault();
+            const sessionId = $(e.currentTarget).data('session-id');
+            const userId = $(e.currentTarget).data('user-id');
+            const username = $(e.currentTarget).data('username');
+            this.removePlayer(sessionId, userId, username);
+        });
+        
+        $(document).on('click', '[data-action="accept-invitation"]', (e) => {
+            e.preventDefault();
+            const sessionId = $(e.currentTarget).data('session-id');
+            this.acceptInvitation(sessionId);
+        });
+        
+        $(document).on('click', '[data-action="decline-invitation"]', (e) => {
+            e.preventDefault();
+            const sessionId = $(e.currentTarget).data('session-id');
+            this.declineInvitation(sessionId);
+        });
+        
+        // DM Dashboard actions
+        $(document).on('click', '[data-action="view-dm-dashboard"]', (e) => {
+            e.preventDefault();
+            const sessionId = $(e.currentTarget).data('session-id');
+            this.viewDMDashboard(sessionId);
+        });
+        
+        $(document).on('click', '[data-action="back-to-sessions"]', (e) => {
+            e.preventDefault();
+            this.app.navigateToView('sessions');
+        });
     }
     
     /**
@@ -395,9 +441,105 @@ class SessionManagementModule {
             $('.nav-link').removeClass('active');
             $('.nav-link[data-view="sessions"]').addClass('active');
             
+            // Load players list
+            this.loadAndRenderPlayers(sessionId);
+            
         } catch (error) {
             console.error('Failed to view session:', error);
             this.app.showError('Failed to load session details');
+        }
+    }
+    
+    /**
+     * Load and render players list for session details view
+     * 
+     * @param {number} sessionId - ID of session
+     */
+    async loadAndRenderPlayers(sessionId) {
+        try {
+            const playersData = await this.loadSessionPlayers(sessionId);
+            const playersList = $('#session-players-list');
+            
+            if (!playersList.length) {
+                return; // Not on session details view
+            }
+            
+            if (playersData.players.length === 0) {
+                playersList.html(`
+                    <div class="empty-state">
+                        <i class="fas fa-user-slash"></i>
+                        <p>No players invited yet</p>
+                        ${playersData.dm_user_id == this.app.state.user.user_id ? `
+                            <button class="btn btn-primary" data-action="invite-player" data-session-id="${sessionId}">
+                                <i class="fas fa-user-plus"></i> Invite Players
+                            </button>
+                        ` : ''}
+                    </div>
+                `);
+            } else {
+                const isDM = playersData.dm_user_id == this.app.state.user.user_id;
+                
+                playersList.html(`
+                    ${isDM ? `
+                        <div class="players-actions">
+                            <button class="btn btn-primary btn-sm" data-action="invite-player" data-session-id="${sessionId}">
+                                <i class="fas fa-user-plus"></i> Invite Player
+                            </button>
+                        </div>
+                    ` : ''}
+                    
+                    <table class="players-table">
+                        <thead>
+                            <tr>
+                                <th>Player</th>
+                                <th>Status</th>
+                                <th>Characters</th>
+                                <th>Joined</th>
+                                ${isDM ? '<th>Actions</th>' : ''}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${playersData.players.map(player => `
+                                <tr class="player-row ${player.status}">
+                                    <td><strong>${player.username}</strong></td>
+                                    <td>
+                                        <span class="player-status-badge ${player.status}">
+                                            ${player.status === 'accepted' ? '<i class="fas fa-check-circle"></i>' :
+                                              player.status === 'invited' ? '<i class="fas fa-clock"></i>' :
+                                              '<i class="fas fa-times-circle"></i>'}
+                                            ${player.status}
+                                        </span>
+                                    </td>
+                                    <td>${player.character_count} character(s)</td>
+                                    <td>${new Date(player.joined_at).toLocaleDateString()}</td>
+                                    ${isDM ? `
+                                        <td>
+                                            <button class="btn btn-sm btn-danger" 
+                                                    data-action="remove-player" 
+                                                    data-session-id="${sessionId}"
+                                                    data-user-id="${player.user_id}"
+                                                    data-username="${player.username}">
+                                                <i class="fas fa-user-times"></i> Remove
+                                            </button>
+                                        </td>
+                                    ` : ''}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    
+                    <div class="player-stats">
+                        <span><strong>Total:</strong> ${playersData.player_counts.total} players</span>
+                        <span><strong>Accepted:</strong> ${playersData.player_counts.accepted}</span>
+                        <span><strong>Invited:</strong> ${playersData.player_counts.invited}</span>
+                        <span><strong>Declined:</strong> ${playersData.player_counts.declined}</span>
+                    </div>
+                `);
+            }
+            
+        } catch (error) {
+            console.error('Failed to load players:', error);
+            $('#session-players-list').html('<p class="error-text">Failed to load players</p>');
         }
     }
     
@@ -448,9 +590,16 @@ class SessionManagementModule {
                     </div>
                     
                     <div class="session-players">
-                        <h3>Players</h3>
-                        <div class="players-list">
-                            <p>Player management coming soon...</p>
+                        <div class="players-header">
+                            <h3>Players</h3>
+                            ${session.is_dm ? `
+                                <button class="btn btn-primary btn-sm" data-action="view-dm-dashboard" data-session-id="${session.session_id}">
+                                    <i class="fas fa-dice-d20"></i> DM Dashboard
+                                </button>
+                            ` : ''}
+                        </div>
+                        <div class="players-list" id="session-players-list">
+                            <p>Loading players...</p>
                         </div>
                     </div>
                 </div>
@@ -631,6 +780,488 @@ class SessionManagementModule {
             console.error('Failed to start session:', error);
             this.app.showError('Failed to start session');
         }
+    }
+    
+    /**
+     * Load players for a session
+     * 
+     * @param {number} sessionId - ID of session to load players for
+     * @returns {Promise<object>} Players data
+     */
+    async loadSessionPlayers(sessionId) {
+        try {
+            const response = await this.apiClient.get(`/api/session/get-players.php?session_id=${sessionId}`);
+            
+            if (response.status === 'success') {
+                return response.data;
+            } else {
+                throw new Error(response.message || 'Failed to load players');
+            }
+        } catch (error) {
+            console.error('Failed to load session players:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Load DM dashboard data
+     * 
+     * @param {number} sessionId - ID of session
+     * @returns {Promise<object>} Dashboard data
+     */
+    async loadDMDashboard(sessionId) {
+        try {
+            const response = await this.apiClient.get(`/api/session/get-dm-dashboard.php?session_id=${sessionId}`);
+            
+            if (response.status === 'success') {
+                return response.data;
+            } else {
+                throw new Error(response.message || 'Failed to load dashboard');
+            }
+        } catch (error) {
+            console.error('Failed to load DM dashboard:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Show invite player modal
+     * 
+     * @param {number} sessionId - ID of session to invite player to
+     */
+    async showInvitePlayerModal(sessionId) {
+        try {
+            const modal = $('#invite-player-modal');
+            if (modal.length === 0) {
+                // Create modal if it doesn't exist
+                $('body').append(`
+                    <div id="invite-player-modal" class="modal" style="display: none;">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h2>Invite Player to Session</h2>
+                                <button class="modal-close">&times;</button>
+                            </div>
+                            <div id="invite-player-content"></div>
+                        </div>
+                    </div>
+                `);
+            }
+            
+            // Show loading
+            $('#invite-player-content').html('<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading users...</div>');
+            $('#invite-player-modal').show();
+            
+            // Get list of available users (not already in session)
+            const playersData = await this.loadSessionPlayers(sessionId);
+            const existingPlayerIds = playersData.players.map(p => p.user_id);
+            
+            // For now, we'll need a way to get all users - this would be a new endpoint
+            // For simplicity, we'll allow entering user ID directly
+            $('#invite-player-content').html(`
+                <form id="invite-player-form" class="invite-form">
+                    <input type="hidden" id="invite-session-id" value="${sessionId}">
+                    
+                    <div class="form-group">
+                        <label for="invite-user-id">User ID to Invite:</label>
+                        <input type="number" id="invite-user-id" name="user_id" min="1" required>
+                        <p class="help-text">Enter the ID of the user you want to invite</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <h4>Current Players (${playersData.players.length})</h4>
+                        <ul class="current-players-list">
+                            ${playersData.players.map(p => `
+                                <li>
+                                    <strong>${p.username}</strong> (ID: ${p.user_id}) 
+                                    <span class="player-status ${p.status}">${p.status}</span>
+                                    ${p.character_count > 0 ? `<span class="character-count">${p.character_count} character(s)</span>` : ''}
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary modal-close">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Send Invitation</button>
+                    </div>
+                </form>
+            `);
+            
+            // Close modal handlers
+            $('.modal-close').off('click').on('click', () => $('#invite-player-modal').hide());
+            $('#invite-player-modal').off('click').on('click', (e) => {
+                if (e.target.id === 'invite-player-modal') {
+                    $('#invite-player-modal').hide();
+                }
+            });
+            
+        } catch (error) {
+            console.error('Failed to show invite player modal:', error);
+            this.app.showError('Failed to load invite player form');
+            $('#invite-player-modal').hide();
+        }
+    }
+    
+    /**
+     * Invite player to session
+     * 
+     * @param {number} sessionId - ID of session
+     * @param {number} userId - ID of user to invite
+     */
+    async invitePlayer(sessionId, userId) {
+        try {
+            const response = await this.apiClient.post('/api/session/invite-player.php', {
+                session_id: sessionId,
+                user_id: userId
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess(`Player invited successfully`);
+                $('#invite-player-modal').hide();
+                
+                // Reload session details
+                await this.loadSession(sessionId);
+            } else {
+                this.app.showError(response.message || 'Failed to invite player');
+            }
+        } catch (error) {
+            console.error('Failed to invite player:', error);
+            this.app.showError('Failed to invite player: ' + error.message);
+        }
+    }
+    
+    /**
+     * Remove player from session
+     * 
+     * @param {number} sessionId - ID of session
+     * @param {number} userId - ID of user to remove
+     * @param {string} username - Username of player
+     */
+    async removePlayer(sessionId, userId, username) {
+        if (!confirm(`Are you sure you want to remove ${username} from this session?`)) {
+            return;
+        }
+        
+        try {
+            const response = await this.apiClient.post('/api/session/remove-player.php', {
+                session_id: sessionId,
+                user_id: userId
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess(`Player ${username} removed from session`);
+                
+                // Reload session details
+                await this.loadSession(sessionId);
+            } else {
+                this.app.showError(response.message || 'Failed to remove player');
+            }
+        } catch (error) {
+            console.error('Failed to remove player:', error);
+            this.app.showError('Failed to remove player: ' + error.message);
+        }
+    }
+    
+    /**
+     * Accept session invitation
+     * 
+     * @param {number} sessionId - ID of session
+     */
+    async acceptInvitation(sessionId) {
+        try {
+            const response = await this.apiClient.post('/api/session/accept-invitation.php', {
+                session_id: sessionId
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess('Invitation accepted successfully');
+                
+                // Reload user data and session
+                await this.app.loadUserData();
+                await this.loadSession(sessionId);
+            } else {
+                this.app.showError(response.message || 'Failed to accept invitation');
+            }
+        } catch (error) {
+            console.error('Failed to accept invitation:', error);
+            this.app.showError('Failed to accept invitation: ' + error.message);
+        }
+    }
+    
+    /**
+     * Decline session invitation
+     * 
+     * @param {number} sessionId - ID of session
+     */
+    async declineInvitation(sessionId) {
+        if (!confirm('Are you sure you want to decline this invitation?')) {
+            return;
+        }
+        
+        try {
+            const response = await this.apiClient.post('/api/session/decline-invitation.php', {
+                session_id: sessionId
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess('Invitation declined');
+                
+                // Reload user data
+                await this.app.loadUserData();
+                this.app.navigateToView('sessions');
+            } else {
+                this.app.showError(response.message || 'Failed to decline invitation');
+            }
+        } catch (error) {
+            console.error('Failed to decline invitation:', error);
+            this.app.showError('Failed to decline invitation: ' + error.message);
+        }
+    }
+    
+    /**
+     * View DM dashboard for a session
+     * 
+     * @param {number} sessionId - ID of session
+     */
+    async viewDMDashboard(sessionId) {
+        try {
+            const dashboardData = await this.loadDMDashboard(sessionId);
+            
+            // Render DM dashboard view
+            const dashboardHTML = this.renderDMDashboard(dashboardData);
+            $('#app-content').html(dashboardHTML);
+            
+        } catch (error) {
+            console.error('Failed to load DM dashboard:', error);
+            this.app.showError('Failed to load DM dashboard: ' + error.message);
+        }
+    }
+    
+    /**
+     * Render DM Dashboard with all player characters
+     * 
+     * @param {object} data - Dashboard data from API
+     * @returns {string} HTML for DM dashboard
+     */
+    renderDMDashboard(data) {
+        const { session, players, party_stats } = data;
+        const sessionDate = new Date(session.session_datetime);
+        
+        return `
+            <div class="dm-dashboard-container">
+                <div class="dm-dashboard-header">
+                    <div class="header-info">
+                        <h1><i class="fas fa-dice-d20"></i> ${session.session_title}</h1>
+                        <p class="session-date">
+                            <i class="fas fa-calendar"></i>
+                            ${sessionDate.toLocaleDateString('en-US', {
+                                weekday: 'long',
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                            })} at ${sessionDate.toLocaleTimeString('en-US', {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            })}
+                        </p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" data-action="back-to-sessions">
+                            <i class="fas fa-arrow-left"></i> Back to Sessions
+                        </button>
+                        <button class="btn btn-primary" data-action="invite-player" data-session-id="${session.session_id}">
+                            <i class="fas fa-user-plus"></i> Invite Player
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="party-stats-summary">
+                    <div class="stat-card">
+                        <div class="stat-icon"><i class="fas fa-users"></i></div>
+                        <div class="stat-info">
+                            <div class="stat-value">${party_stats.accepted_players}/${party_stats.total_players}</div>
+                            <div class="stat-label">Accepted Players</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon"><i class="fas fa-user-friends"></i></div>
+                        <div class="stat-info">
+                            <div class="stat-value">${party_stats.total_characters}</div>
+                            <div class="stat-label">Characters</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon"><i class="fas fa-level-up-alt"></i></div>
+                        <div class="stat-info">
+                            <div class="stat-value">${party_stats.average_level}</div>
+                            <div class="stat-label">Avg Level</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon"><i class="fas fa-heart"></i></div>
+                        <div class="stat-info">
+                            <div class="stat-value">${party_stats.average_hp_percentage}%</div>
+                            <div class="stat-label">Avg HP</div>
+                        </div>
+                    </div>
+                    ${party_stats.characters_dead > 0 ? `
+                    <div class="stat-card dead">
+                        <div class="stat-icon"><i class="fas fa-skull"></i></div>
+                        <div class="stat-info">
+                            <div class="stat-value">${party_stats.characters_dead}</div>
+                            <div class="stat-label">Dead</div>
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+                
+                ${party_stats.total_characters > 0 ? `
+                    <div class="class-distribution">
+                        <h3><i class="fas fa-chart-pie"></i> Class Distribution</h3>
+                        <div class="class-chips">
+                            ${Object.entries(party_stats.class_distribution).map(([className, count]) => `
+                                <span class="class-chip ${className}">${className}: ${count}</span>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+                
+                <div class="players-section">
+                    <h2><i class="fas fa-users"></i> Players & Characters</h2>
+                    
+                    ${players.length === 0 ? `
+                        <div class="empty-state">
+                            <i class="fas fa-user-slash"></i>
+                            <p>No players invited yet</p>
+                            <button class="btn btn-primary" data-action="invite-player" data-session-id="${session.session_id}">
+                                <i class="fas fa-user-plus"></i> Invite Your First Player
+                            </button>
+                        </div>
+                    ` : players.map(player => this.renderDMPlayerCard(player, session.session_id)).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
+    /**
+     * Render player card for DM dashboard
+     * 
+     * @param {object} player - Player data
+     * @param {number} sessionId - Session ID
+     * @returns {string} HTML for player card
+     */
+    renderDMPlayerCard(player, sessionId) {
+        const statusClass = player.status;
+        const statusIcon = {
+            'accepted': 'fa-check-circle',
+            'invited': 'fa-clock',
+            'declined': 'fa-times-circle'
+        }[player.status] || 'fa-question-circle';
+        
+        return `
+            <div class="dm-player-card ${statusClass}">
+                <div class="player-header">
+                    <div class="player-info">
+                        <h3><i class="fas fa-user"></i> ${player.username}</h3>
+                        <span class="player-status ${statusClass}">
+                            <i class="fas ${statusIcon}"></i> ${player.status}
+                        </span>
+                    </div>
+                    <div class="player-actions">
+                        <button class="btn btn-sm btn-danger" data-action="remove-player" 
+                                data-session-id="${sessionId}" 
+                                data-user-id="${player.user_id}"
+                                data-username="${player.username}">
+                            <i class="fas fa-user-times"></i> Remove
+                        </button>
+                    </div>
+                </div>
+                
+                ${player.characters.length === 0 ? `
+                    <div class="no-characters">
+                        <i class="fas fa-user-slash"></i>
+                        <p>No characters assigned to this session</p>
+                    </div>
+                ` : `
+                    <div class="player-characters">
+                        ${player.characters.map(char => this.renderDMCharacterCard(char)).join('')}
+                    </div>
+                `}
+            </div>
+        `;
+    }
+    
+    /**
+     * Render character card for DM dashboard
+     * 
+     * @param {object} character - Character data
+     * @returns {string} HTML for character card
+     */
+    renderDMCharacterCard(character) {
+        const hpStatus = character.hp.is_dead ? 'dead' : 
+                        character.hp.percentage >= 75 ? 'healthy' :
+                        character.hp.percentage >= 50 ? 'injured' :
+                        character.hp.percentage >= 25 ? 'wounded' : 'critical';
+        
+        return `
+            <div class="dm-character-card ${hpStatus}">
+                <div class="character-header">
+                    <div class="character-basic">
+                        <h4>${character.character_name}</h4>
+                        <p class="character-class">Level ${character.level} ${character.class}</p>
+                    </div>
+                    <div class="character-hp">
+                        <div class="hp-bar">
+                            <div class="hp-fill ${hpStatus}" style="width: ${Math.max(0, character.hp.percentage)}%"></div>
+                        </div>
+                        <div class="hp-text">
+                            <span class="hp-value ${hpStatus}">${character.hp.current}/${character.hp.max}</span>
+                            ${character.hp.is_dead ? '<span class="dead-indicator"><i class="fas fa-skull"></i> DEAD</span>' : ''}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="character-stats-grid">
+                    <div class="stat-group">
+                        <h5>Abilities</h5>
+                        <div class="abilities-mini">
+                            <span title="Strength">STR ${character.abilities.strength}</span>
+                            <span title="Dexterity">DEX ${character.abilities.dexterity}</span>
+                            <span title="Constitution">CON ${character.abilities.constitution}</span>
+                            <span title="Intelligence">INT ${character.abilities.intelligence}</span>
+                            <span title="Wisdom">WIS ${character.abilities.wisdom}</span>
+                            <span title="Charisma">CHA ${character.abilities.charisma}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-group">
+                        <h5>Combat</h5>
+                        <div class="combat-stats">
+                            <span><strong>AC:</strong> ${character.combat.armor_class}</span>
+                            <span><strong>THAC0 (M):</strong> ${character.combat.thac0_melee}</span>
+                            <span><strong>THAC0 (R):</strong> ${character.combat.thac0_ranged}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-group">
+                        <h5>Saving Throws</h5>
+                        <div class="saves-mini">
+                            <span title="Death Ray/Poison">DR ${character.saving_throws.death_ray}</span>
+                            <span title="Magic Wand">MW ${character.saving_throws.magic_wand}</span>
+                            <span title="Paralysis/Turn to Stone">Par ${character.saving_throws.paralysis}</span>
+                            <span title="Dragon Breath">DB ${character.saving_throws.dragon_breath}</span>
+                            <span title="Spells/Rods/Staves">Sp ${character.saving_throws.spells}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="character-actions">
+                    <button class="btn btn-sm btn-primary" data-action="view-character" data-character-id="${character.character_id}">
+                        <i class="fas fa-eye"></i> View Full Sheet
+                    </button>
+                </div>
+            </div>
+        `;
     }
     
     /**
