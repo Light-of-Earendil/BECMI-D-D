@@ -15,8 +15,8 @@ Security::init();
 header('Content-Type: application/json');
 
 try {
-    // Only allow DELETE requests
-    if ($_SERVER['REQUEST_METHOD'] !== 'DELETE') {
+    // Only allow POST requests
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         Security::sendErrorResponse('Method not allowed', 405);
     }
     
