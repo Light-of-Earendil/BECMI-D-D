@@ -1,0 +1,55 @@
+# BECMI D&D Character Manager - Git Ignore
+
+# PDF files (rules books, etc.)
+*.pdf
+
+# Cursor IDE settings (contains API keys)
+.cursor/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS Files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+error_log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Database dumps
+*.sql.gz
+backup/
+
+# Node modules (if using any frontend tools)
+node_modules/
+npm-debug.log
+
+# PHP Composer (if used)
+vendor/
+composer.lock
+
+# Test files
+test_*.php
+debug_*.php
+
+# User uploads (if applicable)
+uploads/
+*.upload
+
