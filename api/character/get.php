@@ -163,6 +163,7 @@ try {
             'weight' => $character['weight'],
             'hair_color' => $character['hair_color'],
             'eye_color' => $character['eye_color'],
+            'background' => $character['background'],
             'gold_pieces' => $character['gold_pieces'],
             'silver_pieces' => $character['silver_pieces'],
             'copper_pieces' => $character['copper_pieces'],
