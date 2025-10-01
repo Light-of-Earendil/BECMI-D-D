@@ -26,7 +26,7 @@ try {
     // Get database connection
     $db = getDB();
     
-    // Get user's characters
+    // Get user's characters (including unassigned ones)
     $characters = $db->select(
         "SELECT c.character_id, c.character_name, c.class, c.level, c.current_hp, c.max_hp,
                 c.strength, c.dexterity, c.constitution, c.intelligence, c.wisdom, c.charisma,
@@ -34,8 +34,8 @@ try {
                 gs.session_title, gs.session_datetime, gs.status as session_status,
                 u.username as dm_username
          FROM characters c 
-         JOIN game_sessions gs ON c.session_id = gs.session_id 
-         JOIN users u ON gs.dm_user_id = u.user_id 
+         LEFT JOIN game_sessions gs ON c.session_id = gs.session_id 
+         LEFT JOIN users u ON gs.dm_user_id = u.user_id 
          WHERE c.user_id = ? AND c.is_active = 1 
          ORDER BY c.created_at DESC",
         [$userId]
