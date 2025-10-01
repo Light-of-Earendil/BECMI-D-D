@@ -173,6 +173,10 @@ class CharacterSheetModule {
                         <i class="fas fa-edit"></i>
                         Edit
                     </button>
+                    <button class="btn btn-sm btn-danger"data-action="delete-character"data-character-id="${character.character_id}">
+                        <i class="fas fa-trash"></i>
+                        Delete
+                    </button>
                 </div>
             </div>
         `;
@@ -361,6 +365,12 @@ class CharacterSheetModule {
             this.editCharacter(characterId);
         });
         
+        $(document).on('click', '[data-action="delete-character"]', async (e) => {
+            e.preventDefault();
+            const characterId = $(e.currentTarget).data('character-id');
+            await this.deleteCharacter(characterId);
+        });
+        
         // Create character button
         $(document).on('click', '#create-character-btn', (e) => {
             e.preventDefault();
@@ -442,6 +452,61 @@ class CharacterSheetModule {
         } catch (error) {
             console.error('Failed to open character edit:', error);
             this.app.showError('Failed to load character for editing');
+        }
+    }
+    
+    /**
+     * Delete character with confirmation
+     * 
+     * @param {number} characterId - ID of character to delete
+     */
+    async deleteCharacter(characterId) {
+        try {
+            // Load character to get name for confirmation
+            let character;
+            if (this.currentCharacter && this.currentCharacter.character_id == characterId) {
+                character = this.currentCharacter;
+            } else {
+                character = await this.loadCharacter(characterId);
+            }
+            
+            // Confirm deletion
+            const confirmMessage = `Are you sure you want to delete "${character.character_name}"?\n\nThis action cannot be undone.`;
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+            
+            console.log(`Deleting character ${characterId}: ${character.character_name}`);
+            
+            // Call delete API
+            const response = await this.apiClient.post('/api/character/delete.php', {
+                character_id: characterId
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess(`Character "${character.character_name}" deleted successfully`);
+                
+                // Emit event
+                if (this.app.eventBus && window.BECMI_EVENTS) {
+                    this.app.eventBus.emit(window.BECMI_EVENTS.CHARACTER_DELETED, { characterId });
+                }
+                
+                // Refresh character list
+                if (this.app.loadUserData) {
+                    await this.app.loadUserData();
+                }
+                
+                // Navigate back to characters view
+                if (this.app.navigateToView) {
+                    this.app.navigateToView('characters');
+                }
+            } else {
+                this.app.showError(response.message || 'Failed to delete character');
+            }
+            
+        } catch (error) {
+            console.error('Failed to delete character:', error);
+            this.app.showError('Failed to delete character: ' + error.message);
         }
     }
     
