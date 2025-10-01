@@ -431,4 +431,4 @@ class BECMIRulesEngine {
 }
 
 // Export to window for use in app.js
-window.RulesEngine = RulesEngine;
+window.RulesEngine = BECMIRulesEngine;
