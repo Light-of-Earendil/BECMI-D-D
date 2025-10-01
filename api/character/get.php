@@ -39,7 +39,7 @@ try {
         "SELECT c.*, u.username, gs.session_title 
          FROM characters c 
          JOIN users u ON c.user_id = u.user_id 
-         JOIN game_sessions gs ON c.session_id = gs.session_id 
+         LEFT JOIN game_sessions gs ON c.session_id = gs.session_id 
          WHERE c.character_id = ? AND c.is_active = 1",
         [$characterId]
     );
@@ -56,8 +56,8 @@ try {
         $hasAccess = true;
     }
     
-    // DM of the session has access
-    if (!$hasAccess) {
+    // DM of the session has access (if character is assigned to a session)
+    if (!$hasAccess && $character['session_id']) {
         $session = $db->selectOne(
             "SELECT dm_user_id FROM game_sessions WHERE session_id = ?",
             [$character['session_id']]
@@ -68,8 +68,8 @@ try {
         }
     }
     
-    // Other players in the session have read-only access
-    if (!$hasAccess) {
+    // Other players in the session have read-only access (if character is assigned to a session)
+    if (!$hasAccess && $character['session_id']) {
         $playerInSession = $db->selectOne(
             "SELECT user_id FROM session_players WHERE session_id = ? AND user_id = ?",
             [$character['session_id'], $userId]
