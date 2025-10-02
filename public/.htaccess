@@ -1,0 +1,47 @@
+# ==========================================
+# BECMI VTT - No Browser Cache Configuration
+# ==========================================
+# This prevents browsers from caching files during development
+# Remove or modify for production deployment
+
+<IfModule mod_headers.c>
+    # Disable caching for all files
+    Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+</IfModule>
+
+<IfModule mod_expires.c>
+    # Disable expires headers
+    ExpiresActive Off
+</IfModule>
+
+# ==========================================
+# Additional Security Headers
+# ==========================================
+<IfModule mod_headers.c>
+    # Prevent MIME type sniffing
+    Header set X-Content-Type-Options "nosniff"
+    
+    # Enable XSS protection
+    Header set X-XSS-Protection "1; mode=block"
+    
+    # Prevent clickjacking
+    Header set X-Frame-Options "SAMEORIGIN"
+</IfModule>
+
+# ==========================================
+# Force HTTPS (Optional - uncomment if needed)
+# ==========================================
+# <IfModule mod_rewrite.c>
+#     RewriteEngine On
+#     RewriteCond %{HTTPS} off
+#     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# </IfModule>
+
+# ==========================================
+# Custom Error Pages (Optional)
+# ==========================================
+# ErrorDocument 404 /404.html
+# ErrorDocument 500 /500.html
+
