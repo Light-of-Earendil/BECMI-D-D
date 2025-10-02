@@ -439,6 +439,31 @@ class SessionManagementModule {
             const characterName = $(e.currentTarget).data('character-name');
             this.dmSetHP(characterId, characterName);
         });
+        
+        // Initiative Tracker actions
+        $(document).on('click', '[data-action="initiative-roll"]', (e) => {
+            e.preventDefault();
+            const sessionId = $(e.currentTarget).data('session-id');
+            this.rollInitiative(sessionId);
+        });
+        
+        $(document).on('click', '[data-action="initiative-next"]', (e) => {
+            e.preventDefault();
+            const sessionId = $(e.currentTarget).data('session-id');
+            this.nextTurn(sessionId);
+        });
+        
+        $(document).on('click', '[data-action="initiative-prev"]', (e) => {
+            e.preventDefault();
+            const sessionId = $(e.currentTarget).data('session-id');
+            this.previousTurn(sessionId);
+        });
+        
+        $(document).on('click', '[data-action="initiative-clear"]', (e) => {
+            e.preventDefault();
+            const sessionId = $(e.currentTarget).data('session-id');
+            this.clearInitiative(sessionId);
+        });
     }
     
     /**
@@ -840,6 +865,28 @@ class SessionManagementModule {
     }
     
     /**
+     * Load initiative order for session
+     * 
+     * @param {number} sessionId - ID of session
+     * @returns {Promise<object>} Initiative data
+     */
+    async loadInitiativeOrder(sessionId) {
+        try {
+            const response = await this.apiClient.get(`/api/combat/get-initiative.php?session_id=${sessionId}`);
+            
+            if (response.status === 'success') {
+                return response.data;
+            } else {
+                // No initiatives yet - not an error
+                return { initiatives: [], current_turn: null, total_count: 0 };
+            }
+        } catch (error) {
+            console.log('No initiative data yet:', error);
+            return { initiatives: [], current_turn: null, total_count: 0 };
+        }
+    }
+    
+    /**
      * Show invite player modal
      * 
      * @param {number} sessionId - ID of session to invite player to
@@ -1127,14 +1174,21 @@ class SessionManagementModule {
             const dashboardData = await this.loadDMDashboard(sessionId);
             console.log('Dashboard data loaded:', dashboardData);
             
+            // Load initiative data
+            const initiativeData = await this.loadInitiativeOrder(sessionId);
+            console.log('Initiative data loaded:', initiativeData);
+            
             // Render DM dashboard view
-            const dashboardHTML = this.renderDMDashboard(dashboardData);
+            const dashboardHTML = this.renderDMDashboard(dashboardData, initiativeData);
             console.log('Dashboard HTML length:', dashboardHTML.length);
             console.log('Target element exists:', $('#content-area').length > 0);
             
             $('#content-area').html(dashboardHTML);
             console.log('Dashboard HTML inserted into DOM');
             console.log('=== DM DASHBOARD DEBUG END ===');
+            
+            // Store current session ID for initiative updates
+            this.currentSession = { session_id: sessionId };
             
         } catch (error) {
             console.error('Failed to load DM dashboard:', error);
@@ -1146,9 +1200,10 @@ class SessionManagementModule {
      * Render DM Dashboard with all player characters
      * 
      * @param {object} data - Dashboard data from API
+     * @param {object} initiativeData - Initiative order data
      * @returns {string} HTML for DM dashboard
      */
-    renderDMDashboard(data) {
+    renderDMDashboard(data, initiativeData = { initiatives: [], current_turn: null }) {
         const { session, players, party_stats } = data;
         const sessionDate = new Date(session.session_datetime);
         
@@ -1231,6 +1286,8 @@ class SessionManagementModule {
                     </div>
                 ` : ''}
                 
+                ${this.renderInitiativeTracker(session.session_id, initiativeData)}
+                
                 <div class="players-section">
                     <h2><i class="fas fa-users"></i> Players & Characters</h2>
                     
@@ -1246,6 +1303,102 @@ class SessionManagementModule {
                 </div>
             </div>
         `;
+    }
+    
+    /**
+     * Render Initiative Tracker for combat
+     * 
+     * @param {number} sessionId - Session ID
+     * @param {object} initiativeData - Initiative order data
+     * @returns {string} HTML for initiative tracker
+     */
+    renderInitiativeTracker(sessionId, initiativeData) {
+        const { initiatives, current_turn } = initiativeData;
+        const hasInitiatives = initiatives && initiatives.length > 0;
+        
+        return `
+            <div class="initiative-tracker-section">
+                <div class="initiative-header">
+                    <h2><i class="fas fa-bolt"></i> Initiative Tracker</h2>
+                    <div class="initiative-actions">
+                        ${hasInitiatives ? `
+                            <button class="btn btn-sm btn-success" data-action="initiative-prev" data-session-id="${sessionId}">
+                                <i class="fas fa-arrow-left"></i> Previous
+                            </button>
+                            <button class="btn btn-sm btn-success" data-action="initiative-next" data-session-id="${sessionId}">
+                                Next <i class="fas fa-arrow-right"></i>
+                            </button>
+                            <button class="btn btn-sm btn-warning" data-action="initiative-roll" data-session-id="${sessionId}">
+                                <i class="fas fa-dice-d6"></i> Re-roll
+                            </button>
+                            <button class="btn btn-sm btn-danger" data-action="initiative-clear" data-session-id="${sessionId}">
+                                <i class="fas fa-times"></i> End Combat
+                            </button>
+                        ` : `
+                            <button class="btn btn-primary" data-action="initiative-roll" data-session-id="${sessionId}">
+                                <i class="fas fa-dice-d6"></i> Roll Initiative!
+                            </button>
+                        `}
+                    </div>
+                </div>
+                
+                ${hasInitiatives ? `
+                    <div class="initiative-list">
+                        ${current_turn ? `
+                            <div class="round-indicator">
+                                <i class="fas fa-redo"></i> Round ${current_turn.round_number}
+                            </div>
+                        ` : ''}
+                        
+                        ${initiatives.map((init, index) => `
+                            <div class="initiative-entry ${init.is_current_turn ? 'current-turn' : ''}">
+                                <div class="initiative-position">${index + 1}</div>
+                                <div class="initiative-roll">
+                                    <i class="fas fa-dice-d6"></i> ${init.initiative_roll}
+                                </div>
+                                <div class="initiative-entity">
+                                    <div class="entity-name">
+                                        ${init.entity_type === 'character' ? '<i class="fas fa-user"></i>' : '<i class="fas fa-skull"></i>'}
+                                        ${init.entity_name}
+                                    </div>
+                                    ${init.class && init.level ? `
+                                        <div class="entity-details">${init.class} ${init.level}</div>
+                                    ` : ''}
+                                </div>
+                                ${init.hp ? `
+                                    <div class="initiative-hp">
+                                        <div class="hp-bar-small">
+                                            <div class="hp-bar-fill" style="width: ${init.hp.percentage}%; background-color: ${this.getHPColor(init.hp.percentage)}"></div>
+                                        </div>
+                                        <div class="hp-text">${init.hp.current}/${init.hp.max}</div>
+                                    </div>
+                                ` : ''}
+                                ${init.is_current_turn ? '<div class="current-turn-badge"><i class="fas fa-arrow-right"></i> CURRENT TURN</div>' : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : `
+                    <div class="initiative-empty">
+                        <i class="fas fa-dice-d6 fa-3x"></i>
+                        <p>No active combat. Roll initiative to start!</p>
+                        <p class="help-text">BECMI Rules: Each character rolls 1d6. Highest goes first!</p>
+                    </div>
+                `}
+            </div>
+        `;
+    }
+    
+    /**
+     * Get HP color based on percentage
+     * 
+     * @param {number} percentage - HP percentage
+     * @returns {string} Color code
+     */
+    getHPColor(percentage) {
+        if (percentage > 75) return '#4caf50';
+        if (percentage > 50) return '#8bc34a';
+        if (percentage > 25) return '#ff9800';
+        return '#f44336';
     }
     
     /**
@@ -1531,6 +1684,130 @@ class SessionManagementModule {
         } catch (error) {
             console.error('Failed to set HP:', error);
             this.app.showError('Failed to set HP: ' + error.message);
+        }
+    }
+    
+    /**
+     * Roll initiative for all characters in session
+     * 
+     * @param {number} sessionId - Session ID
+     */
+    async rollInitiative(sessionId) {
+        try {
+            const confirmMessage = 'Roll initiative for all characters? This will replace any existing initiative order.';
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+            
+            console.log(`Rolling initiative for session ${sessionId}`);
+            
+            const response = await this.apiClient.post('/api/combat/roll-initiative.php', {
+                session_id: sessionId
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess('Initiative rolled! Combat begins!');
+                
+                // Reload DM dashboard to show initiative
+                await this.viewDMDashboard(sessionId);
+            } else {
+                this.app.showError(response.message || 'Failed to roll initiative');
+            }
+            
+        } catch (error) {
+            console.error('Failed to roll initiative:', error);
+            this.app.showError('Failed to roll initiative: ' + error.message);
+        }
+    }
+    
+    /**
+     * Advance to next turn in initiative order
+     * 
+     * @param {number} sessionId - Session ID
+     */
+    async nextTurn(sessionId) {
+        try {
+            console.log(`Advancing to next turn in session ${sessionId}`);
+            
+            const response = await this.apiClient.post('/api/combat/next-turn.php', {
+                session_id: sessionId,
+                direction: 'next'
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess(`Next turn: ${response.data.entity_name} (Round ${response.data.round_number})`);
+                
+                // Reload DM dashboard to update current turn
+                await this.viewDMDashboard(sessionId);
+            } else {
+                this.app.showError(response.message || 'Failed to advance turn');
+            }
+            
+        } catch (error) {
+            console.error('Failed to advance turn:', error);
+            this.app.showError('Failed to advance turn: ' + error.message);
+        }
+    }
+    
+    /**
+     * Go back to previous turn in initiative order
+     * 
+     * @param {number} sessionId - Session ID
+     */
+    async previousTurn(sessionId) {
+        try {
+            console.log(`Going back to previous turn in session ${sessionId}`);
+            
+            const response = await this.apiClient.post('/api/combat/next-turn.php', {
+                session_id: sessionId,
+                direction: 'previous'
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess(`Previous turn: ${response.data.entity_name} (Round ${response.data.round_number})`);
+                
+                // Reload DM dashboard to update current turn
+                await this.viewDMDashboard(sessionId);
+            } else {
+                this.app.showError(response.message || 'Failed to go back');
+            }
+            
+        } catch (error) {
+            console.error('Failed to go back:', error);
+            this.app.showError('Failed to go back: ' + error.message);
+        }
+    }
+    
+    /**
+     * Clear initiative and end combat
+     * 
+     * @param {number} sessionId - Session ID
+     */
+    async clearInitiative(sessionId) {
+        try {
+            const confirmMessage = 'End combat and clear all initiative? This cannot be undone.';
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+            
+            console.log(`Clearing initiative for session ${sessionId}`);
+            
+            const response = await this.apiClient.post('/api/combat/clear-initiative.php', {
+                session_id: sessionId
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess('Combat ended - initiative cleared');
+                
+                // Reload DM dashboard to show empty initiative
+                await this.viewDMDashboard(sessionId);
+            } else {
+                this.app.showError(response.message || 'Failed to clear initiative');
+            }
+            
+        } catch (error) {
+            console.error('Failed to clear initiative:', error);
+            this.app.showError('Failed to clear initiative: ' + error.message);
         }
     }
     
