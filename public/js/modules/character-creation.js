@@ -466,8 +466,15 @@ class CharacterCreationModule {
             return '<p class="no-items">No equipment in this category.</p>';
         }
 
-        return items.map(item => `
+        return items.map(item => {
+            const imageSlug = this.getEquipmentImageSlug(item.name);
+            const imagePath = imageSlug ? `images/equipment/${imageSlug}.png` : '';
+            
+            return `
             <div class="equipment-item" data-item-id="${item.item_id}">
+                ${imagePath ? `<div class="item-image">
+                    <img src="${imagePath}" alt="${item.name}" onerror="this.style.display='none'">
+                </div>` : ''}
                 <div class="item-info">
                     <h5>${item.name}</h5>
                     <div class="item-stats">
@@ -479,7 +486,49 @@ class CharacterCreationModule {
                     <i class="fas fa-plus"></i> Add
                 </button>
             </div>
-        `).join('');
+        `}).join('');
+    }
+    
+    /**
+     * Get equipment image slug from item name
+     * Maps item names to image filenames
+     * 
+     * @param {string} itemName - Name of the item
+     * @returns {string|null} Image slug or null if no image
+     * @private
+     */
+    getEquipmentImageSlug(itemName) {
+        const mapping = {
+            'Dagger': 'dagger',
+            'Sword': 'short-sword',
+            'Short Sword': 'short-sword',
+            'Two-handed Sword': 'long-sword',
+            'Long Sword': 'long-sword',
+            'Battle Axe': 'battle-axe',
+            'Hand Axe': 'battle-axe',
+            'Mace': 'mace',
+            'War Hammer': 'mace',
+            'Spear': 'spear',
+            'Pole Arm': 'spear',
+            'Staff': 'spear',
+            'Short Bow': 'short-bow',
+            'Long Bow': 'short-bow',
+            'Crossbow': 'crossbow',
+            'Leather Armor': 'leather-armor',
+            'Chain Mail': 'chain-mail',
+            'Plate Mail': 'plate-armor',
+            'Shield': 'shield',
+            'Rope (50 ft)': 'rope-50-ft',
+            'Rope, 50\'': 'rope-50-ft',
+            'Torches (6)': 'torch',
+            'Torch': 'torch',
+            'Rations (Standard, 7 days)': 'rations-1-week',
+            'Rations (Iron, 7 days)': 'rations-1-week',
+            'Rations (1 day)': 'rations-1-week',
+            'Waterskin': 'waterskin'
+        };
+        
+        return mapping[itemName] || null;
     }
 
     /**
