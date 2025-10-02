@@ -81,8 +81,13 @@ class CharacterCreationModule {
     /**
      * Render current step
      */
-    renderStep() {
+    async renderStep() {
         const content = $('#character-creation-content');
+        
+        // Show loading for Step 4 (equipment loading from database)
+        if (this.currentStep === 4) {
+            content.html('<div class="loading-spinner">Loading equipment from database...</div>');
+        }
         
         switch (this.currentStep) {
             case 1:
@@ -95,7 +100,7 @@ class CharacterCreationModule {
                 content.html(this.renderStep3());
                 break;
             case 4:
-                content.html(this.renderStep4());
+                content.html(await this.renderStep4());
                 break;
             case 5:
                 content.html(this.renderStep5());
@@ -336,11 +341,14 @@ class CharacterCreationModule {
      * 
      * @returns {string} HTML for Step 4
      */
-    renderStep4() {
+    async renderStep4() {
         // Initialize equipment cart if not already done
         if (!this.equipmentCart) {
             const startingGold = this.characterData.starting_gold || 100;
             this.equipmentCart = new CharacterCreationEquipment(startingGold);
+            
+            // Wait for items to load from database
+            await this.equipmentCart.itemsLoadedPromise;
         }
 
         const strength = this.characterData.strength || 10;

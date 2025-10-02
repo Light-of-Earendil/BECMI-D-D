@@ -40,69 +40,60 @@ class CharacterCreationEquipment {
          */
         this.startingGold = startingGold;
         
+        /**
+         * Available items from database
+         * @type {Array<Object>}
+         */
+        this.availableItems = [];
+        
+        /**
+         * Promise for loading items from database
+         * @type {Promise}
+         */
+        this.itemsLoadedPromise = this.loadItemsFromDatabase();
+        
         console.log(`Equipment shopping cart initialized with ${startingGold} gp`);
+    }
+    
+    /**
+     * Load all available items from database
+     * 
+     * @returns {Promise<Array<Object>>} Promise resolving to items array
+     */
+    async loadItemsFromDatabase() {
+        try {
+            const response = await fetch('api/items/list.php');
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                this.availableItems = data.data.items;
+                console.log(`Loaded ${this.availableItems.length} items from database`);
+                return this.availableItems;
+            } else {
+                console.error('Failed to load items:', data.message);
+                this.availableItems = [];
+                return [];
+            }
+        } catch (error) {
+            console.error('Error loading items from database:', error);
+            this.availableItems = [];
+            return [];
+        }
     }
 
     /**
      * Get all available equipment items
-     * This will eventually be loaded from database, but for now uses constants
+     * Now loads from database instead of hardcoded data
      * 
      * @returns {Array<Object>} Array of equipment items
      * 
      * @example
      * const items = equipment.getAvailableEquipment();
-     * // Returns: [{ item_id: 1, name: 'Sword', cost_gp: 10, ... }, ...]
+     * // Returns: [{ item_id: 1, name: 'Dagger', cost_gp: 3, ... }, ...]
      */
     getAvailableEquipment() {
-        /**
-         * BECMI Equipment List
-         * From Rules Cyclopedia
-         * 
-         * Categories:
-         * - Weapons (melee and ranged)
-         * - Armor (light, medium, heavy, shields)
-         * - Adventuring Gear (rope, torches, etc.)
-         * - Containers (backpack, sacks, etc.)
-         */
-        return [
-            // Weapons - Melee
-            { item_id: 1, name: 'Dagger', category: 'weapon', cost_gp: 3, weight_cn: 10 },
-            { item_id: 2, name: 'Sword', category: 'weapon', cost_gp: 10, weight_cn: 60 },
-            { item_id: 3, name: 'Two-handed Sword', category: 'weapon', cost_gp: 15, weight_cn: 150 },
-            { item_id: 4, name: 'Battle Axe', category: 'weapon', cost_gp: 7, weight_cn: 50 },
-            { item_id: 5, name: 'Hand Axe', category: 'weapon', cost_gp: 4, weight_cn: 30 },
-            { item_id: 6, name: 'Mace', category: 'weapon', cost_gp: 5, weight_cn: 30 },
-            { item_id: 7, name: 'War Hammer', category: 'weapon', cost_gp: 5, weight_cn: 30 },
-            { item_id: 8, name: 'Spear', category: 'weapon', cost_gp: 3, weight_cn: 30 },
-            { item_id: 9, name: 'Pole Arm', category: 'weapon', cost_gp: 7, weight_cn: 150 },
-            { item_id: 10, name: 'Staff', category: 'weapon', cost_gp: 2, weight_cn: 40 },
-            
-            // Weapons - Ranged
-            { item_id: 11, name: 'Short Bow', category: 'weapon', cost_gp: 25, weight_cn: 30 },
-            { item_id: 12, name: 'Long Bow', category: 'weapon', cost_gp: 40, weight_cn: 50 },
-            { item_id: 13, name: 'Crossbow', category: 'weapon', cost_gp: 30, weight_cn: 50 },
-            { item_id: 14, name: 'Arrows (20)', category: 'ammunition', cost_gp: 5, weight_cn: 10 },
-            { item_id: 15, name: 'Quarrels (30)', category: 'ammunition', cost_gp: 10, weight_cn: 10 },
-            
-            // Armor
-            { item_id: 16, name: 'Leather Armor', category: 'armor', cost_gp: 20, weight_cn: 200 },
-            { item_id: 17, name: 'Chain Mail', category: 'armor', cost_gp: 40, weight_cn: 400 },
-            { item_id: 18, name: 'Plate Mail', category: 'armor', cost_gp: 60, weight_cn: 500 },
-            { item_id: 19, name: 'Shield', category: 'armor', cost_gp: 10, weight_cn: 100 },
-            
-            // Adventuring Gear
-            { item_id: 20, name: 'Backpack', category: 'container', cost_gp: 5, weight_cn: 20 },
-            { item_id: 21, name: 'Rope (50 ft)', category: 'gear', cost_gp: 1, weight_cn: 50 },
-            { item_id: 22, name: 'Torches (6)', category: 'gear', cost_gp: 1, weight_cn: 30 },
-            { item_id: 23, name: 'Waterskin', category: 'container', cost_gp: 1, weight_cn: 5 },
-            { item_id: 24, name: 'Rations (Standard, 7 days)', category: 'gear', cost_gp: 15, weight_cn: 70 },
-            { item_id: 25, name: 'Rations (Iron, 7 days)', category: 'gear', cost_gp: 5, weight_cn: 70 },
-            { item_id: 26, name: 'Bedroll', category: 'gear', cost_gp: 2, weight_cn: 30 },
-            { item_id: 27, name: 'Lantern', category: 'gear', cost_gp: 10, weight_cn: 20 },
-            { item_id: 28, name: 'Oil (1 flask)', category: 'gear', cost_gp: 2, weight_cn: 10 },
-            { item_id: 29, name: 'Grappling Hook', category: 'gear', cost_gp: 25, weight_cn: 80 },
-            { item_id: 30, name: '10 ft Pole', category: 'gear', cost_gp: 1, weight_cn: 100 }
-        ];
+        // Return cached items from database
+        return this.availableItems;
     }
 
     /**
