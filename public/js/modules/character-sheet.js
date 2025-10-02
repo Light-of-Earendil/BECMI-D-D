@@ -41,6 +41,35 @@ class CharacterSheetModule {
     }
     
     /**
+     * Load character inventory from API
+     * 
+     * @param {number} characterId - ID of character
+     */
+    async loadInventory(characterId) {
+        try {
+            console.log(`Loading inventory for character ${characterId}...`);
+            
+            const response = await this.apiClient.get(`/api/inventory/get.php?character_id=${characterId}`);
+            
+            if (response.status === 'success') {
+                this.currentInventory = response.data.inventory || [];
+                this.inventoryStats = {
+                    total_weight_cn: response.data.total_weight_cn || 0,
+                    equipped_count: response.data.equipped_count || 0
+                };
+                console.log(`Inventory loaded: ${this.currentInventory.length} items`);
+            } else {
+                this.currentInventory = [];
+                this.inventoryStats = { total_weight_cn: 0, equipped_count: 0 };
+            }
+        } catch (error) {
+            console.error('Failed to load inventory:', error);
+            this.currentInventory = [];
+            this.inventoryStats = { total_weight_cn: 0, equipped_count: 0 };
+        }
+    }
+    
+    /**
      * Render character list view
      */
     async renderCharacterList() {
@@ -199,6 +228,9 @@ class CharacterSheetModule {
         try {
             const character = await this.loadCharacter(characterId);
             
+            // Load inventory
+            await this.loadInventory(characterId);
+            
             return `<div class="character-sheet-container">
                     <div class="character-sheet-header">
                         <div>
@@ -253,9 +285,9 @@ class CharacterSheetModule {
             </div>
             
             <div class="character-section">
-                <h3>Equipment</h3>
+                <h3>Equipment & Inventory</h3>
                 <div class="equipment">
-                    <p>Equipment management coming soon...</p>
+                    ${this.renderEquipment(character)}
                 </div>
             </div>
         `;
@@ -349,6 +381,118 @@ class CharacterSheetModule {
     }
     
     /**
+     * Render equipment and inventory
+     * 
+     * @param {object} character - Character data
+     * @returns {string} HTML for equipment section
+     */
+    renderEquipment(character) {
+        if (!this.currentInventory || this.currentInventory.length === 0) {
+            return `<div class="equipment-empty">
+                <i class="fas fa-box-open fa-2x"></i>
+                <p>No items in inventory</p>
+                <p class="help-text">Purchase equipment during character creation or acquire items during adventures.</p>
+            </div>`;
+        }
+        
+        // Separate equipped and unequipped items
+        const equippedItems = this.currentInventory.filter(item => item.is_equipped);
+        const unequippedItems = this.currentInventory.filter(item => !item.is_equipped);
+        
+        // Calculate encumbrance
+        const strength = character.strength || 10;
+        const maxEncumbrance = strength * 10; // BECMI: STR x 10 cn
+        const currentEncumbrance = this.inventoryStats.total_weight_cn;
+        const encumbrancePercent = (currentEncumbrance / maxEncumbrance) * 100;
+        
+        let encumbranceClass = 'normal';
+        if (encumbrancePercent > 100) encumbranceClass = 'overloaded';
+        else if (encumbrancePercent > 75) encumbranceClass = 'heavy';
+        
+        return `
+            <div class="equipment-summary">
+                <div class="encumbrance-bar ${encumbranceClass}">
+                    <div class="encumbrance-label">
+                        <i class="fas fa-weight-hanging"></i>
+                        <span>Encumbrance: ${currentEncumbrance} / ${maxEncumbrance} cn</span>
+                    </div>
+                    <div class="encumbrance-bar-track">
+                        <div class="encumbrance-bar-fill" style="width: ${Math.min(encumbrancePercent, 100)}%"></div>
+                    </div>
+                </div>
+            </div>
+            
+            ${equippedItems.length > 0 ? `
+                <div class="equipment-section">
+                    <h4><i class="fas fa-hand-holding"></i> Equipped Items</h4>
+                    <div class="equipment-list equipped">
+                        ${equippedItems.map(item => this.renderEquipmentItem(item, character.character_id)).join('')}
+                    </div>
+                </div>
+            ` : ''}
+            
+            ${unequippedItems.length > 0 ? `
+                <div class="equipment-section">
+                    <h4><i class="fas fa-backpack"></i> Inventory</h4>
+                    <div class="equipment-list">
+                        ${unequippedItems.map(item => this.renderEquipmentItem(item, character.character_id)).join('')}
+                    </div>
+                </div>
+            ` : ''}
+        `;
+    }
+    
+    /**
+     * Render individual equipment item
+     * 
+     * @param {object} item - Inventory item
+     * @param {number} characterId - Character ID
+     * @returns {string} HTML for equipment item
+     */
+    renderEquipmentItem(item, characterId) {
+        const iconMap = {
+            'weapon': 'fa-sword',
+            'armor': 'fa-shield-alt',
+            'shield': 'fa-shield',
+            'gear': 'fa-tools',
+            'consumable': 'fa-flask',
+            'treasure': 'fa-gem'
+        };
+        const icon = iconMap[item.item_type] || 'fa-cube';
+        
+        return `
+            <div class="equipment-item ${item.is_equipped ? 'equipped' : ''}">
+                <div class="item-icon">
+                    <i class="fas ${icon}"></i>
+                </div>
+                <div class="item-details">
+                    <div class="item-name">
+                        ${item.name}
+                        ${item.quantity > 1 ? `<span class="item-quantity">x${item.quantity}</span>` : ''}
+                        ${item.is_magical ? '<i class="fas fa-magic magical-indicator" title="Magical Item"></i>' : ''}
+                    </div>
+                    <div class="item-stats">
+                        ${item.damage_die ? `<span class="stat-badge"><i class="fas fa-bullseye"></i> ${item.damage_die}</span>` : ''}
+                        ${item.ac_bonus > 0 ? `<span class="stat-badge"><i class="fas fa-shield"></i> AC +${item.ac_bonus}</span>` : ''}
+                        <span class="stat-badge weight"><i class="fas fa-weight"></i> ${item.total_weight_cn} cn</span>
+                    </div>
+                    ${item.description ? `<div class="item-description">${item.description}</div>` : ''}
+                </div>
+                <div class="item-actions">
+                    <button class="btn btn-sm ${item.is_equipped ? 'btn-warning' : 'btn-success'}" 
+                            data-action="toggle-equip" 
+                            data-character-id="${characterId}"
+                            data-item-id="${item.item_id}"
+                            data-equipped="${item.is_equipped}">
+                        <i class="fas ${item.is_equipped ? 'fa-times' : 'fa-check'}"></i>
+                        ${item.is_equipped ? 'Unequip' : 'Equip'}
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+    
+    /**
      * Setup event handlers
      */
     setupEventHandlers() {
@@ -409,6 +553,22 @@ class CharacterSheetModule {
             } catch (error) {
                 console.error('HP update failed:', error);
                 this.app.showError('Failed to update HP: ' + error.message);
+            }
+        });
+        
+        // Equipment equip/unequip toggle
+        $(document).on('click', '[data-action="toggle-equip"]', async (e) => {
+            e.preventDefault();
+            const $btn = $(e.currentTarget);
+            const characterId = $btn.data('character-id');
+            const itemId = $btn.data('item-id');
+            const isEquipped = $btn.data('equipped');
+            
+            try {
+                await this.toggleEquip(characterId, itemId, !isEquipped);
+            } catch (error) {
+                console.error('Toggle equip failed:', error);
+                this.app.showError('Failed to equip/unequip item: ' + error.message);
             }
         });
     }
@@ -743,6 +903,42 @@ class CharacterSheetModule {
             
         } catch (error) {
             console.error('Failed to update HP:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Toggle equip/unequip item
+     * 
+     * @param {number} characterId - Character ID
+     * @param {number} itemId - Item ID
+     * @param {boolean} equip - True to equip, false to unequip
+     */
+    async toggleEquip(characterId, itemId, equip) {
+        try {
+            console.log(`${equip ? 'Equipping' : 'Unequipping'} item ${itemId} for character ${characterId}`);
+            
+            const response = await this.apiClient.post('/api/inventory/equip.php', {
+                character_id: characterId,
+                item_id: itemId,
+                equip: equip
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess(response.message);
+                
+                // Reload character sheet to show updated equipment
+                const content = await this.renderCharacterSheet(characterId);
+                $('#content-area').html(content);
+                
+                console.log(`Item ${equip ? 'equipped' : 'unequipped'} successfully`);
+                
+            } else {
+                throw new Error(response.message || 'Failed to equip/unequip item');
+            }
+            
+        } catch (error) {
+            console.error('Failed to toggle equip:', error);
             throw error;
         }
     }
