@@ -270,6 +270,44 @@ Dette projekt er **DELVIST FUNKTIONELT** med følgende status:
 
 ---
 
+### 11.5. **DM HP Control + Initiative Tracker** ✅ FIXED
+**Prioritet**: 🔴 KRITISK (for combat gameplay)  
+**Status**: ✅ **LØST** (2. Oktober 2025)
+
+**Løsning implementeret**:
+- ✅ **DM HP Control:**
+  - DM kan damage/heal/set HP for player characters
+  - HP controls i DM dashboard character cards
+  - Auto-refresh efter HP changes
+  - Integration med existing `api/character/update-hp.php`
+  
+- ✅ **Initiative Tracker (BECMI 1d6 System):**
+  - **Backend:**
+    - `api/combat/get-initiative.php` - Fetch initiative order
+    - `api/combat/roll-initiative.php` - Roll 1d6 for all characters
+    - `api/combat/next-turn.php` - Next/Previous turn with round tracking
+    - `api/combat/clear-initiative.php` - End combat and clear initiative
+    - Database tables: `combat_initiatives`, `combat_current_turn`
+  
+  - **Frontend:**
+    - Initiative Tracker section in DM Dashboard
+    - Empty state with BECMI rules explanation (1d6 system)
+    - Real-time initiative display with position, dice roll, HP bars
+    - Current turn highlighting with badge
+    - Round indicator
+    - Control buttons: Previous, Next, Re-roll, End Combat
+    - Full event handlers and API integration
+  
+  - **BECMI Compliance:**
+    - Simple 1d6 initiative rolls per character
+    - Sorted by initiative roll DESC, then dexterity DESC
+    - Round tracking starts at 1
+    - Turn wraps from last to first (new round)
+
+**Tid brugt**: 3.5 timer (gold standard, fully tested)
+
+---
+
 ### 12. **Character Edit Modal Mangler** ✅ FIXED
 **Prioritet**: 🟡 MEDIUM  
 **Status**: ✅ **LØST**
