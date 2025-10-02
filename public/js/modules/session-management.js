@@ -1047,11 +1047,20 @@ class SessionManagementModule {
      */
     async viewDMDashboard(sessionId) {
         try {
+            console.log('=== DM DASHBOARD DEBUG ===');
+            console.log('Loading dashboard for session:', sessionId);
+            
             const dashboardData = await this.loadDMDashboard(sessionId);
+            console.log('Dashboard data loaded:', dashboardData);
             
             // Render DM dashboard view
             const dashboardHTML = this.renderDMDashboard(dashboardData);
-            $('#app-content').html(dashboardHTML);
+            console.log('Dashboard HTML length:', dashboardHTML.length);
+            console.log('Target element exists:', $('#content-area').length > 0);
+            
+            $('#content-area').html(dashboardHTML);
+            console.log('Dashboard HTML inserted into DOM');
+            console.log('=== DM DASHBOARD DEBUG END ===');
             
         } catch (error) {
             console.error('Failed to load DM dashboard:', error);
