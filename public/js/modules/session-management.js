@@ -386,13 +386,6 @@ class SessionManagementModule {
             this.showInvitePlayerModal(sessionId);
         });
         
-        $(document).on('submit', '#invite-player-form', (e) => {
-            e.preventDefault();
-            const sessionId = parseInt($('#invite-session-id').val());
-            const userId = parseInt($('#invite-user-id').val());
-            this.invitePlayer(sessionId, userId);
-        });
-        
         $(document).on('click', '[data-action="remove-player"]', (e) => {
             e.preventDefault();
             const sessionId = $(e.currentTarget).data('session-id');
@@ -869,45 +862,64 @@ class SessionManagementModule {
                 `);
             }
             
-            // Show loading
-            $('#invite-player-content').html('<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading users...</div>');
-            $('#invite-player-modal').show();
-            
-            // Get list of available users (not already in session)
+            // Get list of existing players
             const playersData = await this.loadSessionPlayers(sessionId);
             const existingPlayerIds = playersData.players.map(p => p.user_id);
             
-            // For now, we'll need a way to get all users - this would be a new endpoint
-            // For simplicity, we'll allow entering user ID directly
+            // Show search interface
             $('#invite-player-content').html(`
-                <form id="invite-player-form" class="invite-form">
+                <div class="invite-form">
                     <input type="hidden" id="invite-session-id" value="${sessionId}">
                     
                     <div class="form-group">
-                        <label for="invite-user-id">User ID to Invite:</label>
-                        <input type="number" id="invite-user-id" name="user_id" min="1" required>
-                        <p class="help-text">Enter the ID of the user you want to invite</p>
+                        <label for="player-search">Search by Username or Email:</label>
+                        <input type="text" 
+                               id="player-search" 
+                               placeholder="Type at least 2 characters..." 
+                               autocomplete="off">
+                        <p class="help-text">Search for players by their username or email address</p>
                     </div>
+                    
+                    <div id="search-results" class="search-results"></div>
                     
                     <div class="form-group">
                         <h4>Current Players (${playersData.players.length})</h4>
-                        <ul class="current-players-list">
-                            ${playersData.players.map(p => `
-                                <li>
-                                    <strong>${p.username}</strong> (ID: ${p.user_id}) 
-                                    <span class="player-status ${p.status}">${p.status}</span>
-                                    ${p.character_count > 0 ? `<span class="character-count">${p.character_count} character(s)</span>` : ''}
-                                </li>
-                            `).join('')}
-                        </ul>
+                        ${playersData.players.length > 0 ? `
+                            <ul class="current-players-list">
+                                ${playersData.players.map(p => `
+                                    <li>
+                                        <strong>${p.username}</strong>
+                                        <span class="player-status ${p.status}">${p.status}</span>
+                                        ${p.character_count > 0 ? `<span class="character-count">${p.character_count} chars</span>` : ''}
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        ` : '<p class="empty-text">No players invited yet</p>'}
                     </div>
                     
                     <div class="form-actions">
-                        <button type="button" class="btn btn-secondary modal-close">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Send Invitation</button>
+                        <button type="button" class="btn btn-secondary modal-close">Close</button>
                     </div>
-                </form>
+                </div>
             `);
+            
+            $('#invite-player-modal').show();
+            
+            // Setup search handler with debouncing
+            let searchTimeout;
+            $('#player-search').on('input', (e) => {
+                clearTimeout(searchTimeout);
+                const query = e.target.value.trim();
+                
+                if (query.length < 2) {
+                    $('#search-results').html('');
+                    return;
+                }
+                
+                searchTimeout = setTimeout(() => {
+                    this.searchUsers(query, sessionId, existingPlayerIds);
+                }, 300); // 300ms debounce
+            });
             
             // Close modal handlers
             $('.modal-close').off('click').on('click', () => $('#invite-player-modal').hide());
@@ -921,6 +933,68 @@ class SessionManagementModule {
             console.error('Failed to show invite player modal:', error);
             this.app.showError('Failed to load invite player form');
             $('#invite-player-modal').hide();
+        }
+    }
+    
+    /**
+     * Search for users to invite
+     * 
+     * @param {string} query - Search query
+     * @param {number} sessionId - Current session ID
+     * @param {array} existingPlayerIds - IDs of already invited players
+     */
+    async searchUsers(query, sessionId, existingPlayerIds) {
+        try {
+            $('#search-results').html('<div class="loading"><i class="fas fa-spinner fa-spin"></i> Searching...</div>');
+            
+            const response = await this.apiClient.get(`/api/user/search.php?q=${encodeURIComponent(query)}`);
+            
+            if (response.status === 'success') {
+                const users = response.data.users.filter(u => !existingPlayerIds.includes(u.user_id));
+                
+                if (users.length === 0) {
+                    $('#search-results').html('<p class="empty-text">No users found matching your search</p>');
+                    return;
+                }
+                
+                $('#search-results').html(`
+                    <div class="user-results">
+                        <h4>Search Results (${users.length}):</h4>
+                        <div class="user-list">
+                            ${users.map(user => `
+                                <div class="user-card" data-user-id="${user.user_id}">
+                                    <div class="user-info">
+                                        <strong>${user.username}</strong>
+                                        <span class="user-email">${user.email_display}</span>
+                                        <span class="user-member">Member since ${user.member_since}</span>
+                                    </div>
+                                    <button class="btn btn-sm btn-primary" 
+                                            data-action="invite-user" 
+                                            data-user-id="${user.user_id}"
+                                            data-username="${user.username}">
+                                        <i class="fas fa-user-plus"></i> Invite
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `);
+                
+                // Setup invite button handlers
+                $('[data-action="invite-user"]').on('click', async (e) => {
+                    const userId = parseInt($(e.currentTarget).data('user-id'));
+                    const username = $(e.currentTarget).data('username');
+                    await this.invitePlayer(sessionId, userId);
+                    $('#invite-player-modal').hide();
+                });
+                
+            } else {
+                $('#search-results').html(`<p class="error-text">${response.message || 'Search failed'}</p>`);
+            }
+            
+        } catch (error) {
+            console.error('User search failed:', error);
+            $('#search-results').html('<p class="error-text">Search failed. Please try again.</p>');
         }
     }
     
