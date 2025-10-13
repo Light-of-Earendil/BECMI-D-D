@@ -7,6 +7,7 @@
 
 require_once '../../app/core/database.php';
 require_once '../../app/core/security.php';
+require_once '../../app/services/event-broadcaster.php';
 
 // Initialize security
 Security::init();
@@ -173,6 +174,19 @@ try {
             'change' => ($calculatedNewHp - $oldHp),
             'is_dead' => $isDead
         ]);
+        
+        // Broadcast real-time event if character is in a session
+        if ($character['session_id']) {
+            broadcastEvent($character['session_id'], 'hp_change', [
+                'character_id' => $characterId,
+                'character_name' => $character['character_name'],
+                'old_hp' => $oldHp,
+                'new_hp' => $calculatedNewHp,
+                'max_hp' => $maxHp,
+                'hp_change' => ($calculatedNewHp - $oldHp),
+                'is_dead' => $isDead
+            ], $userId);
+        }
         
         // Return success response
         Security::sendSuccessResponse([

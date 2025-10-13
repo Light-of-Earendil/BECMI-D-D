@@ -30,7 +30,7 @@ try {
     $characters = $db->select(
         "SELECT c.character_id, c.character_name, c.class, c.level, c.current_hp, c.max_hp,
                 c.strength, c.dexterity, c.constitution, c.intelligence, c.wisdom, c.charisma,
-                c.alignment, c.created_at, c.updated_at,
+                c.alignment, c.gender, c.portrait_url, c.created_at, c.updated_at,
                 gs.session_title, gs.session_datetime, gs.status as session_status,
                 u.username as dm_username
          FROM characters c 
@@ -45,7 +45,7 @@ try {
     $sessionCharacters = $db->select(
         "SELECT c.character_id, c.character_name, c.class, c.level, c.current_hp, c.max_hp,
                 c.strength, c.dexterity, c.constitution, c.intelligence, c.wisdom, c.charisma,
-                c.alignment, c.created_at, c.updated_at,
+                c.alignment, c.gender, c.portrait_url, c.created_at, c.updated_at,
                 gs.session_title, gs.session_datetime, gs.status as session_status,
                 u.username as dm_username, owner.username as character_owner
          FROM characters c 

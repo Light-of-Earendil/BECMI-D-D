@@ -18,8 +18,14 @@ class DashboardModule {
     async render() {
         try {
             const user = this.app.state.user;
-            const characters = this.app.state.characters;
-            const sessions = this.app.state.sessions;
+            const characters = this.app.state.characters || [];
+            const sessions = this.app.state.sessions || [];
+            
+            // Check if user is authenticated
+            if (!user) {
+                console.warn('Dashboard render: No user in state');
+                return '<div class="card"><h2>Loading...</h2><p>Please wait while we load your data.</p></div>';
+            }
             
             // Calculate dashboard statistics
             const stats = this.calculateDashboardStats(characters, sessions);
@@ -81,9 +87,11 @@ class DashboardModule {
      * Generate dashboard HTML
      */
     generateDashboardHTML(user, characters, sessions, stats) {
+        const username = user?.username || 'Adventurer';
+        
         return `<div class="dashboard-container">
                 <div class="dashboard-header">
-                    <h1>Welcome back, ${user.username}!</h1>
+                    <h1>Welcome back, ${username}!</h1>
                     <p>Manage your BECMI D&D characters and sessions</p>
                 </div>
                 
@@ -188,23 +196,27 @@ class DashboardModule {
         const recentCharacters = characters.slice(0, 3);
         
         return `<div class="character-list">
-                ${recentCharacters.map(character => `<div class="character-item"data-character-id="${character.character_id}">
+                ${recentCharacters.map(character => `<div class="character-item" data-character-id="${character.character_id}">
                         <div class="character-avatar">
-                            <i class="fas fa-user-circle"></i>
+                            ${character.portrait_url ? 
+                                `<img src="${character.portrait_url}" alt="${character.character_name}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <i class="fas fa-user-circle" style="display:none;"></i>` : 
+                                `<i class="fas fa-user-circle"></i>`
+                            }
                         </div>
                         <div class="character-info">
                             <h4>${character.character_name}</h4>
                             <p>Level ${character.level} ${character.class}</p>
                             <div class="character-hp">
                                 <div class="hp-bar">
-                                    <div class="hp-fill"style="width: ${character.hp_percentage}%"></div>
+                                    <div class="hp-fill" style="width: ${character.hp_percentage}%"></div>
                                 </div>
                                 <span>${character.current_hp}/${character.max_hp} HP</span>
                             </div>
                         </div>
                         <div class="character-actions">
-                            <button class="btn btn-sm btn-secondary"data-action="view-character"data-character-id="${character.character_id}">
-                                <i class="fas fa-eye"></i>
+                            <button class="btn btn-sm btn-secondary" data-action="view-character" data-character-id="${character.character_id}">
+                                <i class="fas fa-eye"></i> View
                             </button>
                         </div>
                     </div>
@@ -223,7 +235,12 @@ class DashboardModule {
             return sessionDate > now && session.status === 'scheduled';
         }).slice(0, 3);
         
-        if (upcomingSessions.length === 0) {
+        // Check for pending invitations
+        const pendingInvitations = sessions.filter(session => {
+            return session.invitation_status === 'invited';
+        });
+        
+        if (upcomingSessions.length === 0 && pendingInvitations.length === 0) {
             return `<div class="empty-state">
                     <i class="fas fa-calendar-plus"></i>
                     <p>No upcoming sessions</p>
@@ -232,29 +249,90 @@ class DashboardModule {
             `;
         }
         
-        return `<div class="session-list">
-                ${upcomingSessions.map(session => `<div class="session-item"data-session-id="${session.session_id}">
-                        <div class="session-date">
-                            <div class="date-day">${new Date(session.session_datetime).getDate()}</div>
-                            <div class="date-month">${new Date(session.session_datetime).toLocaleDateString('en', { month: 'short'})}</div>
-                        </div>
-                        <div class="session-info">
-                            <h4>${session.session_title}</h4>
-                            <p>${new Date(session.session_datetime).toLocaleDateString('en', { 
-                                weekday: 'long', 
-                                year: 'numeric', 
-                                month: 'long', 
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'})}</p>
-                        </div>
-                        <div class="session-actions">
-                            <button class="btn btn-sm btn-secondary"data-action="view-session"data-session-id="${session.session_id}">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </div>
+        let html = '';
+        
+        // Show pending invitations first
+        if (pendingInvitations.length > 0) {
+            html += `
+                <div class="invitations-section">
+                    <h3><i class="fas fa-bell"></i> Pending Invitations (${pendingInvitations.length})</h3>
+                    <div class="session-list">
+                        ${pendingInvitations.map(session => this.renderInvitationCard(session)).join('')}
                     </div>
-                `).join('')}
+                </div>
+            `;
+        }
+        
+        // Show upcoming sessions
+        if (upcomingSessions.length > 0) {
+            html += `
+                <div class="session-list">
+                    ${upcomingSessions.map(session => `<div class="session-item" data-session-id="${session.session_id}">
+                            <div class="session-date">
+                                <div class="date-day">${new Date(session.session_datetime).getDate()}</div>
+                                <div class="date-month">${new Date(session.session_datetime).toLocaleDateString('en', { month: 'short'})}</div>
+                            </div>
+                            <div class="session-info">
+                                <h4>${session.session_title}</h4>
+                                <p>${new Date(session.session_datetime).toLocaleDateString('en', { 
+                                    weekday: 'long', 
+                                    year: 'numeric', 
+                                    month: 'long', 
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'})}</p>
+                            </div>
+                            <div class="session-actions">
+                                <button class="btn btn-sm btn-secondary" data-action="view-session" data-session-id="${session.session_id}">
+                                    <i class="fas fa-eye"></i> View
+                                </button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+        
+        return html;
+    }
+    
+    /**
+     * Render invitation card for pending invitations
+     */
+    renderInvitationCard(session) {
+        const sessionDate = session.session_datetime ? 
+            new Date(session.session_datetime).toLocaleDateString('en', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            }) : 'TBA';
+            
+        return `
+            <div class="invitation-card" data-session-id="${session.session_id}">
+                <div class="invitation-header">
+                    <div class="invitation-icon">
+                        <i class="fas fa-envelope-open"></i>
+                    </div>
+                    <div class="invitation-info">
+                        <h4>${session.session_title}</h4>
+                        <p><strong>DM:</strong> ${session.dm_username}</p>
+                        <p><strong>Date:</strong> ${sessionDate}</p>
+                    </div>
+                </div>
+                <div class="invitation-actions">
+                    <button class="btn btn-success btn-sm" data-action="accept-invitation" data-session-id="${session.session_id}">
+                        <i class="fas fa-check"></i> Accept
+                    </button>
+                    <button class="btn btn-danger btn-sm" data-action="decline-invitation" data-session-id="${session.session_id}">
+                        <i class="fas fa-times"></i> Decline
+                    </button>
+                </div>
+                <div class="invitation-notice">
+                    <i class="fas fa-info-circle"></i> You've been invited to join this session
+                </div>
             </div>
         `;
     }

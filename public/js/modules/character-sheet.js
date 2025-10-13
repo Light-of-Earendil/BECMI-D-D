@@ -21,10 +21,40 @@ class CharacterSheetModule {
         try {
             console.log(`Loading character ${characterId}...`);
             
-            const response = await this.apiClient.get(`/api/character/get.php?id=${characterId}`);
+            const response = await this.apiClient.get(`/api/character/get.php?id=${characterId}&t=${Date.now()}`);
             
             if (response.status === 'success') {
                 this.currentCharacter = response.data.character;
+                
+                // Load weapon masteries for equipment display
+                try {
+                    const masteryResponse = await this.apiClient.get(`/api/character/get-weapon-masteries.php?character_id=${characterId}&t=${Date.now()}`);
+                    if (masteryResponse.status === 'success') {
+                        this.currentCharacter.weapon_masteries = masteryResponse.data.masteries || [];
+                        console.log(`Loaded ${this.currentCharacter.weapon_masteries.length} weapon masteries`);
+                    }
+                } catch (error) {
+                    console.warn('Failed to load weapon masteries:', error);
+                    this.currentCharacter.weapon_masteries = [];
+                }
+                
+                // Load XP progression
+                try {
+                    const xpResponse = await this.apiClient.get(`/api/character/get-xp-progression.php?character_id=${characterId}&t=${Date.now()}`);
+                    console.log('XP Response:', xpResponse);
+                    
+                    if (xpResponse.success) {
+                        this.currentCharacter.xpProgression = xpResponse.data;
+                        console.log(`Loaded XP progression for level ${this.currentCharacter.level}`);
+                        console.log('About to call updateXPDisplay with characterId:', characterId);
+                        
+                        this.updateXPDisplay(characterId);
+                        console.log('updateXPDisplay call completed');
+                    }
+                } catch (error) {
+                    console.warn('Failed to load XP progression:', error);
+                }
+                
                 this.app.updateState({ currentCharacter: this.currentCharacter });
                 
                 console.log(`Character loaded: ${this.currentCharacter.character_name}`);
@@ -49,7 +79,7 @@ class CharacterSheetModule {
         try {
             console.log(`Loading inventory for character ${characterId}...`);
             
-            const response = await this.apiClient.get(`/api/inventory/get.php?character_id=${characterId}`);
+            const response = await this.apiClient.get(`/api/inventory/get.php?character_id=${characterId}&t=${Date.now()}`);
             
             if (response.status === 'success') {
                 this.currentInventory = response.data.inventory || [];
@@ -145,66 +175,90 @@ class CharacterSheetModule {
         
         const statusClass = this.getCharacterStatusClass(hpPercentage);
         
-        return `<div class="character-card"data-character-id="${character.character_id}">
-                <div class="character-header">
-                    <h3>${character.character_name}</h3>
-                    <span class="character-class">Level ${character.level} ${character.class}</span>
-                </div>
-                
-                <div class="character-stats">
-                    <div class="stat-row">
-                        <span class="stat-label">HP:</span>
-                        <div class="hp-bar">
-                            <div class="hp-fill ${statusClass}" style="width: ${hpPercentage}%"></div>
-                        </div>
-                        <span class="stat-value">${character.current_hp}/${character.max_hp}</span>
+        // Get class-specific colors and icons
+        const classInfo = this.getClassInfo(character.class);
+        
+        return `<div class="character-card elegant-card" data-character-id="${character.character_id}">
+                <div class="card-header">
+                    <div class="character-portrait-container">
+                        ${character.portrait_url ? 
+                            `<img src="${character.portrait_url}" alt="${character.character_name}" class="character-card-portrait">` :
+                            `<div class="portrait-placeholder ${classInfo.color}">
+                                <i class="${classInfo.icon}"></i>
+                                <span class="level-badge">${character.level}</span>
+                            </div>`
+                        }
+                        <div class="status-indicator ${statusClass}"></div>
                     </div>
                     
-                    <div class="ability-scores">
-                        <div class="ability-score">
+                    <div class="character-info">
+                        <h3 class="character-name">${character.character_name}</h3>
+                        <div class="character-details">
+                            <span class="class-badge ${classInfo.color}">
+                                <i class="${classInfo.icon}"></i>
+                                Level ${character.level} ${character.class}
+                            </span>
+                            ${character.gender ? `<span class="gender-badge">${character.gender.charAt(0).toUpperCase() + character.gender.slice(1)}</span>` : ''}
+                            <span class="alignment-badge ${character.alignment}">${character.alignment}</span>
+                        </div>
+                        
+                        <div class="hp-section">
+                            <div class="hp-bar-container">
+                                <div class="hp-bar">
+                                    <div class="hp-fill ${statusClass}" style="width: ${hpPercentage}%"></div>
+                                </div>
+                                <span class="hp-text">${character.current_hp}/${character.max_hp} HP</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <div class="ability-grid">
+                        <div class="ability-item">
                             <span class="ability-label">STR</span>
                             <span class="ability-value">${character.strength}</span>
                         </div>
-                        <div class="ability-score">
+                        <div class="ability-item">
                             <span class="ability-label">DEX</span>
                             <span class="ability-value">${character.dexterity}</span>
                         </div>
-                        <div class="ability-score">
+                        <div class="ability-item">
                             <span class="ability-label">CON</span>
                             <span class="ability-value">${character.constitution}</span>
                         </div>
-                        <div class="ability-score">
+                        <div class="ability-item">
                             <span class="ability-label">INT</span>
                             <span class="ability-value">${character.intelligence}</span>
                         </div>
-                        <div class="ability-score">
+                        <div class="ability-item">
                             <span class="ability-label">WIS</span>
                             <span class="ability-value">${character.wisdom}</span>
                         </div>
-                        <div class="ability-score">
+                        <div class="ability-item">
                             <span class="ability-label">CHA</span>
                             <span class="ability-value">${character.charisma}</span>
                         </div>
                     </div>
+                    
+                    <div class="session-info">
+                        <i class="fas fa-calendar"></i>
+                        <span>${character.session_title || 'Unassigned'}</span>
+                    </div>
                 </div>
                 
-                <div class="character-session">
-                    <i class="fas fa-calendar"></i>
-                    <span>${character.session_title || 'Unassigned'}</span>
-                </div>
-                
-                <div class="character-actions">
-                    <button class="btn btn-sm btn-primary"data-action="view-character"data-character-id="${character.character_id}">
+                <div class="card-actions">
+                    <button class="btn action-btn view-btn" data-action="view-character" data-character-id="${character.character_id}">
                         <i class="fas fa-eye"></i>
-                        View
+                        <span>View</span>
                     </button>
-                    <button class="btn btn-sm btn-secondary"data-action="edit-character"data-character-id="${character.character_id}">
+                    <button class="btn action-btn edit-btn" data-action="edit-character" data-character-id="${character.character_id}">
                         <i class="fas fa-edit"></i>
-                        Edit
+                        <span>Edit</span>
                     </button>
-                    <button class="btn btn-sm btn-danger"data-action="delete-character"data-character-id="${character.character_id}">
+                    <button class="btn action-btn delete-btn" data-action="delete-character" data-character-id="${character.character_id}">
                         <i class="fas fa-trash"></i>
-                        Delete
+                        <span>Delete</span>
                     </button>
                 </div>
             </div>
@@ -222,21 +276,45 @@ class CharacterSheetModule {
     }
     
     /**
+     * Get class-specific styling information
+     */
+    getClassInfo(className) {
+        const classData = {
+            'fighter': { color: 'fighter-color', icon: 'fas fa-sword' },
+            'magic_user': { color: 'magic-user-color', icon: 'fas fa-hat-wizard' },
+            'cleric': { color: 'cleric-color', icon: 'fas fa-cross' },
+            'thief': { color: 'thief-color', icon: 'fas fa-mask' },
+            'dwarf': { color: 'dwarf-color', icon: 'fas fa-hammer' },
+            'elf': { color: 'elf-color', icon: 'fas fa-leaf' },
+            'halfling': { color: 'halfling-color', icon: 'fas fa-home' }
+        };
+        
+        return classData[className] || { color: 'default-color', icon: 'fas fa-user' };
+    }
+    
+    /**
      * Render detailed character sheet
      */
     async renderCharacterSheet(characterId) {
         try {
-            const character = await this.loadCharacter(characterId);
+            // Load character data and inventory in parallel for faster loading
+            const [character, inventory] = await Promise.all([
+                this.loadCharacter(characterId),
+                this.loadInventory(characterId)
+            ]);
             
-            // Load inventory
-            await this.loadInventory(characterId);
-            
-            return `<div class="character-sheet-container">
+            const html = `<div class="character-sheet-container">
                     <div class="character-sheet-header">
+                        ${character.portrait_url ? `
+                        <div class="character-portrait">
+                            <img src="${character.portrait_url}" alt="${character.character_name}" class="character-portrait-img">
+                        </div>
+                        ` : ''}
                         <div>
                             <h1>${character.character_name}</h1>
                             <div class="character-basic-info">
                                 <span>Level ${character.level} ${character.class}</span>
+                                ${character.gender ? `<span>${character.gender.charAt(0).toUpperCase() + character.gender.slice(1)}</span>` : ''}
                                 <span>${character.alignment}</span>
                             </div>
                         </div>
@@ -252,6 +330,20 @@ class CharacterSheetModule {
                     </div>
                 </div>
             `;
+            
+            // Load weapon masteries, skills, and spells asynchronously after render
+            setTimeout(async () => {
+                await this.loadAndRenderWeaponMasteries(characterId);
+                await this.loadAndRenderSkills(characterId);
+                await this.loadAndRenderSpells(characterId);
+                
+                // Update XP display after DOM is rendered
+                if (this.currentCharacter && this.currentCharacter.xpProgression) {
+                    this.updateXPDisplay(characterId);
+                }
+            }, 100);
+            
+            return html;
             
         } catch (error) {
             console.error('Character sheet render error:', error);
@@ -285,9 +377,124 @@ class CharacterSheetModule {
             </div>
             
             <div class="character-section">
+                <h3>Weapon Masteries</h3>
+                <div class="weapon-masteries" id="weapon-masteries-section">
+                    <div class="loading-spinner">Loading weapon masteries...</div>
+                </div>
+            </div>
+            
+            <div class="character-section">
+                <h3>General Skills</h3>
+                <div class="general-skills" id="general-skills-section">
+                    <div class="loading-spinner">Loading skills...</div>
+                </div>
+            </div>
+            
+            <div class="character-section" id="spells-section" style="display: none;">
+                <h3>Spells & Magic</h3>
+                <div class="spells" id="spells-content">
+                    <div class="loading-spinner">Loading spells...</div>
+                </div>
+            </div>
+            
+            <div class="character-section">
+                <h3>Money & Wealth</h3>
+                <div class="money-section">
+                    ${this.renderMoney(character)}
+                </div>
+            </div>
+            
+            <div class="character-section">
                 <h3>Equipment & Inventory</h3>
                 <div class="equipment">
                     ${this.renderEquipment(character)}
+                </div>
+            </div>
+        `;
+    }
+    
+    /**
+     * Update XP display with loaded progression data
+     */
+    updateXPDisplay(characterId) {
+        console.log('updateXPDisplay called for character:', characterId);
+        const character = this.currentCharacter;
+        console.log('Character XP Progression:', character.xpProgression);
+        if (!character || !character.xpProgression) {
+            console.log('No character or XP progression data:', {character: !!character, xpProgression: !!character?.xpProgression});
+            return;
+        }
+        
+        const xpData = character.xpProgression;
+        console.log('XP Data:', xpData);
+        const nextLevelElement = document.getElementById(`xp-next-level-${characterId}`);
+        const progressBar = document.querySelector(`[data-character-id="${characterId}"] .xp-progress-bar-fill`);
+        const progressBarTrack = document.querySelector(`[data-character-id="${characterId}"] .xp-progress-bar-track`);
+        
+        console.log('DOM Elements found:', {
+            nextLevelElement: !!nextLevelElement,
+            progressBar: !!progressBar,
+            progressBarTrack: !!progressBarTrack,
+            characterId: characterId
+        });
+        
+        if (nextLevelElement && xpData.xp_for_next_level) {
+            nextLevelElement.textContent = `${xpData.xp_for_next_level.toLocaleString()} XP for Level ${xpData.next_level}`;
+        } else if (nextLevelElement) {
+            nextLevelElement.textContent = 'Max Level Reached';
+        }
+        
+        if (progressBar && progressBarTrack) {
+            progressBar.style.width = `${xpData.xp_progress_percent}%`;
+            if (xpData.can_level_up) {
+                progressBar.classList.add('ready');
+            } else {
+                progressBar.classList.remove('ready');
+            }
+        }
+        
+        // Show/hide level up button
+        const levelUpBtn = document.querySelector(`[data-character-id="${characterId}"].btn-level-up`);
+        if (levelUpBtn) {
+            if (xpData.can_level_up) {
+                levelUpBtn.style.display = 'inline-block';
+                levelUpBtn.innerHTML = `<i class="fas fa-level-up-alt"></i> Level Up to ${xpData.next_level}`;
+            } else {
+                levelUpBtn.style.display = 'none';
+            }
+        }
+    }
+    
+    /**
+     * Render money/wealth section
+     */
+    renderMoney(character) {
+        const gp = character.gold_pieces || 0;
+        const sp = character.silver_pieces || 0;
+        const cp = character.copper_pieces || 0;
+        
+        // Calculate total in gold (1 gp = 10 sp = 100 cp)
+        const totalInGold = gp + (sp / 10) + (cp / 100);
+        
+        return `
+            <div class="money-display">
+                <div class="money-item gold">
+                    <div class="money-icon">💰</div>
+                    <div class="money-amount">${gp}</div>
+                    <div class="money-label">Gold Pieces</div>
+                </div>
+                <div class="money-item silver">
+                    <div class="money-icon">⚪</div>
+                    <div class="money-amount">${sp}</div>
+                    <div class="money-label">Silver Pieces</div>
+                </div>
+                <div class="money-item copper">
+                    <div class="money-icon">🟤</div>
+                    <div class="money-amount">${cp}</div>
+                    <div class="money-label">Copper Pieces</div>
+                </div>
+                <div class="money-total">
+                    <strong>Total Value:</strong> ${totalInGold.toFixed(2)} gp
                 </div>
             </div>
         `;
@@ -325,6 +532,10 @@ class CharacterSheetModule {
         const isDead = character.current_hp <= 0;
         const statusClass = isDead ? 'dead' : this.getCharacterStatusClass(hpPercentage);
         
+        // XP progression will be loaded via API call
+        const currentXp = character.experience_points || 0;
+        const nextLevel = character.level + 1;
+        
         return `<div class="combat-stat">
                 <span class="stat-label">Armor Class:</span>
                 <span class="stat-value">${character.armor_class}</span>
@@ -357,6 +568,24 @@ class CharacterSheetModule {
                     <div class="hp-fill ${statusClass}" style="width: ${Math.max(0, hpPercentage)}%"></div>
                 </div>
                 ${isDead ? '<div class="hp-status-dead"><i class="fas fa-skull"></i> DEAD</div>' : ''}
+            </div>
+            <div class="combat-stat-xp">
+                <div class="xp-header">
+                    <span class="stat-label">Experience Points:</span>
+                    <span class="stat-value">${currentXp.toLocaleString()} XP</span>
+                </div>
+                <div class="xp-progress-display">
+                    <div class="xp-progress-label">
+                        <span>Level ${character.level}</span>
+                        <span id="xp-next-level-${character.character_id}">Loading...</span>
+                    </div>
+                    <div class="xp-progress-bar-track">
+                        <div class="xp-progress-bar-fill" style="width: 0%" data-character-id="${character.character_id}"></div>
+                    </div>
+                </div>
+                <button class="btn btn-success btn-level-up" id="level-up-btn" data-character-id="${character.character_id}" style="display: none;">
+                    <i class="fas fa-level-up-alt"></i> Level Up to ${nextLevel}
+                </button>
             </div>
         `;
     }
@@ -399,25 +628,62 @@ class CharacterSheetModule {
         const equippedItems = this.currentInventory.filter(item => item.is_equipped);
         const unequippedItems = this.currentInventory.filter(item => !item.is_equipped);
         
-        // Calculate encumbrance
+        // Calculate encumbrance using BECMI rules
         const strength = character.strength || 10;
-        const maxEncumbrance = strength * 10; // BECMI: STR x 10 cn
         const currentEncumbrance = this.inventoryStats.total_weight_cn;
-        const encumbrancePercent = (currentEncumbrance / maxEncumbrance) * 100;
         
-        let encumbranceClass = 'normal';
-        if (encumbrancePercent > 100) encumbranceClass = 'overloaded';
-        else if (encumbrancePercent > 75) encumbranceClass = 'heavy';
+        // Use BECMI rules engine to calculate movement rates
+        let movementData;
+        if (this.app.modules.becmiRules) {
+            console.log('Using BECMI rules engine for movement calculation');
+            movementData = this.app.modules.becmiRules.calculateMovementRates({
+                ...character,
+                inventory: this.currentInventory
+            });
+            console.log('Movement data from BECMI rules:', movementData);
+        } else {
+            console.log('BECMI rules engine not available, using fallback');
+            // Fallback calculation based on BECMI rules
+            if (currentEncumbrance <= 400) {
+                movementData = { normal: 120, encounter: 40, running: 120, status: 'unencumbered', weight: currentEncumbrance, limit: 400 };
+            } else if (currentEncumbrance <= 800) {
+                movementData = { normal: 90, encounter: 30, running: 90, status: 'lightly_encumbered', weight: currentEncumbrance, limit: 800 };
+            } else if (currentEncumbrance <= 1200) {
+                movementData = { normal: 60, encounter: 20, running: 60, status: 'heavily_encumbered', weight: currentEncumbrance, limit: 1200 };
+            } else if (currentEncumbrance <= 1600) {
+                movementData = { normal: 30, encounter: 10, running: 30, status: 'severely_encumbered', weight: currentEncumbrance, limit: 1600 };
+            } else if (currentEncumbrance <= 2400) {
+                movementData = { normal: 15, encounter: 5, running: 15, status: 'overloaded', weight: currentEncumbrance, limit: 2400 };
+            } else {
+                movementData = { normal: 0, encounter: 0, running: 0, status: 'immobile', weight: currentEncumbrance, limit: 2400 };
+            }
+        }
+        
+        let encumbranceClass = movementData.status || 'unencumbered';
         
         return `
             <div class="equipment-summary">
                 <div class="encumbrance-bar ${encumbranceClass}">
                     <div class="encumbrance-label">
                         <i class="fas fa-weight-hanging"></i>
-                        <span>Encumbrance: ${currentEncumbrance} / ${maxEncumbrance} cn</span>
+                        <span>Encumbrance: ${currentEncumbrance} / ${movementData.limit} cn</span>
                     </div>
                     <div class="encumbrance-bar-track">
-                        <div class="encumbrance-bar-fill" style="width: ${Math.min(encumbrancePercent, 100)}%"></div>
+                        <div class="encumbrance-bar-fill" style="width: ${Math.min((currentEncumbrance / movementData.limit) * 100, 100)}%"></div>
+                    </div>
+                </div>
+                <div class="movement-rates">
+                    <div class="movement-rate-item">
+                        <i class="fas fa-walking"></i>
+                        <span>Normal: ${movementData.normal}'</span>
+                    </div>
+                    <div class="movement-rate-item">
+                        <i class="fas fa-running"></i>
+                        <span>Encounter: ${movementData.encounter}'</span>
+                    </div>
+                    <div class="movement-rate-item">
+                        <i class="fas fa-fire"></i>
+                        <span>Running: ${movementData.running || movementData.normal}'</span>
                     </div>
                 </div>
             </div>
@@ -443,7 +709,7 @@ class CharacterSheetModule {
     }
     
     /**
-     * Render individual equipment item
+     * Render individual equipment item with enhanced magical highlighting and details
      * 
      * @param {object} item - Inventory item
      * @param {number} characterId - Character ID
@@ -456,29 +722,77 @@ class CharacterSheetModule {
             'shield': 'fa-shield',
             'gear': 'fa-tools',
             'consumable': 'fa-flask',
-            'treasure': 'fa-gem'
+            'treasure': 'fa-gem',
+            'mount': 'fa-horse',
+            'vehicle': 'fa-car',
+            'ship': 'fa-ship',
+            'siege_weapon': 'fa-catapult'
         };
         const icon = iconMap[item.item_type] || 'fa-cube';
         
+        // Determine magical highlighting class
+        const magicalClass = item.is_magical ? 'magical-item' : '';
+        const magicalBonus = item.magical_bonus || 0;
+        const effectiveDamage = this.calculateEffectiveDamage(item);
+        const effectiveAC = this.calculateEffectiveAC(item);
+        
+        // Get weapon mastery info if it's a weapon
+        const weaponMastery = this.getWeaponMasteryForItem(item, characterId);
+        
         return `
-            <div class="equipment-item ${item.is_equipped ? 'equipped' : ''}">
-                <div class="item-icon">
+            <div class="equipment-item ${item.is_equipped ? 'equipped' : ''} ${magicalClass}" 
+                 data-item-id="${item.item_id}" 
+                 data-character-id="${characterId}">
+                <div class="item-icon ${magicalClass}">
                     <i class="fas ${icon}"></i>
+                    ${item.is_magical ? '<div class="magical-glow"></div>' : ''}
                 </div>
                 <div class="item-details">
                     <div class="item-name">
-                        ${item.name}
+                        <span class="item-name-text" data-action="view-item-details" style="cursor: pointer;">
+                            ${item.custom_name || item.name}
+                        </span>
                         ${item.quantity > 1 ? `<span class="item-quantity">x${item.quantity}</span>` : ''}
-                        ${item.is_magical ? '<i class="fas fa-magic magical-indicator" title="Magical Item"></i>' : ''}
+                        ${item.is_magical ? `<span class="magical-badge">+${magicalBonus}</span>` : ''}
+                        ${item.identified === false ? '<span class="unidentified-badge">?</span>' : ''}
+                        ${item.attunement_status === 'attuned' ? '<i class="fas fa-link attuned-indicator" title="Attuned"></i>' : ''}
+                        ${item.attunement_status === 'cursed' ? '<i class="fas fa-skull cursed-indicator" title="Cursed"></i>' : ''}
                     </div>
                     <div class="item-stats">
-                        ${item.damage_die ? `<span class="stat-badge"><i class="fas fa-bullseye"></i> ${item.damage_die}</span>` : ''}
-                        ${item.ac_bonus > 0 ? `<span class="stat-badge"><i class="fas fa-shield"></i> AC +${item.ac_bonus}</span>` : ''}
-                        <span class="stat-badge weight"><i class="fas fa-weight"></i> ${item.total_weight_cn} cn</span>
+                        ${item.damage_die ? `
+                            <span class="stat-badge damage">
+                                <i class="fas fa-bullseye"></i> 
+                                ${effectiveDamage}
+                                ${weaponMastery ? `<small class="mastery-bonus">(${weaponMastery.level})</small>` : ''}
+                            </span>
+                        ` : ''}
+                        ${item.ac_bonus > 0 ? `
+                            <span class="stat-badge ac">
+                                <i class="fas fa-shield"></i> AC +${effectiveAC}
+                            </span>
+                        ` : ''}
+                        <span class="stat-badge weight">
+                            <i class="fas fa-weight"></i> ${item.total_weight_cn} cn
+                        </span>
+                        ${item.charges_remaining ? `
+                            <span class="stat-badge charges">
+                                <i class="fas fa-bolt"></i> ${item.charges_remaining} charges
+                            </span>
+                        ` : ''}
                     </div>
                     ${item.description ? `<div class="item-description">${item.description}</div>` : ''}
+                    ${item.notes ? `<div class="item-notes"><small><i class="fas fa-sticky-note"></i> ${item.notes}</small></div>` : ''}
                 </div>
                 <div class="item-actions">
+                    ${item.identified === false && item.is_magical ? `
+                        <button class="btn btn-sm btn-info" 
+                                data-action="identify-item" 
+                                data-character-id="${characterId}"
+                                data-item-id="${item.item_id}"
+                                title="Identify Item">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    ` : ''}
                     <button class="btn btn-sm ${item.is_equipped ? 'btn-warning' : 'btn-success'}" 
                             data-action="toggle-equip" 
                             data-character-id="${characterId}"
@@ -487,9 +801,1074 @@ class CharacterSheetModule {
                         <i class="fas ${item.is_equipped ? 'fa-times' : 'fa-check'}"></i>
                         ${item.is_equipped ? 'Unequip' : 'Equip'}
                     </button>
+                    <button class="btn btn-sm btn-secondary" 
+                            data-action="view-item-details"
+                            data-item-id="${item.item_id}"
+                            data-character-id="${characterId}"
+                            title="View Details">
+                        <i class="fas fa-info"></i>
+                    </button>
                 </div>
             </div>
         `;
+    }
+    
+    /**
+     * Calculate effective damage including magical and mastery bonuses
+     * 
+     * @param {Object} item - Equipment item
+     * @returns {string} Formatted damage string
+     */
+    calculateEffectiveDamage(item) {
+        if (!item.damage_die) return '';
+        
+        let damage = item.damage_die;
+        let bonus = 0;
+        
+        // Add magical bonus
+        if (item.magical_bonus) {
+            bonus += item.magical_bonus;
+        }
+        
+        // Add weapon mastery bonus
+        const mastery = this.getWeaponMasteryForItem(item, this.currentCharacter?.character_id);
+        if (mastery && mastery.damage_bonus) {
+            bonus += mastery.damage_bonus;
+        }
+        
+        if (bonus > 0) {
+            damage += `+${bonus}`;
+        }
+        
+        return damage;
+    }
+
+    /**
+     * Calculate effective AC bonus including magical bonuses
+     * 
+     * @param {Object} item - Equipment item
+     * @returns {number} Effective AC bonus
+     */
+    calculateEffectiveAC(item) {
+        let ac = item.ac_bonus || 0;
+        
+        // Add magical bonus for armor/shields
+        if (item.magical_bonus && (item.item_type === 'armor' || item.item_type === 'shield')) {
+            ac += item.magical_bonus;
+        }
+        
+        return ac;
+    }
+
+    /**
+     * Get weapon mastery information for an item
+     * 
+     * @param {Object} item - Equipment item
+     * @param {number} characterId - Character ID
+     * @returns {Object|null} Weapon mastery info or null
+     */
+    getWeaponMasteryForItem(item, characterId) {
+        // Check if this is a weapon item
+        if (item.item_type !== 'weapon') {
+            return null;
+        }
+        
+        // Check if we have weapon mastery data loaded
+        if (!this.currentCharacter || !this.currentCharacter.weapon_masteries) {
+            return null;
+        }
+        
+        // Find matching weapon mastery
+        const mastery = this.currentCharacter.weapon_masteries.find(wm => {
+            // Direct match by item_id
+            if (wm.item_id === item.item_id) {
+                return true;
+            }
+            
+            // For magical weapons, check if they link to a mastered base weapon
+            if (item.base_item_id && wm.base_item_id === item.base_item_id) {
+                return true;
+            }
+            
+            // Name-based matching (fallback)
+            return wm.weapon_name === item.name || 
+                   wm.weapon_name === item.custom_name ||
+                   (item.base_item_id && wm.base_weapon_name === item.name);
+        });
+        
+        return mastery || null;
+    }
+
+    /**
+     * Show item details modal
+     * 
+     * @param {Object} item - Item to display
+     * @param {number} characterId - Character ID
+     */
+    async showItemDetailsModal(item, characterId) {
+        try {
+            // Get full item details from API
+            const response = await this.apiClient.get(`/api/items/magical-variants.php?base_item_id=${item.base_item_id || item.item_id}&t=${Date.now()}`);
+            const itemDetails = response.data.base_item || item;
+            
+            const modal = $(`
+                <div class="modal fade" id="itemDetailsModal" tabindex="-1" role="dialog">
+                    <div class="modal-dialog modal-lg" role="document">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">
+                                    <i class="fas fa-info-circle"></i> 
+                                    ${item.custom_name || item.name}
+                                    ${item.is_magical ? '<span class="badge badge-purple">Magical</span>' : ''}
+                                </h5>
+                                <button type="button" class="close" data-dismiss="modal">
+                                    <span>&times;</span>
+                                </button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="item-details-full">
+                                    ${this.renderFullItemDetails(item, itemDetails, characterId)}
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                ${item.identified === false && item.is_magical ? `
+                                    <button type="button" class="btn btn-info" id="identify-item-btn">
+                                        <i class="fas fa-search"></i> Identify Item
+                                    </button>
+                                ` : ''}
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `);
+            
+            $('body').append(modal);
+            $('#itemDetailsModal').modal('show');
+            
+            // Setup identify button if present
+            if (item.identified === false && item.is_magical) {
+                $('#identify-item-btn').on('click', async () => {
+                    await this.identifyItem(item.item_id, characterId);
+                });
+            }
+            
+            // Cleanup when modal is closed
+            $('#itemDetailsModal').on('hidden.bs.modal', () => {
+                $('#itemDetailsModal').remove();
+            });
+            
+        } catch (error) {
+            console.error('Failed to show item details:', error);
+            if (this.app.modules.notifications) {
+                this.app.modules.notifications.show('Failed to load item details', 'error');
+            }
+        }
+    }
+
+    /**
+     * Render full item details for modal
+     * 
+     * @param {Object} inventoryItem - Item from inventory
+     * @param {Object} baseItem - Base item data
+     * @param {number} characterId - Character ID
+     * @returns {string} HTML for full item details
+     */
+    renderFullItemDetails(inventoryItem, baseItem, characterId) {
+        const item = inventoryItem;
+        const base = baseItem;
+        
+        return `
+            <div class="item-details-container">
+                <div class="item-header">
+                    <div class="item-icon-large ${item.is_magical ? 'magical-item' : ''}">
+                        <i class="fas ${this.getItemIcon(item.item_type)}"></i>
+                        ${item.is_magical ? '<div class="magical-glow"></div>' : ''}
+                    </div>
+                    <div class="item-info">
+                        <h4>${item.custom_name || item.name}</h4>
+                        <p class="item-type">${item.item_type} ${item.item_category ? '(' + item.item_category + ')' : ''}</p>
+                        ${item.description ? `<p class="item-description">${item.description}</p>` : ''}
+                    </div>
+                </div>
+                
+                <div class="item-properties">
+                    <div class="properties-grid">
+                        <div class="property">
+                            <label>Cost:</label>
+                            <span>${this.formatCost(base.cost_gp)}</span>
+                        </div>
+                        <div class="property">
+                            <label>Weight:</label>
+                            <span>${this.formatWeight(item.total_weight_cn)}</span>
+                        </div>
+                        ${item.damage_die ? `
+                        <div class="property">
+                            <label>Damage:</label>
+                            <span>${this.calculateEffectiveDamage(item)} ${item.damage_type}</span>
+                        </div>
+                        ` : ''}
+                        ${item.ac_bonus ? `
+                        <div class="property">
+                            <label>AC Bonus:</label>
+                            <span>+${this.calculateEffectiveAC(item)}</span>
+                        </div>
+                        ` : ''}
+                        ${item.magical_bonus ? `
+                        <div class="property">
+                            <label>Magical Bonus:</label>
+                            <span>+${item.magical_bonus}</span>
+                        </div>
+                        ` : ''}
+                        ${item.range_short ? `
+                        <div class="property">
+                            <label>Range:</label>
+                            <span>${item.range_short}/${item.range_long} ft</span>
+                        </div>
+                        ` : ''}
+                        ${item.hands_required ? `
+                        <div class="property">
+                            <label>Hands Required:</label>
+                            <span>${item.hands_required}</span>
+                        </div>
+                        ` : ''}
+                        ${item.charges_remaining ? `
+                        <div class="property">
+                            <label>Charges Remaining:</label>
+                            <span>${item.charges_remaining}</span>
+                        </div>
+                        ` : ''}
+                        <div class="property">
+                            <label>Quantity:</label>
+                            <span>${item.quantity}</span>
+                        </div>
+                        <div class="property">
+                            <label>Status:</label>
+                            <span>${item.is_equipped ? 'Equipped' : 'In Inventory'}</span>
+                        </div>
+                        ${item.identified === false ? `
+                        <div class="property">
+                            <label>Identification:</label>
+                            <span class="unidentified">Unidentified</span>
+                        </div>
+                        ` : ''}
+                        ${item.attunement_status && item.attunement_status !== 'none' ? `
+                        <div class="property">
+                            <label>Attunement:</label>
+                            <span class="attunement-${item.attunement_status}">${item.attunement_status}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                ${item.special_properties ? `
+                <div class="item-special-properties">
+                    <h6>Special Properties:</h6>
+                    <div class="special-properties">
+                        <pre>${JSON.stringify(item.special_properties, null, 2)}</pre>
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${item.magical_properties ? `
+                <div class="item-magical-properties">
+                    <h6>Magical Properties:</h6>
+                    <div class="magical-properties">
+                        <pre>${JSON.stringify(item.magical_properties, null, 2)}</pre>
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${item.notes ? `
+                <div class="item-notes">
+                    <h6>Notes:</h6>
+                    <p>${item.notes}</p>
+                </div>
+                ` : ''}
+                
+                ${item.base_item_id ? `
+                <div class="item-variants">
+                    <h6>Magical Variants Available:</h6>
+                    <p>This is a variant of <strong>${base.name}</strong></p>
+                </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    /**
+     * Get icon for item type
+     * 
+     * @param {string} itemType - Item type
+     * @returns {string} Font Awesome icon class
+     */
+    getItemIcon(itemType) {
+        const iconMap = {
+            'weapon': 'fa-sword',
+            'armor': 'fa-shield-alt',
+            'shield': 'fa-shield',
+            'gear': 'fa-tools',
+            'consumable': 'fa-flask',
+            'treasure': 'fa-gem',
+            'mount': 'fa-horse',
+            'vehicle': 'fa-car',
+            'ship': 'fa-ship',
+            'siege_weapon': 'fa-catapult'
+        };
+        return iconMap[itemType] || 'fa-cube';
+    }
+
+    /**
+     * Format cost for display
+     * 
+     * @param {number} costGp - Cost in gold pieces
+     * @returns {string} Formatted cost
+     */
+    formatCost(costGp) {
+        if (costGp === 0) return 'Free';
+        if (costGp < 1) return `${Math.round(costGp * 100)} cp`;
+        return `${costGp} gp`;
+    }
+
+    /**
+     * Format weight for display
+     * 
+     * @param {number} weightCn - Weight in coins
+     * @returns {string} Formatted weight
+     */
+    formatWeight(weightCn) {
+        const pounds = Math.floor(weightCn / 10);
+        return `${weightCn} cn (${pounds} lbs)`;
+    }
+
+    /**
+     * Identify a magical item
+     * 
+     * @param {number} itemId - Item ID
+     * @param {number} characterId - Character ID
+     */
+    async identifyItem(itemId, characterId) {
+        try {
+            const response = await this.apiClient.post('/api/inventory/identify.php', {
+                character_id: characterId,
+                item_id: itemId,
+                method: 'spell'
+            });
+            
+            if (response.status === 'success') {
+                // Close modal
+                $('#itemDetailsModal').modal('hide');
+                
+                // Show success message
+                if (this.app.modules.notifications) {
+                    this.app.modules.notifications.show(response.message, 'success');
+                }
+                
+                // Reload character to show updated item
+                await this.viewCharacter(characterId);
+            } else {
+                throw new Error(response.message || 'Failed to identify item');
+            }
+            
+        } catch (error) {
+            console.error('Failed to identify item:', error);
+            if (this.app.modules.notifications) {
+                this.app.modules.notifications.show('Failed to identify item: ' + error.message, 'error');
+            }
+        }
+    }
+
+    /**
+     * Load and render weapon masteries
+     * 
+     * @param {number} characterId - Character ID
+     */
+    async loadAndRenderWeaponMasteries(characterId) {
+        try {
+            const response = await this.apiClient.get(
+                `/api/character/get-weapon-masteries.php?character_id=${characterId}&t=${Date.now()}`
+            );
+            
+            if (response.status === 'success') {
+                const masteries = response.data.masteries || [];
+                const html = this.renderWeaponMasteries(masteries);
+                $('#weapon-masteries-section').html(html);
+            } else {
+                $('#weapon-masteries-section').html('<p class="error">Failed to load weapon masteries</p>');
+            }
+        } catch (error) {
+            console.error('Failed to load weapon masteries:', error);
+            $('#weapon-masteries-section').html('<p class="error">Error loading weapon masteries</p>');
+        }
+    }
+    
+    /**
+     * Render weapon masteries
+     * 
+     * @param {Array} masteries - Array of weapon masteries
+     * @returns {string} HTML for weapon masteries
+     */
+    renderWeaponMasteries(masteries) {
+        if (masteries.length === 0) {
+            return '<p class="no-data"><i class="fas fa-info-circle"></i> No weapon masteries selected.</p>';
+        }
+        
+        return `<div class="masteries-list">
+            ${masteries.map(mastery => `
+                <div class="mastery-item">
+                    <div class="mastery-weapon">
+                        <i class="fas fa-sword"></i>
+                        <span class="weapon-name">${mastery.weapon_name}</span>
+                        ${mastery.damage_die ? `<span class="weapon-damage">${mastery.damage_die}</span>` : ''}
+                    </div>
+                    <div class="mastery-rank">
+                        <span class="rank-badge ${mastery.mastery_rank}">${mastery.mastery_rank}</span>
+                    </div>
+                    <div class="mastery-bonuses">
+                        <span class="bonus-badge" title="Attack bonus vs Primary targets">
+                            <i class="fas fa-bullseye"></i> +${mastery.attack_bonus_primary}
+                        </span>
+                        <span class="bonus-badge" title="Attack bonus vs Secondary targets">
+                            <i class="fas fa-crosshairs"></i> +${mastery.attack_bonus_secondary}
+                        </span>
+                        <span class="bonus-badge" title="Damage bonus">
+                            <i class="fas fa-bolt"></i> +${mastery.damage_bonus}
+                        </span>
+                    </div>
+                    <div class="mastery-level">
+                        <small>Learned at level ${mastery.learned_at_level}</small>
+                    </div>
+                </div>
+            `).join('')}
+        </div>`;
+    }
+    
+    /**
+     * Load and render general skills
+     * 
+     * @param {number} characterId - Character ID
+     */
+    async loadAndRenderSkills(characterId) {
+        try {
+            const response = await this.apiClient.get(
+                `/api/character/get-skills.php?character_id=${characterId}&t=${Date.now()}`
+            );
+            
+            if (response.status === 'success') {
+                const skills = response.data.skills || [];
+                const html = this.renderGeneralSkills(skills);
+                $('#general-skills-section').html(html);
+            } else {
+                $('#general-skills-section').html('<p class="error">Failed to load skills</p>');
+            }
+        } catch (error) {
+            console.error('Failed to load skills:', error);
+            $('#general-skills-section').html('<p class="error">Error loading skills</p>');
+        }
+    }
+    
+    /**
+     * Render general skills
+     * 
+     * @param {Array} skills - Array of skills
+     * @returns {string} HTML for skills
+     */
+    renderGeneralSkills(skills) {
+        if (skills.length === 0) {
+            return '<p class="no-data"><i class="fas fa-info-circle"></i> No skills learned.</p>';
+        }
+        
+        // Group skills by governing ability
+        const grouped = skills.reduce((acc, skill) => {
+            const ability = skill.governing_ability;
+            if (!acc[ability]) {
+                acc[ability] = [];
+            }
+            acc[ability].push(skill);
+            return acc;
+        }, {});
+        
+        return `<div class="skills-list">
+            ${Object.entries(grouped).map(([ability, abilitySkills]) => `
+                <div class="skill-group">
+                    <h5 class="skill-ability-header">
+                        <i class="fas fa-brain"></i> ${ability.charAt(0).toUpperCase() + ability.slice(1)}
+                    </h5>
+                    <div class="skill-items">
+                        ${abilitySkills.map(skill => `
+                            <div class="skill-item">
+                                <div class="skill-info">
+                                    <span class="skill-name">${skill.skill_name}</span>
+                                    <span class="skill-ability-score">${skill.ability_score} (${window.BECMIUtils ? window.BECMIUtils.formatModifier(skill.ability_modifier) : skill.ability_modifier})</span>
+                                </div>
+                                <button class="btn btn-xs btn-secondary" onclick="rollSkillCheck('${skill.skill_name}', ${skill.ability_score}, ${skill.ability_modifier})">
+                                    <i class="fas fa-dice-d20"></i> Roll
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('')}
+        </div>`;
+    }
+    
+    /**
+     * Load and render spells
+     * 
+     * @param {number} characterId - Character ID
+     */
+    async loadAndRenderSpells(characterId) {
+        try {
+            // Check if character can cast spells
+            const character = this.currentCharacter;
+            const spellcastingClasses = ['magic_user', 'cleric', 'elf'];
+            
+            if (!spellcastingClasses.includes(character.class)) {
+                // Hide spells section for non-spellcasting classes
+                $('#spells-section').hide();
+                return;
+            }
+            
+            // Show spells section
+            $('#spells-section').show();
+            
+            console.log(`Loading spells for character ${characterId}...`);
+            
+            const response = await this.apiClient.get(
+                `/api/spells/get-character-spells.php?character_id=${characterId}&t=${Date.now()}`
+            );
+            
+            if (response.status === 'success') {
+                this.currentSpells = response.data.spells || [];
+                this.spellsByLevel = response.data.spells_by_level || {};
+                this.memorizedByLevel = response.data.memorized_by_level || {};
+                
+                const html = this.renderSpells(character, response.data);
+                $('#spells-content').html(html);
+                
+                console.log(`Spells loaded: ${this.currentSpells.length} spells`);
+            } else {
+                $('#spells-content').html('<p class="error">Failed to load spells</p>');
+            }
+        } catch (error) {
+            console.error('Failed to load spells:', error);
+            $('#spells-content').html('<p class="error">Error loading spells</p>');
+        }
+    }
+    
+    /**
+     * Render spells section
+     * 
+     * @param {Object} character - Character data
+     * @param {Object} spellData - Spell data from API
+     * @returns {string} HTML for spells section
+     */
+    renderSpells(character, spellData) {
+        const spells = spellData.spells || [];
+        const spellsByLevel = spellData.spells_by_level || {};
+        const memorizedByLevel = spellData.memorized_by_level || {};
+        
+        if (spells.length === 0) {
+            return `<div class="spells-empty">
+                <i class="fas fa-book-spells fa-2x"></i>
+                <p>No spells in spellbook</p>
+                <p class="help-text">Learn spells during level-up or from scrolls.</p>
+            </div>`;
+        }
+        
+        // Calculate available spell slots
+        const spellSlots = this.calculateSpellSlots(character);
+        
+        // Separate memorized and non-memorized spells
+        const memorizedSpells = spells.filter(s => s.is_memorized);
+        
+        return `
+            <div class="spells-summary">
+                <div class="spell-slots-display">
+                    <h4><i class="fas fa-star"></i> Spell Slots</h4>
+                    <div class="spell-slots-grid">
+                        ${Object.entries(spellSlots).map(([level, slots]) => {
+                            const used = memorizedByLevel[level] || 0;
+                            const percentage = (used / slots) * 100;
+                            return `
+                                <div class="spell-slot-level">
+                                    <div class="slot-level-header">
+                                        <span class="slot-level-number">Level ${level}</span>
+                                        <span class="slot-count">${used}/${slots}</span>
+                                    </div>
+                                    <div class="slot-bar">
+                                        <div class="slot-bar-fill" style="width: ${percentage}%"></div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+                
+                <div class="spell-actions">
+                    <button class="btn btn-primary" id="prepare-spells-btn" data-character-id="${character.character_id}">
+                        <i class="fas fa-book-open"></i> Prepare Spells
+                    </button>
+                    <button class="btn btn-secondary" id="long-rest-btn" data-character-id="${character.character_id}">
+                        <i class="fas fa-bed"></i> Long Rest
+                    </button>
+                </div>
+            </div>
+            
+            ${memorizedSpells.length > 0 ? `
+                <div class="spells-memorized">
+                    <h4><i class="fas fa-brain"></i> Memorized Spells</h4>
+                    <div class="memorized-spells-list">
+                        ${memorizedSpells.map(spell => this.renderSpellCard(spell, true, character.character_id)).join('')}
+                    </div>
+                </div>
+            ` : ''}
+            
+            <div class="spells-spellbook">
+                <h4><i class="fas fa-book"></i> Spellbook</h4>
+                ${Object.entries(spellsByLevel).map(([level, levelSpells]) => `
+                    <div class="spell-level-section">
+                        <h5 class="spell-level-header">Level ${level} Spells</h5>
+                        <div class="spell-level-list">
+                            ${levelSpells.map(spell => this.renderSpellCard(spell, false, character.character_id)).join('')}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+    
+    /**
+     * Render individual spell card
+     * 
+     * @param {Object} spell - Spell data
+     * @param {boolean} showCastButton - Whether to show cast button
+     * @param {number} characterId - Character ID
+     * @returns {string} HTML for spell card
+     */
+    renderSpellCard(spell, showCastButton, characterId) {
+        const memorizedClass = spell.is_memorized ? 'spell-memorized' : '';
+        
+        return `
+            <div class="spell-card ${memorizedClass}" data-spell-id="${spell.spell_id}">
+                <div class="spell-header">
+                    <div class="spell-name-level">
+                        <span class="spell-name">${spell.spell_name}</span>
+                        <span class="spell-level-badge">Level ${spell.spell_level}</span>
+                    </div>
+                    ${spell.is_memorized ? '<span class="memorized-badge"><i class="fas fa-check-circle"></i> Memorized</span>' : ''}
+                </div>
+                <div class="spell-details">
+                    <div class="spell-meta">
+                        <span><i class="fas fa-clock"></i> ${spell.casting_time}</span>
+                        <span><i class="fas fa-crosshairs"></i> ${spell.range}</span>
+                        <span><i class="fas fa-hourglass"></i> ${spell.duration}</span>
+                    </div>
+                    <div class="spell-description">
+                        ${spell.description}
+                    </div>
+                    ${spell.reversible ? `
+                        <div class="spell-reverse">
+                            <i class="fas fa-exchange-alt"></i> Reversible: ${spell.reverse_name || 'Yes'}
+                        </div>
+                    ` : ''}
+                </div>
+                <div class="spell-actions">
+                    ${showCastButton ? `
+                        <button class="btn btn-sm btn-primary cast-spell-btn" 
+                                data-character-id="${characterId}"
+                                data-spell-id="${spell.spell_id}"
+                                data-spell-name="${spell.spell_name}">
+                            <i class="fas fa-magic"></i> Cast Spell
+                        </button>
+                    ` : ''}
+                    <button class="btn btn-sm btn-info view-spell-details-btn"
+                            data-spell-id="${spell.spell_id}">
+                        <i class="fas fa-info-circle"></i> Details
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+    
+    /**
+     * Calculate spell slots for character
+     * 
+     * @param {Object} character - Character data
+     * @returns {Object} Spell slots by level
+     */
+    calculateSpellSlots(character) {
+        const level = character.level;
+        const characterClass = character.class;
+        
+        if (characterClass === 'magic_user' || characterClass === 'elf') {
+            return this.getMagicUserSpellSlots(level);
+        } else if (characterClass === 'cleric') {
+            return this.getClericSpellSlots(level);
+        }
+        
+        return {};
+    }
+    
+    /**
+     * Get magic-user spell slots by level
+     */
+    getMagicUserSpellSlots(level) {
+        const slots = {
+            1: [1],
+            2: [2],
+            3: [2, 1],
+            4: [2, 2],
+            5: [2, 2],
+            6: [2, 2, 1],
+            7: [3, 2, 1],
+            8: [3, 3, 2],
+            9: [3, 3, 2],
+            10: [3, 3, 2, 1],
+            11: [4, 3, 3, 2],
+            12: [4, 4, 3, 2, 1]
+        };
+        
+        const levelSlots = slots[Math.min(level, 12)] || [];
+        const result = {};
+        levelSlots.forEach((count, index) => {
+            result[index + 1] = count;
+        });
+        return result;
+    }
+    
+    /**
+     * Get cleric spell slots by level
+     */
+    getClericSpellSlots(level) {
+        const slots = {
+            1: [],
+            2: [1],
+            3: [2],
+            4: [2, 1],
+            5: [2, 2],
+            6: [2, 2],
+            7: [2, 2, 1],
+            8: [3, 3, 2],
+            9: [3, 3, 2, 1],
+            10: [3, 3, 2, 2],
+            11: [4, 4, 3, 2, 1],
+            12: [4, 4, 3, 3, 2]
+        };
+        
+        const levelSlots = slots[Math.min(level, 12)] || [];
+        const result = {};
+        levelSlots.forEach((count, index) => {
+            result[index + 1] = count;
+        });
+        return result;
+    }
+    
+    /**
+     * Show prepare spells modal
+     * 
+     * @param {number} characterId - Character ID
+     */
+    async showPrepareSpellsModal(characterId) {
+        try {
+            console.log('Opening prepare spells modal for character:', characterId);
+            
+            const character = this.currentCharacter;
+            console.log('Current character:', character);
+            
+            if (!character) {
+                throw new Error('No character data available');
+            }
+            
+            const spells = this.currentSpells || [];
+            console.log('Current spells:', spells);
+            
+            if (spells.length === 0) {
+                throw new Error('No spells available for this character');
+            }
+            
+            const spellSlots = this.calculateSpellSlots(character);
+            console.log('Calculated spell slots:', spellSlots);
+            
+            if (!spellSlots || Object.keys(spellSlots).length === 0) {
+                throw new Error('No spell slots available for this character class');
+            }
+            
+            console.log('Generating modal HTML...');
+            let modalHtml = '';
+            
+            try {
+                const availableSlotsHtml = Object.entries(spellSlots).map(([level, count]) => 
+                    `<span class="slot-badge">Level ${level}: ${count} slots</span>`
+                ).join('');
+                
+                const spellsListHtml = this.renderPrepareSpellsList(spells, spellSlots);
+                
+                modalHtml = `
+                    <div class="modal fade" id="prepareSpellsModal" tabindex="-1" role="dialog">
+                        <div class="modal-dialog modal-lg" role="document">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">
+                                        <i class="fas fa-book-open"></i> Prepare Spells
+                                    </h5>
+                                    <button type="button" class="close" data-dismiss="modal">
+                                        <span>&times;</span>
+                                    </button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="prepare-spells-info">
+                                        <p>Select which spells to memorize for the day. You have the following spell slots available:</p>
+                                        <div class="available-slots">
+                                            ${availableSlotsHtml}
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="prepare-spells-selection" id="prepare-spells-selection">
+                                        ${spellsListHtml}
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <div class="selection-summary" id="selection-summary"></div>
+                                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                                    <button type="button" class="btn btn-primary" id="confirm-prepare-spells">Confirm</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                console.log('Modal HTML generated successfully');
+            } catch (error) {
+                throw new Error('Failed to generate modal HTML: ' + error.message);
+            }
+            
+            const modal = $(modalHtml);
+            
+            console.log('Modal HTML created, appending to body...');
+            $('body').append(modal);
+            
+            console.log('Showing modal...');
+            $('#prepareSpellsModal').show();
+            
+            console.log('Setting up event handlers...');
+            // Setup event handlers after modal is shown with a small delay
+            setTimeout(() => {
+                this.setupPrepareSpellsHandlers(characterId, spellSlots);
+            }, 100);
+            
+            console.log('Setting up cleanup handler...');
+            // Cleanup when modal is closed
+            $('#prepareSpellsModal .close, #prepareSpellsModal .btn-secondary').on('click', () => {
+                $('#prepareSpellsModal').remove();
+            });
+            
+            console.log('Prepare spells modal opened successfully');
+            
+        } catch (error) {
+            console.error('Failed to show prepare spells modal:', error);
+            console.error('Error stack:', error.stack);
+            if (this.app.modules.notifications) {
+                this.app.modules.notifications.show('Failed to open prepare spells modal', 'error');
+            }
+        }
+    }
+    
+    /**
+     * Render prepare spells list
+     */
+    renderPrepareSpellsList(spells, spellSlots) {
+        console.log('Rendering prepare spells list with:', { spells, spellSlots });
+        
+        const spellsByLevel = spells.reduce((acc, spell) => {
+            const level = spell.spell_level;
+            if (!acc[level]) acc[level] = [];
+            acc[level].push(spell);
+            return acc;
+        }, {});
+        
+        console.log('Spells grouped by level:', spellsByLevel);
+        
+        const html = Object.entries(spellsByLevel).map(([level, levelSpells]) => `
+            <div class="prepare-spell-level-group">
+                <h6>Level ${level} Spells (${spellSlots[level] || 0} slots available)</h6>
+                <div class="spell-checkboxes">
+                    ${levelSpells.map(spell => `
+                        <label class="spell-checkbox-label">
+                            <input type="checkbox" 
+                                   class="spell-checkbox"
+                                   data-spell-id="${spell.spell_id}"
+                                   data-spell-level="${spell.spell_level}"
+                                   ${spell.is_memorized ? 'checked' : ''}>
+                            <span class="spell-checkbox-name">${spell.spell_name}</span>
+                        </label>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('');
+        
+        console.log('Generated spells list HTML:', html);
+        return html;
+    }
+    
+    /**
+     * Setup prepare spells modal handlers
+     */
+    setupPrepareSpellsHandlers(characterId, spellSlots) {
+        console.log('Setting up prepare spells handlers for character:', characterId, 'with slots:', spellSlots);
+        
+        const updateSummary = () => {
+            console.log('Updating spell selection summary...');
+            const selected = {};
+            $('.spell-checkbox:checked').each(function() {
+                const level = $(this).data('spell-level');
+                if (!selected[level]) selected[level] = 0;
+                selected[level]++;
+            });
+            
+            let summaryHtml = 'Selected: ';
+            let valid = true;
+            
+            Object.entries(spellSlots).forEach(([level, max]) => {
+                const count = selected[level] || 0;
+                const colorClass = count > max ? 'text-danger' : 'text-success';
+                summaryHtml += `<span class="${colorClass}">L${level}: ${count}/${max}</span> `;
+                if (count > max) valid = false;
+            });
+            
+            $('#selection-summary').html(summaryHtml);
+            $('#confirm-prepare-spells').prop('disabled', !valid);
+            console.log('Summary updated, valid:', valid);
+        };
+        
+        console.log('Binding spell checkbox change events...');
+        $('.spell-checkbox').on('change', updateSummary);
+        updateSummary();
+        
+        console.log('Binding confirm button click event...');
+        console.log('Confirm button element:', $('#confirm-prepare-spells'));
+        console.log('Confirm button exists:', $('#confirm-prepare-spells').length > 0);
+        
+        $('#confirm-prepare-spells').on('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Confirm prepare spells clicked - EVENT FIRED!');
+            const selectedSpellIds = [];
+            $('.spell-checkbox:checked').each(function() {
+                selectedSpellIds.push($(this).data('spell-id'));
+            });
+            
+            console.log('Selected spell IDs:', selectedSpellIds);
+            await this.memorizeSpells(characterId, selectedSpellIds);
+        });
+        
+        console.log('Prepare spells handlers setup complete');
+    }
+    
+    /**
+     * Memorize selected spells
+     */
+    async memorizeSpells(characterId, spellIds) {
+        try {
+            console.log('memorizeSpells called with:', { characterId, spellIds });
+            
+            const response = await this.apiClient.post('/api/spells/memorize.php', {
+                character_id: characterId,
+                spell_ids: spellIds
+            });
+            
+            console.log('API response:', response);
+            
+            if (response.status === 'success') {
+                console.log('Spells memorized successfully, hiding modal...');
+                $('#prepareSpellsModal').remove();
+                
+                if (this.app.modules.notifications) {
+                    this.app.modules.notifications.show('Spells memorized successfully', 'success');
+                }
+                
+                // Reload spells
+                console.log('Reloading spells...');
+                await this.loadAndRenderSpells(characterId);
+            } else {
+                console.error('API returned error:', response);
+                throw new Error(response.message || 'Failed to memorize spells');
+            }
+        } catch (error) {
+            console.error('Failed to memorize spells:', error);
+            
+            // Log the full response text to see the actual PHP error
+            if (error.xhr && error.xhr.responseText) {
+                console.error('Full API Error Response:', error.xhr.responseText);
+            }
+            
+            if (this.app.modules.notifications) {
+                this.app.modules.notifications.show('Failed to memorize spells: ' + error.message, 'error');
+            }
+        }
+    }
+    
+    /**
+     * Cast spell
+     */
+    async castSpell(characterId, spellId, spellName) {
+        if (!confirm(`Cast spell: ${spellName}?\n\nThis will remove it from your memorized spells.`)) {
+            return;
+        }
+        
+        try {
+            const response = await this.apiClient.post('/api/spells/cast.php', {
+                character_id: characterId,
+                spell_id: spellId
+            });
+            
+            if (response.status === 'success') {
+                if (this.app.modules.notifications) {
+                    this.app.modules.notifications.show(`Cast spell: ${spellName}`, 'success');
+                }
+                
+                // Reload spells
+                await this.loadAndRenderSpells(characterId);
+            } else {
+                throw new Error(response.message || 'Failed to cast spell');
+            }
+        } catch (error) {
+            console.error('Failed to cast spell:', error);
+            if (this.app.modules.notifications) {
+                this.app.modules.notifications.show('Failed to cast spell: ' + error.message, 'error');
+            }
+        }
+    }
+    
+    /**
+     * Long rest
+     */
+    async longRest(characterId) {
+        if (!confirm('Take a long rest?\n\nThis will reset all memorized spells.')) {
+            return;
+        }
+        
+        try {
+            const response = await this.apiClient.post('/api/spells/rest.php', {
+                character_id: characterId
+            });
+            
+            if (response.status === 'success') {
+                if (this.app.modules.notifications) {
+                    this.app.modules.notifications.show('Long rest completed. All spells reset.', 'success');
+                }
+                
+                // Reload spells
+                await this.loadAndRenderSpells(characterId);
+            } else {
+                throw new Error(response.message || 'Failed to complete long rest');
+            }
+        } catch (error) {
+            console.error('Failed to complete long rest:', error);
+            if (this.app.modules.notifications) {
+                this.app.modules.notifications.show('Failed to complete long rest: ' + error.message, 'error');
+            }
+        }
     }
     
     /**
@@ -571,6 +1950,76 @@ class CharacterSheetModule {
                 this.app.showError('Failed to equip/unequip item: ' + error.message);
             }
         });
+        
+        // View item details
+        $(document).on('click', '[data-action="view-item-details"]', async (e) => {
+            e.preventDefault();
+            const $btn = $(e.currentTarget);
+            const itemId = $btn.data('item-id');
+            const characterId = $btn.data('character-id');
+            
+            try {
+                // Find the item in current inventory
+                const item = this.currentInventory.find(invItem => invItem.item_id == itemId);
+                if (item) {
+                    await this.showItemDetailsModal(item, characterId);
+                } else {
+                    this.app.showError('Item not found in inventory');
+                }
+            } catch (error) {
+                console.error('Failed to show item details:', error);
+                this.app.showError('Failed to load item details: ' + error.message);
+            }
+        });
+        
+        // Identify magical item
+        $(document).on('click', '[data-action="identify-item"]', async (e) => {
+            e.preventDefault();
+            const $btn = $(e.currentTarget);
+            const itemId = $btn.data('item-id');
+            const characterId = $btn.data('character-id');
+            
+            try {
+                await this.identifyItem(itemId, characterId);
+            } catch (error) {
+                console.error('Failed to identify item:', error);
+                this.app.showError('Failed to identify item: ' + error.message);
+            }
+        });
+        
+        // Spell management buttons
+        $(document).on('click', '#prepare-spells-btn', async (e) => {
+            e.preventDefault();
+            const characterId = $(e.currentTarget).data('character-id');
+            await this.showPrepareSpellsModal(characterId);
+        });
+        
+        $(document).on('click', '#long-rest-btn', async (e) => {
+            e.preventDefault();
+            const characterId = $(e.currentTarget).data('character-id');
+            await this.longRest(characterId);
+        });
+        
+        $(document).on('click', '.cast-spell-btn', async (e) => {
+            e.preventDefault();
+            const $btn = $(e.currentTarget);
+            const characterId = $btn.data('character-id');
+            const spellId = $btn.data('spell-id');
+            const spellName = $btn.data('spell-name');
+            await this.castSpell(characterId, spellId, spellName);
+        });
+        
+        // Level-up button
+        $(document).on('click', '#level-up-btn', async (e) => {
+            e.preventDefault();
+            const characterId = $(e.currentTarget).data('character-id');
+            
+            if (this.app.modules.levelUpWizard) {
+                await this.app.modules.levelUpWizard.showWizard(characterId);
+            } else {
+                this.app.showError('Level-up wizard not available');
+            }
+        });
     }
     
     /**
@@ -581,9 +2030,10 @@ class CharacterSheetModule {
             const content = await this.renderCharacterSheet(characterId);
             $('#content-area').html(content);
             
-            // Update navigation
+            // Update navigation and current view
             $('.nav-link').removeClass('active');
             $('.nav-link[data-view="characters"]').addClass('active');
+            this.app.currentView = 'characters';
             
         } catch (error) {
             console.error('Failed to view character:', error);
@@ -706,6 +2156,16 @@ class CharacterSheetModule {
                         </div>
                         
                         <div class="form-group">
+                            <label for="edit-gender">Gender:</label>
+                            <select id="edit-gender" name="gender">
+                                <option value="">Select Gender</option>
+                                <option value="male" ${character.gender === 'male' ? 'selected' : ''}>Male</option>
+                                <option value="female" ${character.gender === 'female' ? 'selected' : ''}>Female</option>
+                                <option value="other" ${character.gender === 'other' ? 'selected' : ''}>Other/Non-Binary</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
                             <label for="edit-age">Age:</label>
                             <input type="number" id="edit-age" name="age" value="${character.age || ''}" min="16" max="200">
                         </div>
@@ -736,6 +2196,27 @@ class CharacterSheetModule {
                         <div class="form-group">
                             <label for="edit-eye-color">Eye Color:</label>
                             <input type="text" id="edit-eye-color" name="eye_color" value="${character.eye_color || ''}" placeholder="e.g., Blue">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-section">
+                    <h3>Character Portrait</h3>
+                    <div class="portrait-section">
+                        <div id="edit-portrait-preview" class="portrait-preview">
+                            ${character.portrait_url ? 
+                                `<img src="${character.portrait_url}" alt="Character Portrait" class="generated-portrait">` :
+                                `<div class="portrait-placeholder">
+                                    <i class="fas fa-user fa-3x"></i>
+                                    <p>No portrait generated yet</p>
+                                </div>`
+                            }
+                        </div>
+                        <div class="portrait-actions">
+                            <button type="button" class="btn btn-primary" id="edit-generate-portrait-btn">
+                                <i class="fas fa-magic"></i> ${character.portrait_url ? 'Regenerate Portrait' : 'Generate AI Portrait'}
+                            </button>
+                            <p class="portrait-hint">Fill in gender, hair color, and eye color to generate a portrait</p>
                         </div>
                     </div>
                 </div>
@@ -787,6 +2268,16 @@ class CharacterSheetModule {
             this.hideEditModal();
         });
         
+        // Portrait generation for edit modal
+        $('#edit-generate-portrait-btn').off('click').on('click', () => {
+            this.generatePortraitForEdit(characterId);
+        });
+        
+        // Check portrait generation readiness
+        $('#edit-gender, #edit-hair-color, #edit-eye-color').off('change keyup').on('change keyup', () => {
+            this.checkEditPortraitGenerationReady();
+        });
+        
         // Form submission
         $('#character-edit-form').off('submit').on('submit', async (e) => {
             e.preventDefault();
@@ -797,6 +2288,7 @@ class CharacterSheetModule {
                     character_id: characterId,
                     character_name: $('#edit-character-name').val().trim(),
                     alignment: $('#edit-alignment').val(),
+                    gender: $('#edit-gender').val() || null,
                     age: $('#edit-age').val() || null,
                     height: $('#edit-height').val().trim() || null,
                     weight: $('#edit-weight').val().trim() || null,
@@ -904,6 +2396,96 @@ class CharacterSheetModule {
         } catch (error) {
             console.error('Failed to update HP:', error);
             throw error;
+        }
+    }
+    
+    /**
+     * Check if portrait generation is ready for edit modal
+     */
+    checkEditPortraitGenerationReady() {
+        const gender = $('#edit-gender').val();
+        const hairColor = $('#edit-hair-color').val();
+        const eyeColor = $('#edit-eye-color').val();
+        
+        const isReady = gender && hairColor && eyeColor;
+        
+        $('#edit-generate-portrait-btn').prop('disabled', !isReady);
+        
+        if (isReady) {
+            $('.portrait-hint').text('Click to generate AI portrait');
+        } else {
+            $('.portrait-hint').text('Fill in gender, hair color, and eye color to generate a portrait');
+        }
+    }
+
+    /**
+     * Generate portrait for existing character (edit modal)
+     */
+    async generatePortraitForEdit(characterId) {
+        try {
+            const $btn = $('#edit-generate-portrait-btn');
+            const $preview = $('#edit-portrait-preview');
+            
+            // Disable button and show loading
+            $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Generating...');
+            
+            $preview.html(`
+                <div class="portrait-loading">
+                    <i class="fas fa-magic fa-spin fa-3x"></i>
+                    <p>Generating your character portrait...</p>
+                    <p class="text-muted">This may take 10-30 seconds</p>
+                </div>
+            `);
+            
+            // Collect character data for portrait
+            const portraitData = {
+                character_id: characterId,
+                character_name: $('#edit-character-name').val(),
+                class: this.currentCharacter ? this.currentCharacter.class : 'fighter', // fallback
+                gender: $('#edit-gender').val(),
+                age: $('#edit-age').val(),
+                hair_color: $('#edit-hair-color').val(),
+                eye_color: $('#edit-eye-color').val(),
+                background: $('#edit-background').val(),
+            };
+            
+            console.log('Generating portrait for edit with data:', portraitData);
+            
+            // Call the portrait API
+            const response = await this.apiClient.post('/api/character/generate-portrait.php', portraitData);
+            
+            if (response.status === 'success' && response.data.portrait_url) {
+                // Display the generated portrait
+                $preview.html(`
+                    <img src="${response.data.portrait_url}" alt="Character Portrait" class="generated-portrait">
+                `);
+                
+                $btn.html('<i class="fas fa-sync"></i> Regenerate Portrait');
+                
+                if (this.app.modules.notifications) {
+                    this.app.modules.notifications.show('Portrait generated successfully!', 'success');
+                }
+            } else {
+                throw new Error(response.message || 'Failed to generate portrait');
+            }
+            
+        } catch (error) {
+            console.error('Portrait generation failed:', error);
+            
+            $('#edit-portrait-preview').html(`
+                <div class="portrait-error">
+                    <i class="fas fa-exclamation-triangle fa-3x text-danger"></i>
+                    <p>Failed to generate portrait</p>
+                    <p class="text-muted">${error.message}</p>
+                </div>
+            `);
+            
+            if (this.app.modules.notifications) {
+                this.app.modules.notifications.show('Failed to generate portrait: ' + error.message, 'error');
+            }
+        } finally {
+            // Re-enable button
+            $('#edit-generate-portrait-btn').prop('disabled', false).html('<i class="fas fa-magic"></i> Generate AI Portrait');
         }
     }
     

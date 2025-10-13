@@ -6,8 +6,8 @@
  * Handles equipment slots and unequips conflicting items.
  */
 
-require_once '../app/core/database.php';
-require_once '../app/core/security.php';
+require_once '../../app/core/database.php';
+require_once '../../app/core/security.php';
 
 // Initialize security
 Security::init();

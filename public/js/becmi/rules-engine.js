@@ -94,60 +94,67 @@ class BECMIRulesEngine {
     }
     
     /**
-     * Calculate movement rates based on encumbrance
+     * Calculate movement rates based on encumbrance (BECMI Chapter 6 rules)
      */
     calculateMovementRates(character) {
         const strength = character.strength;
         const totalWeight = this.calculateTotalWeight(character);
         
-        // Strength adjustment to encumbrance limits
-        const strengthAdjustment = this.getEncumbranceAdjustmentFromStrength(strength);
-        
-        // Adjusted encumbrance levels
-        const unencumberedLimit = 400 + strengthAdjustment;
-        const lightlyEncumberedLimit = 800 + strengthAdjustment;
-        const heavilyEncumberedLimit = 1200 + strengthAdjustment;
-        const severelyEncumberedLimit = 1600 + strengthAdjustment;
-        
-        if (totalWeight <= unencumberedLimit) {
+        // BECMI Character Movement Rates and Encumbrance Table (Chapter 6)
+        // Encumbrance levels are fixed, not adjusted by strength
+        if (totalWeight <= 400) {
             return {
                 normal: 120,
                 encounter: 40,
+                running: 120,
                 status: 'unencumbered',
                 weight: totalWeight,
-                limit: unencumberedLimit
+                limit: 400
             };
-        } else if (totalWeight <= lightlyEncumberedLimit) {
+        } else if (totalWeight <= 800) {
             return {
                 normal: 90,
                 encounter: 30,
+                running: 90,
                 status: 'lightly_encumbered',
                 weight: totalWeight,
-                limit: lightlyEncumberedLimit
+                limit: 800
             };
-        } else if (totalWeight <= heavilyEncumberedLimit) {
+        } else if (totalWeight <= 1200) {
             return {
                 normal: 60,
                 encounter: 20,
+                running: 60,
                 status: 'heavily_encumbered',
                 weight: totalWeight,
-                limit: heavilyEncumberedLimit
+                limit: 1200
             };
-        } else if (totalWeight <= severelyEncumberedLimit) {
+        } else if (totalWeight <= 1600) {
             return {
                 normal: 30,
                 encounter: 10,
+                running: 30,
                 status: 'severely_encumbered',
                 weight: totalWeight,
-                limit: severelyEncumberedLimit
+                limit: 1600
             };
-        } else {
+        } else if (totalWeight <= 2400) {
             return {
                 normal: 15,
                 encounter: 5,
+                running: 15,
                 status: 'overloaded',
                 weight: totalWeight,
-                limit: severelyEncumberedLimit
+                limit: 2400
+            };
+        } else {
+            return {
+                normal: 0,
+                encounter: 0,
+                running: 0,
+                status: 'immobile',
+                weight: totalWeight,
+                limit: 2400
             };
         }
     }
@@ -337,35 +344,59 @@ class BECMIRulesEngine {
     }
     
     /**
-     * Calculate armor class
+     * Calculate armor class according to BECMI rules
+     * BECMI uses descending AC where lower is better
      */
-    calculateArmorClass(character) {
-        let baseAC = 10;
-        
-        // Dexterity bonus/penalty
+    calculateArmorClass(character, inventory = null) {
+        // Dexterity bonus/penalty (subtract from AC, lower is better)
         const dexBonus = this.getDexterityBonus(character.dexterity);
         
-        // Armor bonus (would need to check equipped armor)
-        let armorBonus = 0;
-        if (character.inventory) {
-            const equippedArmor = character.inventory.find(item => 
+        // Start with base AC (no armor)
+        let baseAC = 9;
+        
+        // Check for equipped armor - ARMOR REPLACES the base AC
+        if (inventory || character.inventory) {
+            const inv = inventory || character.inventory;
+            const equippedArmor = inv.find(item => 
                 item.is_equipped && item.item_type === 'armor');
             if (equippedArmor) {
-                armorBonus = equippedArmor.ac_bonus || 0;
+                // BECMI armor AC values (lower is better) - ARMOR REPLACES base AC
+                const armorACTable = {
+                    'leather armor': 7,
+                    'scale armor': 6, 
+                    'chain mail': 5,
+                    'banded armor': 4,
+                    'plate mail': 3,
+                    'suit armor': 0
+                };
+                
+                const armorName = equippedArmor.name.toLowerCase();
+                baseAC = armorACTable[armorName] || 9; // ARMOR REPLACES base AC
+                
+                // Add magical bonus if applicable
+                if (equippedArmor.magical_bonus && equippedArmor.magical_bonus > 0) {
+                    baseAC -= equippedArmor.magical_bonus; // Subtract magical bonus (lower AC is better)
+                }
             }
         }
         
-        // Shield bonus (would need to check equipped shield)
+        // Shield bonus (subtract from AC, lower is better)  
         let shieldBonus = 0;
-        if (character.inventory) {
-            const equippedShield = character.inventory.find(item => 
+        if (inventory || character.inventory) {
+            const inv = inventory || character.inventory;
+            const equippedShield = inv.find(item => 
                 item.is_equipped && item.item_type === 'shield');
             if (equippedShield) {
-                shieldBonus = equippedShield.ac_bonus || 0;
+                shieldBonus = 1; // Standard shield gives -1 AC (better)
+                
+                // Add magical bonus if applicable
+                if (equippedShield.magical_bonus && equippedShield.magical_bonus > 0) {
+                    shieldBonus += equippedShield.magical_bonus; // Add magical bonus (lower AC is better)
+                }
             }
         }
         
-        return baseAC + dexBonus + armorBonus + shieldBonus;
+        return baseAC - dexBonus - shieldBonus;
     }
     
     /**

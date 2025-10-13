@@ -153,7 +153,9 @@ class APIClient {
                         fullResponseLength: fullResponseText.length
                     });
                     
-                    throw new Error(errorMessage);
+                    const apiError = new Error(errorMessage);
+                    apiError.responseText = fullResponseText;
+                    throw apiError;
                 }
                 
                 // Parse JSON response
@@ -189,6 +191,12 @@ class APIClient {
         
         // All retries failed
         console.error(`[API] ${method} ${url} - all attempts failed:`, lastError);
+        
+        // Log the full response text to see the actual PHP error
+        if (lastError.responseText) {
+            console.error('Full API Error Response:', lastError.responseText);
+        }
+        
         throw new Error(`API request failed after ${this.retryAttempts} attempts: ${lastError.message}`);
     }
     

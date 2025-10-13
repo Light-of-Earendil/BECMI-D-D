@@ -98,6 +98,7 @@ try {
     $simpleFields = [
         'character_name',
         'alignment',
+        'gender',
         'age',
         'height',
         'weight',
@@ -107,7 +108,8 @@ try {
         'current_hp',
         'gold_pieces',
         'silver_pieces',
-        'copper_pieces'
+        'copper_pieces',
+        'portrait_url'
     ];
     
     $abilityFields = [
@@ -183,7 +185,7 @@ try {
         $characterData = array_merge($existingCharacter, $updateData);
         
         // Calculate new derived statistics
-        $calculatedStats = calculateCharacterStats($characterData);
+        $calculatedStats = calculateCharacterStats($characterData, null);
         
         // Add derived stats to update
         $updateFields[] = "armor_class = ?";
@@ -304,6 +306,30 @@ try {
     error_log("=== END ERROR ===");
     
     Security::sendErrorResponse('Failed to update character: ' . $e->getMessage(), 500);
+}
+
+/**
+ * Calculate character statistics
+ */
+function calculateCharacterStats($characterData, $inventory = null) {
+    $stats = [];
+    
+    // Calculate hit points
+    $stats['max_hp'] = BECMIRulesEngine::calculateHitPoints($characterData);
+    
+    // Calculate THAC0
+    $stats['thac0'] = BECMIRulesEngine::calculateTHAC0($characterData);
+    
+    // Calculate movement rates
+    $stats['movement'] = BECMIRulesEngine::calculateMovementRates($characterData);
+    
+    // Calculate saving throws
+    $stats['saving_throws'] = BECMIRulesEngine::calculateSavingThrows($characterData);
+    
+    // Calculate armor class (with inventory data)
+    $stats['armor_class'] = BECMIRulesEngine::calculateArmorClass($characterData, $inventory);
+    
+    return $stats;
 }
 ?>
 

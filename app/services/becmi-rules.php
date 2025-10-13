@@ -50,7 +50,9 @@ class BECMIRulesEngine {
             'thief' => [20, 20, 19, 19, 18, 18, 17, 17, 16, 16, 15, 15, 14, 14, 13, 13, 12, 12, 11, 11],
             'dwarf' => [20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
             'elf' => [20, 20, 19, 19, 18, 18, 17, 17, 16, 16, 15, 15, 14, 14, 13, 13, 12, 12, 11, 11],
-            'halfling' => [20, 20, 19, 19, 18, 18, 17, 17, 16, 16, 15, 15, 14, 14, 13, 13, 12, 12, 11, 11]
+            'halfling' => [20, 20, 19, 19, 18, 18, 17, 17, 16, 16, 15, 15, 14, 14, 13, 13, 12, 12, 11, 11],
+            'druid' => [20, 20, 20, 19, 19, 19, 18, 18, 18, 17, 17, 17, 16, 16, 16, 15, 15, 15, 14, 14], // Same as Cleric
+            'mystic' => [20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1] // Same as Fighter
         ];
         
         $levelIndex = min($level - 1, 19); // Cap at level 20
@@ -93,60 +95,67 @@ class BECMIRulesEngine {
     }
     
     /**
-     * Calculate movement rates based on encumbrance
+     * Calculate movement rates based on encumbrance (BECMI Chapter 6 rules)
      */
     public static function calculateMovementRates($character) {
         $strength = $character['strength'];
         $totalWeight = self::calculateTotalWeight($character);
         
-        // Strength adjustment to encumbrance limits
-        $strengthAdjustment = self::getEncumbranceAdjustmentFromStrength($strength);
-        
-        // Adjusted encumbrance levels
-        $unencumberedLimit = 400 + $strengthAdjustment;
-        $lightlyEncumberedLimit = 800 + $strengthAdjustment;
-        $heavilyEncumberedLimit = 1200 + $strengthAdjustment;
-        $severelyEncumberedLimit = 1600 + $strengthAdjustment;
-        
-        if ($totalWeight <= $unencumberedLimit) {
+        // BECMI Character Movement Rates and Encumbrance Table (Chapter 6)
+        // Encumbrance levels are fixed, not adjusted by strength
+        if ($totalWeight <= 400) {
             return [
                 'normal' => 120,
                 'encounter' => 40,
+                'running' => 120,
                 'status' => 'unencumbered',
                 'weight' => $totalWeight,
-                'limit' => $unencumberedLimit
+                'limit' => 400
             ];
-        } elseif ($totalWeight <= $lightlyEncumberedLimit) {
+        } elseif ($totalWeight <= 800) {
             return [
                 'normal' => 90,
                 'encounter' => 30,
+                'running' => 90,
                 'status' => 'lightly_encumbered',
                 'weight' => $totalWeight,
-                'limit' => $lightlyEncumberedLimit
+                'limit' => 800
             ];
-        } elseif ($totalWeight <= $heavilyEncumberedLimit) {
+        } elseif ($totalWeight <= 1200) {
             return [
                 'normal' => 60,
                 'encounter' => 20,
+                'running' => 60,
                 'status' => 'heavily_encumbered',
                 'weight' => $totalWeight,
-                'limit' => $heavilyEncumberedLimit
+                'limit' => 1200
             ];
-        } elseif ($totalWeight <= $severelyEncumberedLimit) {
+        } elseif ($totalWeight <= 1600) {
             return [
                 'normal' => 30,
                 'encounter' => 10,
+                'running' => 30,
                 'status' => 'severely_encumbered',
                 'weight' => $totalWeight,
-                'limit' => $severelyEncumberedLimit
+                'limit' => 1600
             ];
-        } else {
+        } elseif ($totalWeight <= 2400) {
             return [
                 'normal' => 15,
                 'encounter' => 5,
+                'running' => 15,
                 'status' => 'overloaded',
                 'weight' => $totalWeight,
-                'limit' => $severelyEncumberedLimit
+                'limit' => 2400
+            ];
+        } else {
+            return [
+                'normal' => 0,
+                'encounter' => 0,
+                'running' => 0,
+                'status' => 'immobile',
+                'weight' => $totalWeight,
+                'limit' => 2400
             ];
         }
     }
@@ -242,6 +251,20 @@ class BECMIRulesEngine {
                 'paralysis' => [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                 'dragon_breath' => [15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1, 1],
                 'spells' => [13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1, 1, 1, 1]
+            ],
+            'druid' => [
+                'death_ray' => [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                'magic_wand' => [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                'paralysis' => [14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1, 1, 1],
+                'dragon_breath' => [16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1],
+                'spells' => [13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1, 1, 1, 1]
+            ],
+            'mystic' => [
+                'death_ray' => [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                'magic_wand' => [13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1, 1, 1, 1],
+                'paralysis' => [14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1, 1, 1],
+                'dragon_breath' => [15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1, 1],
+                'spells' => [16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1]
             ]
         ];
         
@@ -309,10 +332,17 @@ class BECMIRulesEngine {
         $level = $character['level'];
         $constitution = $character['constitution'];
         
-        // Hit dice by class
+        // Hit dice by class (Rules Cyclopedia Chapter 1, page 290-302)
         $hitDice = [
-            'fighter' => 8, 'cleric' => 6, 'magic_user' => 4, 'thief' => 4,
-            'dwarf' => 8, 'elf' => 6, 'halfling' => 6
+            'fighter' => 8,
+            'cleric' => 6,
+            'magic_user' => 4,
+            'thief' => 4,
+            'dwarf' => 8,
+            'elf' => 6,
+            'halfling' => 6,
+            'druid' => 6,
+            'mystic' => 6
         ];
         
         $hitDie = $hitDice[$class] ?? 6;
@@ -337,7 +367,7 @@ class BECMIRulesEngine {
     public static function getExperienceForNextLevel($class, $currentLevel) {
         $xpTable = [
             'fighter' => [0, 2000, 4000, 8000, 16000, 32000, 64000, 125000, 250000, 500000, 750000, 1000000, 1250000, 1500000, 1750000, 2000000, 2250000, 2500000, 2750000, 3000000],
-            'cleric' => [0, 1500, 3000, 6000, 12000, 24000, 48000, 96000, 192000, 384000, 576000, 768000, 960000, 1152000, 1344000, 1536000, 1728000, 1920000, 2112000, 2304000],
+            'cleric' => [0, 1500, 3000, 6000, 12000, 25000, 50000, 100000, 200000, 300000, 400000, 500000, 600000, 700000, 800000, 900000, 1000000, 1100000, 1200000, 1300000, 1400000, 1500000, 1600000, 1700000, 1800000, 1900000, 2000000, 2100000, 2200000, 2300000, 2400000, 2500000, 2600000, 2700000, 2800000, 2900000],
             'magic_user' => [0, 2500, 5000, 10000, 20000, 40000, 80000, 160000, 320000, 640000, 960000, 1280000, 1600000, 1920000, 2240000, 2560000, 2880000, 3200000, 3520000, 3840000],
             'thief' => [0, 1200, 2400, 4800, 9600, 19200, 38400, 76800, 153600, 307200, 460800, 614400, 768000, 921600, 1075200, 1228800, 1382400, 1536000, 1689600, 1843200],
             'dwarf' => [0, 2200, 4400, 8800, 17600, 35200, 70400, 140800, 281600, 563200, 844800, 1126400, 1408000, 1689600, 1971200, 2252800, 2534400, 2816000, 3097600, 3379200],
@@ -345,7 +375,13 @@ class BECMIRulesEngine {
             'halfling' => [0, 2000, 4000, 8000, 16000, 32000, 64000, 128000, 256000, 512000, 768000, 1024000, 1280000, 1536000, 1788000, 2048000, 2304000, 2560000, 2816000, 3072000]
         ];
         
-        if ($currentLevel >= 20) {
+        // Check max level by class
+        $maxLevels = [
+            'fighter' => 36, 'dwarf' => 12, 'elf' => 10, 'halfling' => 8,
+            'cleric' => 36, 'magic_user' => 36, 'thief' => 36, 'druid' => 36, 'mystic' => 36
+        ];
+        
+        if ($currentLevel >= ($maxLevels[$class] ?? 20)) {
             return null; // Max level reached
         }
         
@@ -353,21 +389,196 @@ class BECMIRulesEngine {
     }
     
     /**
-     * Calculate armor class
+     * Get spell slots per level for Clerics
+     * Based on Cleric Experience Table from Rules Cyclopedia
      */
-    public static function calculateArmorClass($character) {
-        $baseAC = 10;
+    public static function getClericSpellSlots($level) {
+        $spellSlots = [
+            1 => [0, 0, 0, 0, 0, 0, 0], // Level 1: No spells
+            2 => [1, 0, 0, 0, 0, 0, 0], // Level 2: 1 first level spell
+            3 => [2, 0, 0, 0, 0, 0, 0], // Level 3: 2 first level spells
+            4 => [2, 1, 0, 0, 0, 0, 0], // Level 4: 2/1/0/0/0/0/0
+            5 => [2, 2, 0, 0, 0, 0, 0], // Level 5: 2/2/0/0/0/0/0
+            6 => [3, 2, 0, 0, 0, 0, 0], // Level 6: 3/2/0/0/0/0/0
+            7 => [3, 2, 1, 0, 0, 0, 0], // Level 7: 3/2/1/0/0/0/0
+            8 => [3, 3, 2, 0, 0, 0, 0], // Level 8: 3/3/2/0/0/0/0
+            9 => [3, 3, 2, 1, 0, 0, 0], // Level 9: 3/3/2/1/0/0/0
+            10 => [4, 4, 3, 2, 0, 0, 0], // Level 10: 4/4/3/2/0/0/0
+            11 => [4, 4, 3, 2, 1, 0, 0], // Level 11: 4/4/3/2/1/0/0
+            12 => [4, 4, 4, 3, 2, 0, 0], // Level 12: 4/4/4/3/2/0/0
+            13 => [5, 5, 4, 3, 2, 1, 0], // Level 13: 5/5/4/3/2/1/0
+            14 => [5, 5, 4, 4, 3, 2, 0], // Level 14: 5/5/4/4/3/2/0
+            15 => [5, 5, 5, 4, 3, 2, 0], // Level 15: 5/5/5/4/3/2/0
+            16 => [6, 6, 5, 4, 3, 2, 1], // Level 16: 6/6/5/4/3/2/1
+            17 => [6, 6, 5, 4, 4, 3, 2], // Level 17: 6/6/5/4/4/3/2
+            18 => [6, 6, 6, 5, 4, 3, 2], // Level 18: 6/6/6/5/4/3/2
+            19 => [7, 6, 6, 5, 4, 4, 3], // Level 19: 7/6/6/5/4/4/3
+            20 => [7, 7, 6, 5, 5, 4, 3], // Level 20: 7/7/6/5/5/4/3
+            21 => [7, 7, 6, 6, 5, 4, 4], // Level 21: 7/7/6/6/5/4/4
+            22 => [7, 7, 7, 6, 5, 5, 4], // Level 22: 7/7/7/6/5/5/4
+            23 => [7, 7, 7, 6, 6, 5, 4], // Level 23: 7/7/7/6/6/5/4
+            24 => [8, 7, 7, 6, 6, 5, 5], // Level 24: 8/7/7/6/6/5/5
+            25 => [8, 7, 7, 7, 6, 5, 5], // Level 25: 8/7/7/7/6/5/5
+            26 => [8, 8, 7, 7, 6, 6, 5], // Level 26: 8/8/7/7/6/6/5
+            27 => [8, 8, 7, 7, 7, 6, 5], // Level 27: 8/8/7/7/7/6/5
+            28 => [8, 8, 8, 7, 7, 6, 6], // Level 28: 8/8/8/7/7/6/6
+            29 => [8, 8, 8, 7, 7, 7, 6], // Level 29: 8/8/8/7/7/7/6
+            30 => [8, 8, 8, 8, 7, 7, 6], // Level 30: 8/8/8/8/7/7/6
+            31 => [8, 8, 8, 8, 7, 7, 7], // Level 31: 8/8/8/8/7/7/7
+            32 => [9, 8, 8, 8, 7, 7, 7], // Level 32: 9/8/8/8/7/7/7
+            33 => [9, 9, 8, 8, 7, 7, 7], // Level 33: 9/9/8/8/7/7/7
+            34 => [9, 9, 9, 8, 8, 7, 7], // Level 34: 9/9/9/8/8/7/7
+            35 => [9, 9, 9, 9, 8, 8, 7], // Level 35: 9/9/9/9/8/8/7
+            36 => [9, 9, 9, 9, 9, 8, 8]  // Level 36: 9/9/9/9/9/8/8
+        ];
         
-        // Dexterity bonus/penalty
+        return $spellSlots[$level] ?? [0, 0, 0, 0, 0, 0, 0];
+    }
+    
+    /**
+     * Get spell slots per level for Magic-Users
+     * Based on Magic-User Experience Table from Rules Cyclopedia
+     */
+    public static function getMagicUserSpellSlots($level) {
+        $spellSlots = [
+            1 => [1, 0, 0, 0, 0, 0, 0, 0, 0], // Level 1: 1 first level spell
+            2 => [2, 0, 0, 0, 0, 0, 0, 0, 0], // Level 2: 2 first level spells
+            3 => [2, 1, 0, 0, 0, 0, 0, 0, 0], // Level 3: 2/1/0/0/0/0/0/0/0
+            4 => [2, 2, 0, 0, 0, 0, 0, 0, 0], // Level 4: 2/2/0/0/0/0/0/0/0
+            5 => [2, 2, 1, 0, 0, 0, 0, 0, 0], // Level 5: 2/2/1/0/0/0/0/0/0
+            6 => [3, 2, 1, 0, 0, 0, 0, 0, 0], // Level 6: 3/2/1/0/0/0/0/0/0
+            7 => [3, 2, 2, 0, 0, 0, 0, 0, 0], // Level 7: 3/2/2/0/0/0/0/0/0
+            8 => [3, 3, 2, 1, 0, 0, 0, 0, 0], // Level 8: 3/3/2/1/0/0/0/0/0
+            9 => [3, 3, 2, 2, 0, 0, 0, 0, 0], // Level 9: 3/3/2/2/0/0/0/0/0
+            10 => [4, 3, 2, 2, 1, 0, 0, 0, 0], // Level 10: 4/3/2/2/1/0/0/0/0
+            11 => [4, 3, 3, 2, 1, 0, 0, 0, 0], // Level 11: 4/3/3/2/1/0/0/0/0
+            12 => [4, 4, 3, 2, 2, 0, 0, 0, 0], // Level 12: 4/4/3/2/2/0/0/0/0
+            13 => [4, 4, 3, 3, 2, 1, 0, 0, 0], // Level 13: 4/4/3/3/2/1/0/0/0
+            14 => [5, 4, 3, 3, 2, 1, 0, 0, 0], // Level 14: 5/4/3/3/2/1/0/0/0
+            15 => [5, 4, 4, 3, 2, 2, 0, 0, 0], // Level 15: 5/4/4/3/2/2/0/0/0
+            16 => [5, 5, 4, 3, 3, 2, 1, 0, 0], // Level 16: 5/5/4/3/3/2/1/0/0
+            17 => [5, 5, 4, 4, 3, 2, 1, 0, 0], // Level 17: 5/5/4/4/3/2/1/0/0
+            18 => [6, 5, 4, 4, 3, 3, 2, 0, 0], // Level 18: 6/5/4/4/3/3/2/0/0
+            19 => [6, 5, 5, 4, 3, 3, 2, 1, 0], // Level 19: 6/5/5/4/3/3/2/1/0
+            20 => [6, 6, 5, 4, 4, 3, 2, 1, 0], // Level 20: 6/6/5/4/4/3/2/1/0
+            21 => [6, 6, 5, 5, 4, 3, 3, 2, 0], // Level 21: 6/6/5/5/4/3/3/2/0
+            22 => [6, 6, 6, 5, 4, 4, 3, 2, 1], // Level 22: 6/6/6/5/4/4/3/2/1
+            23 => [6, 6, 6, 5, 5, 4, 3, 2, 1], // Level 23: 6/6/6/5/5/4/3/2/1
+            24 => [6, 6, 6, 6, 5, 4, 4, 3, 2], // Level 24: 6/6/6/6/5/4/4/3/2
+            25 => [6, 6, 6, 6, 5, 5, 4, 3, 2], // Level 25: 6/6/6/6/5/5/4/3/2
+            26 => [6, 6, 6, 6, 6, 5, 4, 4, 3], // Level 26: 6/6/6/6/6/5/4/4/3
+            27 => [6, 6, 6, 6, 6, 5, 5, 4, 3], // Level 27: 6/6/6/6/6/5/5/4/3
+            28 => [6, 6, 6, 6, 6, 6, 5, 4, 4], // Level 28: 6/6/6/6/6/6/5/4/4
+            29 => [6, 6, 6, 6, 6, 6, 5, 5, 4], // Level 29: 6/6/6/6/6/6/5/5/4
+            30 => [6, 6, 6, 6, 6, 6, 6, 5, 5], // Level 30: 6/6/6/6/6/6/6/5/5
+            31 => [6, 6, 6, 6, 6, 6, 6, 5, 5], // Level 31: 6/6/6/6/6/6/6/5/5
+            32 => [6, 6, 6, 6, 6, 6, 6, 6, 5], // Level 32: 6/6/6/6/6/6/6/6/5
+            33 => [6, 6, 6, 6, 6, 6, 6, 6, 5], // Level 33: 6/6/6/6/6/6/6/6/5
+            34 => [6, 6, 6, 6, 6, 6, 6, 6, 6], // Level 34: 6/6/6/6/6/6/6/6/6
+            35 => [6, 6, 6, 6, 6, 6, 6, 6, 6], // Level 35: 6/6/6/6/6/6/6/6/6
+            36 => [6, 6, 6, 6, 6, 6, 6, 6, 6]  // Level 36: 6/6/6/6/6/6/6/6/6
+        ];
+        
+        return $spellSlots[$level] ?? [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    }
+    
+    /**
+     * Get spell slots for any class
+     */
+    public static function getSpellSlots($class, $level) {
+        $slots = [];
+        switch ($class) {
+            case 'cleric':
+            case 'druid':
+                $slots = self::getClericSpellSlots($level);
+                break;
+            case 'magic_user':
+            case 'elf':
+                $slots = self::getMagicUserSpellSlots($level);
+                break;
+            default:
+                $slots = [0, 0, 0, 0, 0, 0, 0, 0, 0]; // Non-spellcasters
+        }
+        
+        // Convert array to associative array with level as key
+        $result = [];
+        foreach ($slots as $spellLevel => $count) {
+            if ($count > 0) {
+                $result[$spellLevel + 1] = $count; // Convert 0-based to 1-based level
+            }
+        }
+        
+        return $result;
+    }
+    
+    /**
+     * Calculate armor class according to BECMI rules
+     * BECMI uses descending AC where lower is better
+     * 
+     * @param array $character Character data
+     * @param array $inventory Character inventory (optional)
+     * @return int Armor class (lower is better)
+     */
+    public static function calculateArmorClass($character, $inventory = null) {
+        // Dexterity bonus/penalty (subtract from AC, lower is better)
         $dexBonus = self::getDexterityBonus($character['dexterity']);
         
-        // Armor bonus (would need to check equipped armor)
-        $armorBonus = 0; // Placeholder
+        // Start with base AC (no armor)
+        $baseAC = 9;
         
-        // Shield bonus (would need to check equipped shield)
-        $shieldBonus = 0; // Placeholder
+        // Check for equipped armor - ARMOR REPLACES the base AC
+        if ($inventory) {
+            $equippedArmor = array_filter($inventory, function($item) {
+                // Handle both database inventory (with is_equipped) and character creation equipment (without is_equipped)
+                $isEquipped = isset($item['is_equipped']) ? $item['is_equipped'] : true;
+                $itemType = isset($item['item_type']) ? $item['item_type'] : 'unknown';
+                return $isEquipped && $itemType === 'armor';
+            });
+            
+            if (!empty($equippedArmor)) {
+                $armor = reset($equippedArmor);
+                // BECMI armor AC values (lower is better) - ARMOR REPLACES base AC
+                $armorACTable = [
+                    'leather armor' => 7,
+                    'scale armor' => 6, 
+                    'chain mail' => 5,
+                    'banded armor' => 4,
+                    'plate mail' => 3,
+                    'suit armor' => 0
+                ];
+                
+                $armorName = strtolower($armor['name']);
+                $baseAC = $armorACTable[$armorName] ?? 9; // ARMOR REPLACES base AC
+                
+                // Add magical bonus if applicable
+                if (isset($armor['magical_bonus']) && $armor['magical_bonus'] && $armor['magical_bonus'] > 0) {
+                    $baseAC -= $armor['magical_bonus']; // Subtract magical bonus (lower AC is better)
+                }
+            }
+        }
         
-        return $baseAC + $dexBonus + $armorBonus + $shieldBonus;
+        // Shield bonus (subtract from AC, lower is better)  
+        $shieldBonus = 0;
+        if ($inventory) {
+            $equippedShield = array_filter($inventory, function($item) {
+                // Handle both database inventory (with is_equipped) and character creation equipment (without is_equipped)
+                $isEquipped = isset($item['is_equipped']) ? $item['is_equipped'] : true;
+                $itemType = isset($item['item_type']) ? $item['item_type'] : 'unknown';
+                return $isEquipped && $itemType === 'shield';
+            });
+            
+            if (!empty($equippedShield)) {
+                $shield = reset($equippedShield);
+                $shieldBonus = 1; // Standard shield gives -1 AC (better)
+                
+                // Add magical bonus if applicable
+                if (isset($shield['magical_bonus']) && $shield['magical_bonus'] && $shield['magical_bonus'] > 0) {
+                    $shieldBonus += $shield['magical_bonus']; // Add magical bonus (lower AC is better)
+                }
+            }
+        }
+        
+        return $baseAC - $dexBonus - $shieldBonus;
     }
     
     /**
@@ -381,6 +592,271 @@ class BECMIRulesEngine {
         ];
         
         return $bonusTable[$dexterity] ?? 0;
+    }
+    
+    /**
+     * Get ability modifier for any ability score
+     * Public method for use by API endpoints
+     * 
+     * @param int $abilityScore The ability score (3-18)
+     * @return int The modifier (-3 to +3)
+     */
+    public static function getAbilityModifier($abilityScore) {
+        $bonusTable = [
+            3 => -3, 4 => -2, 5 => -2, 6 => -1, 7 => -1, 8 => -1, 9 => 0,
+            10 => 0, 11 => 0, 12 => 0, 13 => 1, 14 => 1, 15 => 1, 16 => 2,
+            17 => 2, 18 => 3
+        ];
+        
+        return $bonusTable[$abilityScore] ?? 0;
+    }
+    
+    /**
+     * Get class prime requisites
+     * Rules Cyclopedia Chapter 1-2
+     * 
+     * @param string $class Character class
+     * @return array Array of prime requisite ability names
+     */
+    public static function getClassPrimeRequisites($class) {
+        $primeRequisites = [
+            'fighter' => ['strength'],
+            'cleric' => ['wisdom'],
+            'magic_user' => ['intelligence'],
+            'thief' => ['dexterity'],
+            'dwarf' => ['strength'],
+            'elf' => ['strength', 'intelligence'],
+            'halfling' => ['strength', 'dexterity'],
+            'druid' => ['wisdom'],
+            'mystic' => ['strength', 'dexterity']
+        ];
+        
+        return $primeRequisites[$class] ?? [];
+    }
+    
+    /**
+     * Validate class requirements (minimum ability scores)
+     * Rules Cyclopedia Chapter 1, page 129-146
+     * 
+     * @param string $class Character class
+     * @param array $abilities Character abilities
+     * @return array ['valid' => bool, 'error' => string]
+     */
+    public static function validateClassRequirements($class, $abilities) {
+        $requirements = [
+            'fighter' => [],
+            'cleric' => [],
+            'magic_user' => [],
+            'thief' => [],
+            'dwarf' => ['constitution' => 9],
+            'elf' => ['intelligence' => 9],
+            'halfling' => ['dexterity' => 9, 'constitution' => 9],
+            'druid' => [], // Cannot be created at 1st level
+            'mystic' => ['wisdom' => 13, 'dexterity' => 13]
+        ];
+        
+        // Special case: Druid
+        if ($class === 'druid') {
+            return [
+                'valid' => false,
+                'error' => 'Druid characters must start as Neutral Clerics and become Druids at 9th level. Please select Cleric class instead.'
+            ];
+        }
+        
+        $classReqs = $requirements[$class] ?? [];
+        
+        foreach ($classReqs as $ability => $minScore) {
+            if (!isset($abilities[$ability]) || $abilities[$ability] < $minScore) {
+                $abilityName = ucfirst($ability);
+                return [
+                    'valid' => false,
+                    'error' => "{$abilityName} must be at least {$minScore} to play a " . ucfirst(str_replace('_', '-', $class))
+                ];
+            }
+        }
+        
+        return ['valid' => true, 'error' => null];
+    }
+    
+    /**
+     * Validate ability score adjustments
+     * Rules Cyclopedia Chapter 1, Step 3, page 227-268
+     * 
+     * Rules:
+     * - Trade 2 points from ability to raise prime requisite by 1
+     * - Cannot lower any ability below 9
+     * - Cannot lower Constitution or Charisma
+     * - Cannot lower Dexterity (except for Thief/Halfling who can raise it)
+     * - Can only raise prime requisites
+     * 
+     * @param array $original Original rolled abilities
+     * @param array $adjusted Adjusted abilities
+     * @param string $class Character class
+     * @return array ['valid' => bool, 'error' => string, 'details' => array]
+     */
+    public static function validateAbilityAdjustmentRules($original, $adjusted, $class) {
+        $primeReqs = self::getClassPrimeRequisites($class);
+        $canLowerDex = in_array($class, ['thief', 'halfling']);
+        
+        $totalPointsLowered = 0;
+        $totalPointsRaised = 0;
+        $errors = [];
+        
+        foreach (['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'] as $ability) {
+            $origValue = $original[$ability] ?? 10;
+            $adjValue = $adjusted[$ability] ?? 10;
+            $diff = $adjValue - $origValue;
+            
+            // Check if lowered below 9
+            if ($adjValue < 9 && $diff < 0) {
+                return [
+                    'valid' => false,
+                    'error' => ucfirst($ability) . " cannot be lowered below 9 (currently {$adjValue})",
+                    'details' => []
+                ];
+            }
+            
+            // Check if Constitution or Charisma lowered
+            if (in_array($ability, ['constitution', 'charisma']) && $diff < 0) {
+                return [
+                    'valid' => false,
+                    'error' => ucfirst($ability) . " cannot be lowered",
+                    'details' => []
+                ];
+            }
+            
+            // Check if Dexterity lowered (not allowed except for Thief/Halfling)
+            if ($ability === 'dexterity' && $diff < 0 && !$canLowerDex) {
+                return [
+                    'valid' => false,
+                    'error' => "Dexterity cannot be lowered for this class",
+                    'details' => []
+                ];
+            }
+            
+            // Check if non-prime requisite raised
+            if ($diff > 0 && !in_array($ability, $primeReqs)) {
+                return [
+                    'valid' => false,
+                    'error' => "Can only raise prime requisites (" . implode(', ', $primeReqs) . "), not " . ucfirst($ability),
+                    'details' => []
+                ];
+            }
+            
+            // Count points
+            if ($diff < 0) {
+                $totalPointsLowered += abs($diff);
+            }
+            if ($diff > 0) {
+                $totalPointsRaised += $diff;
+            }
+        }
+        
+        // Check 2-for-1 ratio
+        $expectedPointsRaised = floor($totalPointsLowered / 2);
+        if ($totalPointsRaised != $expectedPointsRaised) {
+            return [
+                'valid' => false,
+                'error' => "Invalid point exchange: Lowered {$totalPointsLowered} points (should raise " . floor($totalPointsLowered / 2) . "), but raised {$totalPointsRaised}",
+                'details' => ['lowered' => $totalPointsLowered, 'raised' => $totalPointsRaised]
+            ];
+        }
+        
+        return [
+            'valid' => true,
+            'error' => null,
+            'details' => ['lowered' => $totalPointsLowered, 'raised' => $totalPointsRaised]
+        ];
+    }
+    
+    /**
+     * Get number of starting spells for a class
+     * Rules Cyclopedia Chapter 3, page 1967-2012
+     * 
+     * @param string $class Character class
+     * @param int $level Character level
+     * @return int Number of starting spells in spellbook
+     */
+    public static function getStartingSpellsForClass($class, $level = 1) {
+        // Magic-Users start with 2 spells at 1st level
+        if ($class === 'magic_user' && $level === 1) {
+            return 2;
+        }
+        
+        // Elves start with 1 spell at 1st level (as they have fewer spells total)
+        if ($class === 'elf' && $level === 1) {
+            return 1;
+        }
+        
+        // Clerics don't get spells until 2nd level
+        // All other classes don't use spells
+        return 0;
+    }
+    
+    /**
+     * Get hit die for a class
+     * Rules Cyclopedia Chapter 1, page 290-302
+     * 
+     * @param string $class Character class
+     * @return int Hit die size (4, 6, or 8)
+     */
+    public static function getHitDieForClass($class) {
+        $hitDice = [
+            'fighter' => 8,
+            'cleric' => 6,
+            'magic_user' => 4,
+            'thief' => 4,
+            'dwarf' => 8,
+            'elf' => 6,
+            'halfling' => 6,
+            'druid' => 6,
+            'mystic' => 6
+        ];
+        
+        return $hitDice[$class] ?? 6;
+    }
+    
+    /**
+     * Calculate experience bonus from prime requisite
+     * Rules Cyclopedia Chapter 1, page 1061-1103
+     * 
+     * @param string $class Character class
+     * @param array $abilities Character abilities
+     * @return float XP multiplier (0.8, 0.9, 1.0, 1.05, or 1.10)
+     */
+    public static function getExperienceBonus($class, $abilities) {
+        $primeReqs = self::getClassPrimeRequisites($class);
+        
+        // For classes with two prime requisites (Elf, Halfling, Mystic)
+        if (count($primeReqs) === 2) {
+            $req1 = $abilities[$primeReqs[0]] ?? 10;
+            $req2 = $abilities[$primeReqs[1]] ?? 10;
+            
+            // Both must meet threshold
+            if ($req1 >= 13 && $req2 >= 13) {
+                if ($req1 >= 16 && $req2 >= 16) {
+                    return 1.10; // +10%
+                }
+                return 1.05; // +5%
+            }
+            
+            // Penalties for low scores (use lowest)
+            $lowest = min($req1, $req2);
+            if ($lowest <= 5) return 0.80; // -20%
+            if ($lowest <= 8) return 0.90; // -10%
+            
+            return 1.0; // No bonus
+        }
+        
+        // Single prime requisite
+        $primeValue = $abilities[$primeReqs[0]] ?? 10;
+        
+        if ($primeValue >= 16) return 1.10; // +10%
+        if ($primeValue >= 13) return 1.05; // +5%
+        if ($primeValue <= 5) return 0.80; // -20%
+        if ($primeValue <= 8) return 0.90; // -10%
+        
+        return 1.0; // No bonus or penalty
     }
 }
 ?>

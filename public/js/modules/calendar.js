@@ -35,9 +35,7 @@ class CalendarModule {
                         </div>
                     </div>
                     
-                    <div class="calendar-grid">
-                        ${this.renderCalendarGrid(sessions)}
-                    </div>
+                    ${this.renderCalendarGrid(sessions)}
                     
                     <div class="calendar-legend">
                         <div class="legend-item">
@@ -77,17 +75,19 @@ class CalendarModule {
         const firstDay = new Date(year, month, 1);
         const lastDay = new Date(year, month + 1, 0);
         const daysInMonth = lastDay.getDate();
-        const startDayOfWeek = firstDay.getDay();
+        // Convert to Monday=0 system (Monday=0, Tuesday=1, ..., Sunday=6)
+        let startDayOfWeek = firstDay.getDay();
+        startDayOfWeek = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
         
-        // Calendar header
+        // Calendar header - Monday first (European standard)
         const header = `<div class="calendar-header-row">
-                <div class="day-header">Sun</div>
                 <div class="day-header">Mon</div>
                 <div class="day-header">Tue</div>
                 <div class="day-header">Wed</div>
                 <div class="day-header">Thu</div>
                 <div class="day-header">Fri</div>
                 <div class="day-header">Sat</div>
+                <div class="day-header">Sun</div>
             </div>
         `;
         
@@ -115,7 +115,10 @@ class CalendarModule {
             calendarBody += '<div class="calendar-day empty"></div>';
         }
         
-        return header + calendarBody;
+        return `${header}
+                <div class="calendar-grid">
+                    ${calendarBody}
+                </div>`;
     }
     
     /**

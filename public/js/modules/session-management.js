@@ -86,9 +86,9 @@ class SessionManagementModule {
     renderSessionCard(session) {
         const sessionDate = new Date(session.session_datetime);
         const now = new Date();
-        const isUpcoming = sessionDate > now;
-        const isPast = sessionDate < now;
+        const isUpcoming = sessionDate > now && session.status === 'scheduled';
         const isActive = session.status === 'active';
+        const isPast = sessionDate < now;
         
         let statusClass = 'scheduled';
         let statusText = 'Scheduled';
@@ -96,12 +96,15 @@ class SessionManagementModule {
         if (isActive) {
             statusClass = 'active';
             statusText = 'Active';
-        } else if (isPast) {
+        } else if (session.status === 'completed') {
             statusClass = 'completed';
             statusText = 'Completed';
         } else if (session.status === 'cancelled') {
             statusClass = 'cancelled';
             statusText = 'Cancelled';
+        } else if (isPast) {
+            statusClass = 'past';
+            statusText = 'Past';
         }
         
         return `<div class="session-card ${statusClass}"data-session-id="${session.session_id}">
@@ -147,15 +150,17 @@ class SessionManagementModule {
                         <i class="fas fa-eye"></i>
                         View
                     </button>
-                    <button class="btn btn-sm btn-secondary"data-action="edit-session"data-session-id="${session.session_id}">
-                        <i class="fas fa-edit"></i>
-                        Edit
-                    </button>
-                    ${isUpcoming ? `<button class="btn btn-sm btn-success"data-action="start-session"data-session-id="${session.session_id}">
-                            <i class="fas fa-play"></i>
-                            Start
+                    ${session.is_dm ? `
+                        <button class="btn btn-sm btn-secondary"data-action="edit-session"data-session-id="${session.session_id}">
+                            <i class="fas fa-edit"></i>
+                            Edit
                         </button>
-                    `: ''}
+                        ${isUpcoming ? `<button class="btn btn-sm btn-success"data-action="start-session"data-session-id="${session.session_id}">
+                                <i class="fas fa-play"></i>
+                                Start
+                            </button>
+                        `: ''}
+                    ` : ''}
                 </div>
             </div>
         `;
@@ -809,16 +814,28 @@ class SessionManagementModule {
     }
     
     /**
-     * Start session
+     * Start session (DM only)
      */
     async startSession(sessionId) {
         try {
-            // This would call a session start API endpoint
-            this.app.showSuccess('Session started! (Feature coming soon)');
+            console.log('Starting session:', sessionId);
+            
+            const response = await this.apiClient.post('/api/session/start.php', {
+                session_id: sessionId
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess(response.message || 'Session started successfully!');
+                
+                // Reload sessions to reflect status change
+                await this.render();
+            } else {
+                this.app.showError(response.message || 'Failed to start session');
+            }
             
         } catch (error) {
             console.error('Failed to start session:', error);
-            this.app.showError('Failed to start session');
+            this.app.showError('Failed to start session: ' + error.message);
         }
     }
     
@@ -830,7 +847,7 @@ class SessionManagementModule {
      */
     async loadSessionPlayers(sessionId) {
         try {
-            const response = await this.apiClient.get(`/api/session/get-players.php?session_id=${sessionId}`);
+            const response = await this.apiClient.get(`/api/session/get-players.php?session_id=${sessionId}&t=${Date.now()}`);
             
             if (response.status === 'success') {
                 return response.data;
@@ -1817,6 +1834,15 @@ class SessionManagementModule {
     init() {
         this.setupEventHandlers();
         console.log('Session Management Module initialized');
+    }
+    
+    /**
+     * Cleanup resources when navigating away
+     */
+    cleanup() {
+        // Stop any ongoing processes
+        console.log('Session Management Module cleanup');
+        // Add any cleanup logic here if needed
     }
 }
 

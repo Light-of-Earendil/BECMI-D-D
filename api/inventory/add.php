@@ -6,8 +6,8 @@
  * Note: Initial equipment is added during character creation.
  */
 
-require_once '../app/core/database.php';
-require_once '../app/core/security.php';
+require_once '../../app/core/database.php';
+require_once '../../app/core/security.php';
 
 // Initialize security
 Security::init();

@@ -127,7 +127,7 @@ try {
     }
     
     // Recalculate all statistics to ensure they're current
-    $calculatedStats = recalculateCharacterStats($character);
+    $calculatedStats = recalculateCharacterStats($character, $inventory);
     $currentHp = min($character['current_hp'], $calculatedStats['max_hp']);
     
     // Prepare response data
@@ -158,12 +158,14 @@ try {
             'save_dragon_breath' => $calculatedStats['saving_throws']['dragon_breath'],
             'save_spells' => $calculatedStats['saving_throws']['spells'],
             'alignment' => $character['alignment'],
+            'gender' => $character['gender'],
             'age' => $character['age'],
             'height' => $character['height'],
             'weight' => $character['weight'],
             'hair_color' => $character['hair_color'],
             'eye_color' => $character['eye_color'],
             'background' => $character['background'],
+            'portrait_url' => $character['portrait_url'],
             'gold_pieces' => $character['gold_pieces'],
             'silver_pieces' => $character['silver_pieces'],
             'copper_pieces' => $character['copper_pieces'],
@@ -191,7 +193,7 @@ try {
 /**
  * Recalculate all character statistics
  */
-function recalculateCharacterStats($character) {
+function recalculateCharacterStats($character, $inventory = null) {
     $stats = [];
     
     // Calculate hit points
@@ -206,8 +208,8 @@ function recalculateCharacterStats($character) {
     // Calculate saving throws
     $stats['saving_throws'] = BECMIRulesEngine::calculateSavingThrows($character);
     
-    // Calculate armor class
-    $stats['armor_class'] = BECMIRulesEngine::calculateArmorClass($character);
+    // Calculate armor class (with inventory data)
+    $stats['armor_class'] = BECMIRulesEngine::calculateArmorClass($character, $inventory);
     
     // Calculate experience for next level
     $stats['xp_for_next_level'] = BECMIRulesEngine::getExperienceForNextLevel($character['class'], $character['level']);

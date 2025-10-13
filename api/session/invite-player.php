@@ -26,6 +26,119 @@
 require_once '../../app/core/database.php';
 require_once '../../app/core/security.php';
 
+/**
+ * Send invitation email to player
+ */
+function sendInvitationEmail($playerUser, $session, $dmUserId) {
+    // Get DM username
+    $db = getDB();
+    $dmUser = $db->selectOne(
+        "SELECT username FROM users WHERE user_id = ?",
+        [$dmUserId]
+    );
+    
+    if (!$dmUser) {
+        error_log("INVITATION EMAIL ERROR: DM user not found for ID {$dmUserId}");
+        return false;
+    }
+    
+    $dmUsername = $dmUser['username'];
+    $playerEmail = $playerUser['email'];
+    $playerUsername = $playerUser['username'];
+    
+    // Format session datetime
+    $sessionDate = 'TBA';
+    if (!empty($session['session_datetime'])) {
+        $timestamp = strtotime($session['session_datetime']);
+        if ($timestamp !== false) {
+            $sessionDate = date('l, F j, Y \a\t g:i A', $timestamp);
+        }
+    }
+    
+    // Create email content
+    $subject = "🎲 You've been invited to a D&D session: " . $session['session_title'];
+    
+    $message = "
+    <html>
+    <head>
+        <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; }
+            .content { padding: 20px; max-width: 600px; margin: 0 auto; }
+            .session-info { background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; }
+            .cta-button { background: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; }
+            .footer { text-align: center; color: #666; font-size: 12px; margin-top: 30px; }
+        </style>
+    </head>
+    <body>
+        <div class='header'>
+            <h1>🎲 BECMI D&D Virtual Tabletop</h1>
+            <h2>You've been invited to a game session!</h2>
+        </div>
+        
+        <div class='content'>
+            <p>Hello <strong>{$playerUsername}</strong>,</p>
+            
+            <p><strong>{$dmUsername}</strong> has invited you to join their D&D session:</p>
+            
+            <div class='session-info'>
+                <h3>🎮 {$session['session_title']}</h3>
+                <p><strong>📅 Date & Time:</strong> {$sessionDate}</p>
+                <p><strong>📝 Description:</strong> " . htmlspecialchars($session['session_description'] ?? 'No description provided') . "</p>
+                <p><strong>👤 Dungeon Master:</strong> {$dmUsername}</p>
+            </div>
+            
+            <p>To accept this invitation and join the session:</p>
+            
+            <div style='text-align: center;'>
+                <a href='https://becmi.snilld-api.dk/public/index.html' class='cta-button'>
+                    🚀 Go to BECMI VTT
+                </a>
+            </div>
+            
+            <p><strong>Instructions:</strong></p>
+            <ol>
+                <li>Click the button above to go to the BECMI VTT</li>
+                <li>Log in to your account</li>
+                <li>Go to the 'Sessions' section</li>
+                <li>Find this session and click 'Accept'</li>
+                <li>Create your character and start playing!</li>
+            </ol>
+            
+            <p>If you have any questions, please contact {$dmUsername} directly.</p>
+            
+            <p>Happy gaming!<br>
+            <strong>The BECMI VTT Team</strong></p>
+        </div>
+        
+        <div class='footer'>
+            <p>This is an automated message from BECMI D&D Virtual Tabletop</p>
+            <p>If you did not expect this invitation, you can safely ignore this email.</p>
+        </div>
+    </body>
+    </html>
+    ";
+    
+    // Send email
+    $headers = [
+        'MIME-Version: 1.0',
+        'Content-type: text/html; charset=UTF-8',
+        'From: BECMI VTT <noreply@snilld-api.dk>',
+        'Reply-To: ' . $dmUsername . ' <noreply@snilld-api.dk>',
+        'X-Mailer: BECMI VTT System'
+    ];
+    
+    $sent = Security::sendEmail($playerEmail, $subject, $message, $headers);
+    
+    if ($sent) {
+        error_log("INVITATION EMAIL: Successfully sent invitation email to {$playerEmail} for session {$session['session_id']}");
+    } else {
+        error_log("INVITATION EMAIL: Failed to send invitation email to {$playerEmail} for session {$session['session_id']}");
+    }
+    
+    return $sent;
+}
+
 // Initialize security
 Security::init();
 
@@ -175,8 +288,8 @@ try {
     
     error_log("INVITE PLAYER: User {$dmUserId} invited player {$playerUserId} ({$playerUser['username']}) to session {$sessionId} ({$session['session_title']})");
     
-    // TODO: Send email notification to player
-    // This would be implemented in a future email notification system
+    // Send email notification to player
+    sendInvitationEmail($playerUser, $session, $dmUserId);
     
     // Return success with player info
     Security::sendSuccessResponse([

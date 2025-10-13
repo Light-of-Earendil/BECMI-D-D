@@ -5,8 +5,8 @@
  * Removes an item (or reduces quantity) from character's inventory.
  */
 
-require_once '../app/core/database.php';
-require_once '../app/core/security.php';
+require_once '../../app/core/database.php';
+require_once '../../app/core/security.php';
 
 // Initialize security
 Security::init();

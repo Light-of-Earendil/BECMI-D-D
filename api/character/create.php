@@ -108,6 +108,32 @@ try {
         $characterData['level'] = 1;
     }
     
+    // BECMI VALIDATION: Validate class requirements (minimum ability scores)
+    $classValidation = BECMIRulesEngine::validateClassRequirements($characterData['class'], $characterData);
+    if (!$classValidation['valid']) {
+        Security::sendValidationErrorResponse(['class' => $classValidation['error']]);
+    }
+    
+    // BECMI VALIDATION: Validate ability score adjustments if provided
+    if (!empty($characterData['ability_adjustments']) && !empty($characterData['original_abilities'])) {
+        $adjustmentValidation = BECMIRulesEngine::validateAbilityAdjustmentRules(
+            $characterData['original_abilities'],
+            [
+                'strength' => $characterData['strength'],
+                'dexterity' => $characterData['dexterity'],
+                'constitution' => $characterData['constitution'],
+                'intelligence' => $characterData['intelligence'],
+                'wisdom' => $characterData['wisdom'],
+                'charisma' => $characterData['charisma']
+            ],
+            $characterData['class']
+        );
+        
+        if (!$adjustmentValidation['valid']) {
+            Security::sendValidationErrorResponse(['abilities' => $adjustmentValidation['error']]);
+        }
+    }
+    
     // Calculate derived statistics using BECMI rules
     $calculatedStats = calculateCharacterStats($characterData);
     
@@ -115,52 +141,105 @@ try {
     $db->beginTransaction();
     
     try {
-        // Create character record
+        // Prepare ability adjustment data
+        $abilityAdjustmentsJSON = null;
+        $originalAbilities = [];
+        
+        if (!empty($characterData['original_abilities'])) {
+            $originalAbilities = $characterData['original_abilities'];
+            
+            // Build adjustments JSON
+            $adjustments = [];
+            foreach (['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'] as $ability) {
+                $original = $originalAbilities[$ability] ?? $characterData[$ability];
+                $adjusted = $characterData[$ability];
+                if ($original != $adjusted) {
+                    $adjustments[$ability] = [
+                        'original' => $original,
+                        'adjusted' => $adjusted,
+                        'change' => $adjusted - $original
+                    ];
+                }
+            }
+            
+            if (!empty($adjustments)) {
+                $abilityAdjustmentsJSON = json_encode($adjustments);
+            }
+        }
+        
+        // Debug: Log the values being inserted
+        error_log("Character data being inserted: " . json_encode([
+            'user_id' => $userId,
+            'session_id' => $characterData['session_id'],
+            'character_name' => $characterData['character_name'],
+            'class' => $characterData['class'],
+            'alignment' => $characterData['alignment'],
+            'ability_adjustments' => $abilityAdjustmentsJSON,
+            'original_abilities' => $originalAbilities
+        ]));
+        $valuesArray = [
+            $userId,
+            $characterData['session_id'],
+            $characterData['character_name'],
+            $characterData['class'],
+            1, // Starting level
+            0, // Starting XP
+            $calculatedStats['max_hp'],
+            $calculatedStats['max_hp'],
+            $characterData['strength'],
+            $characterData['dexterity'],
+            $characterData['constitution'],
+            $characterData['intelligence'],
+            $characterData['wisdom'],
+            $characterData['charisma'],
+            $calculatedStats['armor_class'],
+            $calculatedStats['thac0']['melee'],
+            $calculatedStats['thac0']['ranged'],
+            $calculatedStats['movement']['normal'],
+            $calculatedStats['movement']['encounter'],
+            $calculatedStats['movement']['status'],
+            $calculatedStats['saving_throws']['death_ray'],
+            $calculatedStats['saving_throws']['magic_wand'],
+            $calculatedStats['saving_throws']['paralysis'],
+            $calculatedStats['saving_throws']['dragon_breath'],
+            $calculatedStats['saving_throws']['spells'],
+            $characterData['alignment'],
+            $characterData['gender'] ?? null,
+            $characterData['age'] ?? null,
+            $characterData['height'] ?? null,
+            $characterData['weight'] ?? null,
+            $characterData['hair_color'] ?? null,
+            $characterData['eye_color'] ?? null,
+            $characterData['gold_pieces'] ?? 0,
+            $characterData['silver_pieces'] ?? 0,
+            $characterData['copper_pieces'] ?? 0,
+            1, // is_active (default to active)
+            $abilityAdjustmentsJSON,
+            $originalAbilities['strength'] ?? null,
+            $originalAbilities['dexterity'] ?? null,
+            $originalAbilities['constitution'] ?? null,
+            $originalAbilities['intelligence'] ?? null,
+            $originalAbilities['wisdom'] ?? null,
+            $originalAbilities['charisma'] ?? null,
+            $characterData['personality'] ?? null,
+            $characterData['background'] ?? null,
+            $characterData['portrait_url'] ?? null
+        ];
+        
+        error_log("Values count: " . count($valuesArray) . " (should be 46)");
+        
+        // Create character record with proper values array (46 values total - added gender and portrait_url)
         $characterId = $db->insert(
             "INSERT INTO characters (
                 user_id, session_id, character_name, class, level, experience_points,
                 current_hp, max_hp, strength, dexterity, constitution, intelligence, wisdom, charisma,
                 armor_class, thac0_melee, thac0_ranged, movement_rate_normal, movement_rate_encounter,
                 encumbrance_status, save_death_ray, save_magic_wand, save_paralysis, save_dragon_breath, save_spells,
-                alignment, age, height, weight, hair_color, eye_color, background, gold_pieces, silver_pieces, copper_pieces
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [
-                $userId,
-                $characterData['session_id'],
-                $characterData['character_name'],
-                $characterData['class'],
-                1, // Starting level
-                0, // Starting XP
-                $calculatedStats['max_hp'],
-                $calculatedStats['max_hp'],
-                $characterData['strength'],
-                $characterData['dexterity'],
-                $characterData['constitution'],
-                $characterData['intelligence'],
-                $characterData['wisdom'],
-                $characterData['charisma'],
-                $calculatedStats['armor_class'],
-                $calculatedStats['thac0']['melee'],
-                $calculatedStats['thac0']['ranged'],
-                $calculatedStats['movement']['normal'],
-                $calculatedStats['movement']['encounter'],
-                $calculatedStats['movement']['status'],
-                $calculatedStats['saving_throws']['death_ray'],
-                $calculatedStats['saving_throws']['magic_wand'],
-                $calculatedStats['saving_throws']['paralysis'],
-                $calculatedStats['saving_throws']['dragon_breath'],
-                $calculatedStats['saving_throws']['spells'],
-                $characterData['alignment'],
-                $characterData['age'] ?? null,
-                $characterData['height'] ?? null,
-                $characterData['weight'] ?? null,
-                $characterData['hair_color'] ?? null,
-                $characterData['eye_color'] ?? null,
-                $characterData['background'] ?? null,
-                $characterData['gold_pieces'] ?? 0,
-                $characterData['silver_pieces'] ?? 0,
-                $characterData['copper_pieces'] ?? 0
-            ]
+                alignment, gender, age, height, weight, hair_color, eye_color, gold_pieces, silver_pieces, copper_pieces,
+                is_active, ability_adjustments, original_strength, original_dexterity, original_constitution, 
+                original_intelligence, original_wisdom, original_charisma, personality, background, portrait_url
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            $valuesArray
         );
         
         // Log character creation
@@ -175,6 +254,136 @@ try {
                 'Character created through character creation wizard'
             ]
         );
+        
+        // Save equipment to character_inventory
+        if (!empty($characterData['equipment']) && is_array($characterData['equipment'])) {
+            foreach ($characterData['equipment'] as $equipmentItem) {
+                $db->insert(
+                    "INSERT INTO character_inventory (character_id, item_id, quantity, is_equipped)
+                     VALUES (?, ?, ?, ?)",
+                    [
+                        $characterId,
+                        $equipmentItem['item_id'],
+                        $equipmentItem['quantity'],
+                        $equipmentItem['is_equipped'] ?? false
+                    ]
+                );
+            }
+            
+            error_log("Saved " . count($characterData['equipment']) . " items to inventory for character " . $characterId);
+            
+            // Log equipment purchase
+            $db->insert(
+                "INSERT INTO character_changes (character_id, user_id, change_type, field_name, new_value, change_reason) 
+                 VALUES (?, ?, ?, ?, ?, ?)",
+                [
+                    $characterId,
+                    $userId,
+                    'equipment',
+                    'starting_equipment',
+                    json_encode($characterData['equipment']),
+                    'Starting equipment purchased during character creation'
+                ]
+            );
+        }
+        
+        // Save weapon masteries
+        if (!empty($characterData['weapon_masteries']) && is_array($characterData['weapon_masteries'])) {
+            error_log("Saving weapon masteries: " . json_encode($characterData['weapon_masteries']));
+            
+            // Mapping from integer rank to string rank
+            $rankMap = [
+                1 => 'basic',
+                2 => 'skilled',
+                3 => 'expert',
+                4 => 'master',
+                5 => 'grand_master'
+            ];
+            
+            foreach ($characterData['weapon_masteries'] as $weaponMastery) {
+                // Handle both old format (just item_id) and new format (with mastery_rank)
+                $itemId = is_array($weaponMastery) ? $weaponMastery['item_id'] : $weaponMastery;
+                $masteryRankInput = (is_array($weaponMastery) && isset($weaponMastery['mastery_rank'])) 
+                    ? $weaponMastery['mastery_rank'] 
+                    : 1;
+                
+                // Convert integer rank to string rank
+                if (is_numeric($masteryRankInput)) {
+                    $masteryRank = $rankMap[intval($masteryRankInput)] ?? 'basic';
+                } else {
+                    $masteryRank = $masteryRankInput; // Already a string
+                }
+                
+                error_log("Saving weapon mastery: item_id=$itemId, mastery_rank=$masteryRank");
+                
+                $db->insert(
+                    "INSERT INTO character_weapon_mastery (character_id, item_id, mastery_rank, learned_at_level)
+                     VALUES (?, ?, ?, ?)",
+                    [
+                        $characterId,
+                        $itemId,
+                        $masteryRank,
+                        1              // Learned at level 1
+                    ]
+                );
+            }
+            
+            error_log("Saved " . count($characterData['weapon_masteries']) . " weapon masteries for character " . $characterId);
+        }
+        
+        // Save general skills
+        if (!empty($characterData['skills']) && is_array($characterData['skills'])) {
+            foreach ($characterData['skills'] as $skill) {
+                $db->insert(
+                    "INSERT INTO character_skills (character_id, skill_name, learned_at_level)
+                     VALUES (?, ?, ?)",
+                    [
+                        $characterId,
+                        $skill['skill_name'],
+                        1  // Learned at level 1
+                    ]
+                );
+            }
+            
+            error_log("Saved " . count($characterData['skills']) . " skills for character " . $characterId);
+        }
+        
+        // BECMI: Grant starting spells for Magic-Users and Elves
+        // Rules Cyclopedia Chapter 3, page 1967-2012
+        // Magic-Users start with 2 spells, Elves with 1 spell
+        if (in_array($characterData['class'], ['magic_user', 'elf'])) {
+            $numStartingSpells = BECMIRulesEngine::getStartingSpellsForClass($characterData['class'], 1);
+            
+            if ($numStartingSpells > 0 && !empty($characterData['starting_spells']) && is_array($characterData['starting_spells'])) {
+                foreach (array_slice($characterData['starting_spells'], 0, $numStartingSpells) as $spellId) {
+                    // Get spell details
+                    $spell = $db->selectOne(
+                        "SELECT spell_id, spell_name, spell_level, spell_type 
+                         FROM spells 
+                         WHERE spell_id = ? AND spell_type = 'magic_user' AND spell_level = 1",
+                        [$spellId]
+                    );
+                    
+                    if ($spell) {
+                        $db->insert(
+                            "INSERT INTO character_spells 
+                             (character_id, spell_id, spell_name, spell_level, spell_type, 
+                              memorized_count, max_memorized, is_memorized, times_cast_today, is_starting_spell)
+                             VALUES (?, ?, ?, ?, ?, 0, 0, FALSE, 0, TRUE)",
+                            [
+                                $characterId,
+                                $spell['spell_id'],
+                                $spell['spell_name'],
+                                $spell['spell_level'],
+                                $spell['spell_type']
+                            ]
+                        );
+                    }
+                }
+                
+                error_log("Granted {$numStartingSpells} starting spells to {$characterData['class']} character {$characterId}");
+            }
+        }
         
         // Commit transaction
         $db->commit();
@@ -207,7 +416,9 @@ try {
     error_log("Error file: " . $e->getFile() . " (line " . $e->getLine() . ")");
     error_log("Stack trace: " . $e->getTraceAsString());
     error_log("=== END ERROR ===");
-    Security::sendErrorResponse('An error occurred during character creation', 500);
+    
+    // Include detailed error in response for debugging (remove in production)
+    Security::sendErrorResponse('Character creation error: ' . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine(), 500);
 }
 
 /**
@@ -275,8 +486,8 @@ function calculateCharacterStats($characterData) {
     // Calculate saving throws
     $stats['saving_throws'] = BECMIRulesEngine::calculateSavingThrows($characterData);
     
-    // Calculate armor class
-    $stats['armor_class'] = BECMIRulesEngine::calculateArmorClass($characterData);
+    // Calculate armor class (with inventory data)
+    $stats['armor_class'] = BECMIRulesEngine::calculateArmorClass($characterData, $characterData['equipment'] ?? null);
     
     return $stats;
 }

@@ -42,7 +42,7 @@ class AuthModule {
                 });
                 
                 // Hide modal && show app
-                $('.modal').hide();
+                $('.modal').removeClass('show');
                 this.app.updateUserInterface();
                 
                 // Load user data
@@ -135,8 +135,8 @@ class AuthModule {
                 this.showFormSuccess(form, 'Account created successfully! Please log in.');
 
                 setTimeout(() => {
-                    $('#register-modal').hide();
-                    $('#login-modal').show();
+                    $('#register-modal').removeClass('show');
+                    $('#login-modal').addClass('show');
                     form.reset();
                 }, 2000);
 
@@ -254,8 +254,8 @@ class AuthModule {
                 console.log('SUCCESS: Password reset successful');
                 this.showFormSuccess(form, response.message || 'Password updated successfully.');
                 setTimeout(() => {
-                    $('#password-reset-modal').hide();
-                    $('#login-modal').show();
+                    $('#password-reset-modal').removeClass('show');
+                    $('#login-modal').addClass('show');
                     form.reset();
                 }, 2000);
                 if (window.history && window.history.replaceState) {
@@ -289,10 +289,8 @@ class AuthModule {
     showForgotPasswordModal() {
         this.clearFormFeedback(document.getElementById('forgot-password-form'));
         document.getElementById('forgot-password-form').reset();
-        $('#login-modal').hide();
-        $('#register-modal').hide();
-        $('#password-reset-modal').hide();
-        $('#forgot-password-modal').show();
+        $('.modal').removeClass('show');
+        $('#forgot-password-modal').addClass('show');
     }
 
     showPasswordResetModal(selector = '', token = '') {
@@ -303,10 +301,8 @@ class AuthModule {
         }
         $('#reset-selector').val(selector);
         $('#reset-token').val(token);
-        $('#login-modal').hide();
-        $('#register-modal').hide();
-        $('#forgot-password-modal').hide();
-        $('#password-reset-modal').show();
+        $('.modal').removeClass('show');
+        $('#password-reset-modal').addClass('show');
     }
 
     checkForPasswordResetToken() {
@@ -632,16 +628,16 @@ class AuthModule {
             e.preventDefault();
             self.clearFormFeedback(document.getElementById("login-form"));
             document.getElementById("login-form").reset();
-            $("#login-modal").hide();
-            $("#register-modal").show();
+            $("#login-modal").removeClass('show');
+            $("#register-modal").addClass('show');
         });
 
         $(document).off("click", "#show-login").on("click", "#show-login", function(e) {
             e.preventDefault();
             self.clearFormFeedback(document.getElementById("register-form"));
             document.getElementById("register-form").reset();
-            $("#register-modal").hide();
-            $("#login-modal").show();
+            $("#register-modal").removeClass('show');
+            $("#login-modal").addClass('show');
         });
 
         $(document).off("click", "#show-forgot-password").on("click", "#show-forgot-password", function(e) {
@@ -653,16 +649,16 @@ class AuthModule {
             e.preventDefault();
             self.clearFormFeedback(document.getElementById("forgot-password-form"));
             document.getElementById("forgot-password-form").reset();
-            $("#forgot-password-modal").hide();
-            $("#login-modal").show();
+            $("#forgot-password-modal").removeClass('show');
+            $("#login-modal").addClass('show');
         });
 
         $(document).off("click", "#back-to-login-from-reset").on("click", "#back-to-login-from-reset", function(e) {
             e.preventDefault();
             self.clearFormFeedback(document.getElementById("password-reset-form"));
             document.getElementById("password-reset-form").reset();
-            $("#password-reset-modal").hide();
-            $("#login-modal").show();
+            $("#password-reset-modal").removeClass('show');
+            $("#login-modal").addClass('show');
         });
 
         $(document).off("submit", "#forgot-password-form").on("submit", "#forgot-password-form", function(e) {

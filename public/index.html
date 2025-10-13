@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BECMI D&D Character & Session Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
@@ -17,7 +19,7 @@
     </div>
 
     <!-- Main Application Container -->
-    <div id="app" class="app-container" style="display: none;">
+    <div id="app" class="app-container">
         <!-- Navigation Header -->
         <header class="app-header">
             <div class="header-content">
@@ -29,6 +31,7 @@
                     <ul>
                         <li><a href="#" data-view="dashboard" class="nav-link active">Dashboard</a></li>
                         <li><a href="#" data-view="characters" class="nav-link">Characters</a></li>
+                        <li><a href="#" data-view="equipment" class="nav-link">Equipment</a></li>
                         <li><a href="#" data-view="sessions" class="nav-link">Sessions</a></li>
                         <li><a href="#" data-view="calendar" class="nav-link">Calendar</a></li>
                     </ul>
@@ -131,117 +134,125 @@
     </div>
 
     <!-- Login Modal -->
-    <div id="login-modal" class="modal" style="display: none;">
+    <div id="login-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h2>Welcome to BECMI Character Manager</h2>
                 <p>Please log in to continue</p>
             </div>
-            <form id="login-form" class="auth-form">
-                <div class="form-group">
-                    <label for="username">Username:</label>
-                    <input type="text" id="username" name="username" required>
-                </div>
-                <div class="form-group">
-                    <label for="password">Password:</label>
-                    <input type="password" id="password" name="password" required>
-                </div>
-                <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">Login</button>
-                    <button type="button" id="show-register" class="btn btn-secondary">Register</button>
-                </div>
-                <div class="form-footnote">
-                    <button type="button" id="show-forgot-password" class="link-button">Forgot password?</button>
-                </div>
-            </form>
+            <div class="modal__inner">
+                <form id="login-form" class="auth-form">
+                    <div class="form-group">
+                        <label for="username">Username:</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Login</button>
+                        <button type="button" id="show-register" class="btn btn-secondary">Register</button>
+                    </div>
+                    <div class="form-footnote">
+                        <button type="button" id="show-forgot-password" class="link-button">Forgot password?</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
     <!-- Registration Modal -->
-    <div id="register-modal" class="modal" style="display: none;">
+    <div id="register-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h2>Create New Account</h2>
                 <p>Join the BECMI Character Manager</p>
             </div>
-            <form id="register-form" class="auth-form">
-                <div class="form-group">
-                    <label for="reg-username">Username:</label>
-                    <input type="text" id="reg-username" name="username" required>
-                </div>
-                <div class="form-group">
-                    <label for="reg-email">Email:</label>
-                    <input type="email" id="reg-email" name="email" required>
-                </div>
-                <div class="form-group">
-                    <label for="reg-password">Password:</label>
-                    <input type="password" id="reg-password" name="password" required>
-                </div>
-                <div class="form-group">
-                    <label for="reg-confirm-password">Confirm Password:</label>
-                    <input type="password" id="reg-confirm-password" name="confirm_password" required>
-                </div>
-                <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">Register</button>
-                    <button type="button" id="show-login" class="btn btn-secondary">Back to Login</button>
-                </div>
-            </form>
+            <div class="modal__inner">
+                <form id="register-form" class="auth-form">
+                    <div class="form-group">
+                        <label for="reg-username">Username:</label>
+                        <input type="text" id="reg-username" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-email">Email:</label>
+                        <input type="email" id="reg-email" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-password">Password:</label>
+                        <input type="password" id="reg-password" name="password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-confirm-password">Confirm Password:</label>
+                        <input type="password" id="reg-confirm-password" name="confirm_password" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Register</button>
+                        <button type="button" id="show-login" class="btn btn-secondary">Back to Login</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
     <!-- Forgot Password Modal -->
-    <div id="forgot-password-modal" class="modal" style="display: none;">
+    <div id="forgot-password-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h2>Forgot Your Password?</h2>
                 <p>Enter your email and we will send a reset link.</p>
             </div>
-            <form id="forgot-password-form" class="auth-form">
-                <div class="form-group">
-                    <label for="forgot-email">Email:</label>
-                    <input type="email" id="forgot-email" name="email" required>
-                </div>
-                <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">Send Reset Link</button>
-                    <button type="button" id="back-to-login-from-forgot" class="btn btn-secondary">Back to Login</button>
-                </div>
-            </form>
+            <div class="modal__inner">
+                <form id="forgot-password-form" class="auth-form">
+                    <div class="form-group">
+                        <label for="forgot-email">Email:</label>
+                        <input type="email" id="forgot-email" name="email" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Send Reset Link</button>
+                        <button type="button" id="back-to-login-from-forgot" class="btn btn-secondary">Back to Login</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
     <!-- Password Reset Modal -->
-    <div id="password-reset-modal" class="modal" style="display: none;">
+    <div id="password-reset-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h2>Reset Your Password</h2>
                 <p>Enter the code from your email along with your new password.</p>
             </div>
-            <form id="password-reset-form" class="auth-form">
-                <div class="form-group">
-                    <label for="reset-selector">Reset Selector:</label>
-                    <input type="text" id="reset-selector" name="selector" required>
-                </div>
-                <div class="form-group">
-                    <label for="reset-token">Reset Token:</label>
-                    <input type="text" id="reset-token" name="token" required>
-                </div>
-                <div class="form-group">
-                    <label for="reset-password">New Password:</label>
-                    <input type="password" id="reset-password" name="password" required>
-                </div>
-                <div class="form-group">
-                    <label for="reset-confirm-password">Confirm New Password:</label>
-                    <input type="password" id="reset-confirm-password" name="confirm_password" required>
-                </div>
-                <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">Update Password</button>
-                    <button type="button" id="back-to-login-from-reset" class="btn btn-secondary">Back to Login</button>
-                </div>
-            </form>
+            <div class="modal__inner">
+                <form id="password-reset-form" class="auth-form">
+                    <div class="form-group">
+                        <label for="reset-selector">Reset Selector:</label>
+                        <input type="text" id="reset-selector" name="selector" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reset-token">Reset Token:</label>
+                        <input type="text" id="reset-token" name="token" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reset-password">New Password:</label>
+                        <input type="password" id="reset-password" name="password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reset-confirm-password">Confirm New Password:</label>
+                        <input type="password" id="reset-confirm-password" name="confirm_password" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Update Password</button>
+                        <button type="button" id="back-to-login-from-reset" class="btn btn-secondary">Back to Login</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
     <!-- Character Creation Modal -->
-    <div id="character-creation-modal" class="modal" style="display: none;">
+    <div id="character-creation-modal" class="modal">
         <div class="modal-content character-creation">
             <div class="modal-header">
                 <h2>Create New Character</h2>
@@ -254,7 +265,7 @@
     </div>
 
     <!-- Session Creation Modal -->
-    <div id="session-creation-modal" class="modal" style="display: none;">
+    <div id="session-creation-modal" class="modal">
         <div class="modal-content session-creation">
             <div class="modal-header">
                 <h2>Create New Session</h2>
@@ -267,7 +278,7 @@
     </div>
 
     <!-- Character Edit Modal -->
-    <div id="character-edit-modal" class="modal" style="display: none;">
+    <div id="character-edit-modal" class="modal">
         <div class="modal-content character-edit">
             <div class="modal-header">
                 <h2>Edit Character</h2>
@@ -288,17 +299,25 @@
     <script src="js/core/api-client.js"></script>
     <script src="js/core/state-manager.js"></script>
     <script src="js/core/event-bus.js"></script>
+    <script src="js/core/realtime-client.js"></script>
+    <script src="js/core/notification-manager.js"></script>
+    <script src="js/core/error-handler.js"></script>
+    <script src="js/core/offline-detector.js"></script>
     <script src="js/modules/auth.js"></script>
     <script src="js/modules/dashboard.js"></script>
     <script src="js/modules/character-sheet.js"></script>
-    <script src="js/modules/character-creation.js"></script>
+    <script src="js/modules/character-creation.js?v=2"></script>
     <script src="js/modules/character-creation-gold.js"></script>
     <script src="js/modules/character-creation-equipment.js"></script>
     <script src="js/modules/session-management.js"></script>
+    <script src="js/modules/dm-dashboard.js"></script>
+    <script src="js/modules/level-up-wizard.js"></script>
     <script src="js/modules/calendar.js"></script>
     <script src="js/modules/notifications.js"></script>
+    <script src="js/modules/equipment.js"></script>
     <script src="js/becmi/rules-engine.js"></script>
     <script src="js/becmi/calculations.js"></script>
+    <script src="js/becmi/class-data.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

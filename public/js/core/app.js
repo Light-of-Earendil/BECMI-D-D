@@ -69,13 +69,19 @@ class BECMIApp {
         this.modules.apiClient = new APIClient();
         this.modules.stateManager = new StateManager(this.state);
         this.modules.rulesEngine = new BECMIRulesEngine();
+        this.modules.notificationManager = new NotificationManager(this);
+        this.modules.errorHandler = new ErrorHandler(this);
+        this.modules.offlineDetector = new OfflineDetector(this);
         
         // Initialize feature modules
         this.modules.auth = new AuthModule(this);
         this.modules.dashboard = new DashboardModule(this);
         this.modules.characterSheet = new CharacterSheetModule(this);
+        this.modules.equipment = new EquipmentModule(this);
         this.modules.characterCreation = new CharacterCreationModule(this);
         this.modules.sessionManagement = new SessionManagementModule(this);
+        this.modules.dmDashboard = new DMDashboardModule(this);
+        this.modules.levelUpWizard = new LevelUpWizard(this);
         this.modules.calendar = new CalendarModule(this);
         this.modules.notifications = new NotificationsModule(this);
         
@@ -113,6 +119,9 @@ class BECMIApp {
 
                 this.updateUserInterface();
                 await this.loadUserData();
+                
+                // Navigate to dashboard after loading data
+                this.navigateToView('dashboard');
             } else {
                 localStorage.removeItem('auth_token');
                 this.showLoginModal();
@@ -215,16 +224,22 @@ class BECMIApp {
             }
             
             if (!$(e.target).closest('.user-menu').length) {
-                $('.user-dropdown').hide();
+                $('.user-dropdown').css('display', 'none');
             }
         });
         
         // Modal close handlers - only close if clicking on modal background, not content
         $(document).on('click', '.modal', (e) => {
             if (e.target === e.currentTarget) {
+                // Don't close character creation modal on background click - user could lose progress!
+                if (e.currentTarget.id === 'character-creation-modal') {
+                    console.log('Preventing character creation modal close on background click');
+                    return;
+                }
+                
                 // Only close if clicking on the modal background itself
                 console.log('Closing modal:', e.currentTarget.id);
-                $(e.currentTarget).hide();
+                $(e.currentTarget).removeClass('show');
                 
                 // If closing login modal and user is not authenticated, show main app
                 if (e.currentTarget.id === 'login-modal' && !this.state.user) {
@@ -254,6 +269,9 @@ class BECMIApp {
         
         console.log(`Navigating to view: ${viewName}`);
         
+        // Cleanup current view before navigating away
+        this.cleanupCurrentView();
+        
         // Update active nav link
         $('.nav-link').removeClass('active');
         $(`.nav-link[data-view="${viewName}"]`).addClass('active');
@@ -263,6 +281,28 @@ class BECMIApp {
         
         // Load view content
         this.loadViewContent(viewName);
+    }
+    
+    /**
+     * Cleanup current view resources
+     */
+    cleanupCurrentView() {
+        // Cleanup DM Dashboard auto-refresh if active
+        if (this.modules.dmDashboard && this.modules.dmDashboard.cleanup) {
+            this.modules.dmDashboard.cleanup();
+        }
+        
+        // Cleanup other modules that might have resources
+        if (this.modules.sessionManagement && this.modules.sessionManagement.cleanup) {
+            this.modules.sessionManagement.cleanup();
+        }
+        
+        if (this.modules.equipment && this.modules.equipment.cleanup) {
+            this.modules.equipment.cleanup();
+        }
+        
+        // Emit cleanup event
+        this.eventBus.emit('viewCleanup', { view: this.currentView });
     }
     
     /**
@@ -294,6 +334,9 @@ class BECMIApp {
                 case 'characters':
                     content = await this.modules.characterSheet.renderCharacterList();
                     break;
+                case 'equipment':
+                    content = await this.modules.equipment.render();
+                    break;
                 case 'sessions':
                     content = await this.modules.sessionManagement.render();
                     break;
@@ -321,8 +364,8 @@ class BECMIApp {
     updateUserInterface() {
         if (this.state.user) {
             $('#user-name').text(this.state.user.username);
-            $('#app').show();
-            $('.modal').hide();
+            $('#app').addClass('loaded');
+            $('.modal').removeClass('show');
         }
     }
     
@@ -330,30 +373,30 @@ class BECMIApp {
      * Show login modal
      */
     showLoginModal() {
-        $('#app').hide();
-        $('#login-modal').show();
+        $('#app').removeClass('loaded');
+        $('#login-modal').addClass('show');
     }
     
     /**
      * Show main application
      */
     showMainApp() {
-        $('#app').show();
-        $('.modal').hide();
+        $('#app').addClass('loaded');
+        $('.modal').removeClass('show');
     }
     
     /**
      * Show loading screen
      */
     showLoadingScreen() {
-        $('#loading-screen').show();
+        $('#loading-screen').css('display', 'flex');
     }
     
     /**
      * Hide loading screen
      */
     hideLoadingScreen() {
-        $('#loading-screen').hide();
+        $('#loading-screen').css('display', 'none');
     }
     
     /**

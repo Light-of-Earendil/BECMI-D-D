@@ -50,9 +50,12 @@ $(document).ready(() => {
             }
         }
         
-        // Escape to close modals
+        // Escape to close modals (except character creation modal)
         if (e.key === 'Escape') {
-            $('.modal:visible').hide();
+            // Don't close character creation modal with Escape - user could lose progress!
+            if (!$('#character-creation-modal').is(':visible')) {
+                $('.modal:visible').hide();
+            }
         }
     });
     
