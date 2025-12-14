@@ -110,12 +110,13 @@ try {
         $newMaxHp = $character['max_hp'] + $newHpGained;
         $newCurrentHp = $character['current_hp'] + $newHpGained; // Heal by amount gained
         
-        // Calculate new THAC0 based on class and level
-        $newThac0Melee = BECMIRules::calculateTHAC0($character['class'], $nextLevel, 'melee');
-        $newThac0Ranged = BECMIRules::calculateTHAC0($character['class'], $nextLevel, 'ranged');
+        // Calculate new THAC0 based on class and level (only ONE THAC0)
+        $characterForThac0 = array_merge($character, ['level' => $nextLevel]);
+        $newThac0Data = BECMIRulesEngine::calculateTHAC0($characterForThac0);
+        $newThac0 = $newThac0Data['base']; // Only one THAC0 value
         
         // Calculate new saving throws
-        $newSaves = BECMIRules::calculateSavingThrows($character['class'], $nextLevel);
+        $newSaves = BECMIRulesEngine::calculateSavingThrows($characterForThac0);
         
         // Update character
         $db->execute(
@@ -135,8 +136,8 @@ try {
                 $nextLevel,
                 $newMaxHp,
                 $newCurrentHp,
-                $newThac0Melee,
-                $newThac0Ranged,
+                $newThac0, // Only one THAC0
+                $newThac0, // Store same value for compatibility
                 $newSaves['death_ray'],
                 $newSaves['magic_wand'],
                 $newSaves['paralysis'],
@@ -260,8 +261,11 @@ try {
             'hp_gained' => $newHpGained,
             'new_max_hp' => $newMaxHp,
             'new_current_hp' => $newCurrentHp,
-            'new_thac0_melee' => $newThac0Melee,
-            'new_thac0_ranged' => $newThac0Ranged,
+            'new_thac0' => $newThac0, // Only one THAC0
+            'new_thac0_melee' => $newThac0, // For backward compatibility
+            'new_thac0_ranged' => $newThac0, // For backward compatibility
+            'strength_to_hit_bonus' => $newThac0Data['strength_bonus'],
+            'dexterity_to_hit_bonus' => $newThac0Data['dexterity_bonus'],
             'new_saves' => $newSaves,
             'spells_added' => count($newSpells),
             'skills_added' => count($newSkills),

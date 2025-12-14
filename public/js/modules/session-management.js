@@ -418,6 +418,31 @@ class SessionManagementModule {
             this.viewDMDashboard(sessionId);
         });
         
+        // Refresh dashboard button
+        $(document).on('click', '#refresh-dashboard', async (e) => {
+            e.preventDefault();
+            const sessionId = $(e.currentTarget).data('session-id') || this.currentSession?.session_id;
+            if (sessionId) {
+                await this.viewDMDashboard(sessionId);
+            }
+        });
+        
+        // Toggle auto-refresh
+        $(document).on('click', '#toggle-auto-refresh', (e) => {
+            e.preventDefault();
+            const sessionId = $(e.currentTarget).data('session-id') || this.currentSession?.session_id;
+            if (this.app.modules.dmDashboard) {
+                if (this.app.modules.dmDashboard.autoRefreshInterval) {
+                    this.app.modules.dmDashboard.stopAutoRefresh();
+                    $(e.currentTarget).html('<i class="fas fa-clock"></i> Auto-refresh: OFF');
+                } else {
+                    this.app.modules.dmDashboard.currentSessionId = sessionId;
+                    this.app.modules.dmDashboard.startAutoRefresh();
+                    $(e.currentTarget).html('<i class="fas fa-clock"></i> Auto-refresh: ON');
+                }
+            }
+        });
+        
         $(document).on('click', '[data-action="back-to-sessions"]', (e) => {
             e.preventDefault();
             this.app.navigateToView('sessions');
@@ -1249,6 +1274,12 @@ class SessionManagementModule {
                         <button class="btn btn-primary" data-action="invite-player" data-session-id="${session.session_id}">
                             <i class="fas fa-user-plus"></i> Invite Player
                         </button>
+                        <button class="btn btn-secondary" id="refresh-dashboard" data-session-id="${session.session_id}">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                        <button class="btn btn-primary" id="toggle-auto-refresh" data-session-id="${session.session_id}">
+                            <i class="fas fa-clock"></i> Auto-refresh: ON
+                        </button>
                     </div>
                 </div>
                 
@@ -1543,8 +1574,9 @@ class SessionManagementModule {
                         <h5>Combat</h5>
                         <div class="combat-stats">
                             <span><strong>AC:</strong> ${character.combat.armor_class}</span>
-                            <span><strong>THAC0 (M):</strong> ${character.combat.thac0_melee}</span>
-                            <span><strong>THAC0 (R):</strong> ${character.combat.thac0_ranged}</span>
+                            <span><strong>THAC0:</strong> ${character.combat.thac0}</span>
+                            ${character.combat.strength_to_hit_bonus !== 0 ? `<span><strong>STR to Hit:</strong> ${character.combat.strength_to_hit_bonus > 0 ? '+' : ''}${character.combat.strength_to_hit_bonus}</span>` : ''}
+                            ${character.combat.dexterity_to_hit_bonus !== 0 ? `<span><strong>DEX to Hit:</strong> ${character.combat.dexterity_to_hit_bonus > 0 ? '+' : ''}${character.combat.dexterity_to_hit_bonus}</span>` : ''}
                         </div>
                     </div>
                     

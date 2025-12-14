@@ -137,10 +137,15 @@ try {
         );
         
         // Format character data
-        $formattedCharacters = array_map(function($char) {
+        $formattedCharacters = array_map(function($char) use ($db) {
+            require_once '../../app/services/becmi-rules.php';
+            
             $hpPercentage = $char['max_hp'] > 0 
                 ? ($char['current_hp'] / $char['max_hp']) * 100 
                 : 0;
+            
+            // Recalculate THAC0 correctly (only base value)
+            $thac0Data = BECMIRulesEngine::calculateTHAC0($char);
             
             return [
                 'character_id' => (int) $char['character_id'],
@@ -164,8 +169,9 @@ try {
                 ],
                 'combat' => [
                     'armor_class' => (int) $char['armor_class'],
-                    'thac0_melee' => (int) $char['thac0_melee'],
-                    'thac0_ranged' => (int) $char['thac0_ranged']
+                    'thac0' => (int) $thac0Data['base'], // Only ONE THAC0
+                    'strength_to_hit_bonus' => (int) $thac0Data['strength_bonus'], // Separate bonus
+                    'dexterity_to_hit_bonus' => (int) $thac0Data['dexterity_bonus'] // Separate bonus
                 ],
                 'movement' => [
                     'normal' => (int) $char['movement_rate_normal'],

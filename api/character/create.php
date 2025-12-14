@@ -193,11 +193,14 @@ try {
             $characterData['wisdom'],
             $characterData['charisma'],
             $calculatedStats['armor_class'],
-            $calculatedStats['thac0']['melee'],
-            $calculatedStats['thac0']['ranged'],
+            $calculatedStats['thac0']['base'], // Only one THAC0
+            $calculatedStats['thac0']['base'], // Store same value in both columns for compatibility
             $calculatedStats['movement']['normal'],
             $calculatedStats['movement']['encounter'],
-            $calculatedStats['movement']['status'],
+            // Map movement status to database ENUM (database only accepts: unencumbered, lightly_encumbered, heavily_encumbered, severely_encumbered)
+            in_array($calculatedStats['movement']['status'], ['unencumbered', 'lightly_encumbered', 'heavily_encumbered', 'severely_encumbered']) 
+                ? $calculatedStats['movement']['status'] 
+                : 'heavily_encumbered', // Default fallback for overloaded/immobile
             $calculatedStats['saving_throws']['death_ray'],
             $calculatedStats['saving_throws']['magic_wand'],
             $calculatedStats['saving_throws']['paralysis'],

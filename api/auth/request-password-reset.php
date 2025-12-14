@@ -87,7 +87,7 @@ try {
         error_log("PASSWORD RESET LINK: " . $resetLink);
         error_log("PASSWORD RESET LINK (urlencode test): " . urlencode($resetLink));
 
-        $subject = 'BECMI Character Manager Password Reset';
+        $subject = 'BECMI Manager Password Reset';
         
         // HTML email with clickable link (prevents line-wrapping issues)
         $htmlMessage = "<!DOCTYPE html>
@@ -104,7 +104,7 @@ try {
     <div style='background: #ffffff; padding: 30px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 10px 10px;'>
         <p style='font-size: 16px; margin-bottom: 20px;'>Hello <strong>{$user['username']}</strong>,</p>
         
-        <p style='font-size: 14px; margin-bottom: 20px;'>We received a request to reset your password for your BECMI Character Manager account.</p>
+        <p style='font-size: 14px; margin-bottom: 20px;'>We received a request to reset your password for your BECMI Manager account.</p>
         
         <p style='font-size: 14px; margin-bottom: 30px;'>Click the button below to set a new password:</p>
         
@@ -127,19 +127,19 @@ try {
     </div>
     
     <div style='text-align: center; margin-top: 20px; padding: 20px; font-size: 12px; color: #64748b;'>
-        <p>BECMI Character Manager<br>Powered by BECMI Rules Cyclopedia</p>
+        <p>BECMI Manager<br>Powered by BECMI Rules Cyclopedia</p>
     </div>
 </body>
 </html>";
 
         // Plain text fallback for email clients that don't support HTML
         $textMessage = "Hello {$user['username']},\n\n" .
-            "We received a request to reset your password for your BECMI Character Manager account.\n\n" .
+            "We received a request to reset your password for your BECMI Manager account.\n\n" .
             "Click the link below to reset your password:\n" .
             "{$resetLink}\n\n" .
             "If you didn't request this password reset, you can safely ignore this email.\n\n" .
             "This link will expire in 24 hours.\n\n" .
-            "BECMI Character Manager";
+            "BECMI Manager";
 
         // Send HTML email with plain text fallback
         $headers = [

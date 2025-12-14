@@ -14,7 +14,7 @@
     <div id="loading-screen" class="loading-screen">
         <div class="loading-spinner">
             <i class="fas fa-dice-d20 fa-spin"></i>
-            <p>Loading BECMI Character Manager...</p>
+            <p>Loading BECMI Manager...</p>
         </div>
     </div>
 
@@ -25,7 +25,7 @@
             <div class="header-content">
                 <div class="logo">
                     <i class="fas fa-dice-d20"></i>
-                    <h1>BECMI Character Manager</h1>
+                    <h1>BECMI Manager</h1>
                 </div>
                 <nav class="main-nav">
                     <ul>
@@ -55,7 +55,7 @@
                 <div id="dashboard-view" class="view active">
                     <div class="view-header">
                         <h2>Dashboard</h2>
-                        <p>Welcome to your BECMI Character Manager</p>
+                        <p>Welcome to your BECMI Manager</p>
                     </div>
                     <div class="dashboard-content">
                         <div class="dashboard-stats">
@@ -129,7 +129,7 @@
 
         <!-- Footer -->
         <footer class="app-footer">
-            <p>&copy; 2024 BECMI Character Manager. Built for the Basic, Expert, Companion, Master, and Immortal ruleset.</p>
+            <p>&copy; 2024 BECMI Manager. Built for the Basic, Expert, Companion, Master, and Immortal ruleset.</p>
         </footer>
     </div>
 
@@ -137,7 +137,7 @@
     <div id="login-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Welcome to BECMI Character Manager</h2>
+                <h2>Welcome to BECMI Manager</h2>
                 <p>Please log in to continue</p>
             </div>
             <div class="modal__inner">
@@ -167,7 +167,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2>Create New Account</h2>
-                <p>Join the BECMI Character Manager</p>
+                <p>Join the BECMI Manager</p>
             </div>
             <div class="modal__inner">
                 <form id="register-form" class="auth-form">
@@ -295,6 +295,10 @@
 
     <!-- JavaScript Libraries -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <!-- BECMI Rules Engine must be loaded before app.js -->
+    <script src="js/becmi/rules-engine.js"></script>
+    <script src="js/becmi/calculations.js"></script>
+    <script src="js/becmi/class-data.js"></script>
     <script src="js/core/app.js"></script>
     <script src="js/core/api-client.js"></script>
     <script src="js/core/state-manager.js"></script>
@@ -315,9 +319,6 @@
     <script src="js/modules/calendar.js"></script>
     <script src="js/modules/notifications.js"></script>
     <script src="js/modules/equipment.js"></script>
-    <script src="js/becmi/rules-engine.js"></script>
-    <script src="js/becmi/calculations.js"></script>
-    <script src="js/becmi/class-data.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

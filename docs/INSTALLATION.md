@@ -81,7 +81,7 @@
 1. Open browser and navigate to:
    - http://localhost/becmi-vtt/public/ (if using document root)
    - http://becmi.local/ (if using virtual host)
-2. You should see the BECMI Character Manager login page
+2. You should see the BECMI Manager login page
 3. Create a test account to verify functionality
 
 ## Troubleshooting

@@ -237,18 +237,18 @@ class EquipmentModule {
         
         return `
             <div class="equipment-item-card" data-item-type="${item.item_type}" data-item-category="${item.item_category || ''}">
-                ${hasImage ? `
-                    <div class="item-image">
-                        <img src="${item.image_url}" alt="${item.name}" loading="lazy" onerror="this.style.display='none'; this.parentElement.nextElementSibling.querySelector('.item-icon').style.display='flex';">
-                    </div>
-                ` : ''}
-                
-                <div class="item-header">
-                    ${!hasImage ? `
-                        <div class="item-icon" style="display: ${hasImage ? 'none' : 'flex'};">
-                            <i class="${this.getItemIcon(item)}"></i>
+                <div class="item-image-container">
+                    ${hasImage ? `
+                        <div class="item-image">
+                            <img src="${item.image_url}" alt="${item.name}" loading="lazy" onerror="this.style.display='none'; const icon = this.closest('.item-image-container').querySelector('.item-icon'); if (icon) icon.style.display='flex';">
                         </div>
                     ` : ''}
+                    <div class="item-icon" style="display: ${hasImage ? 'none' : 'flex'};">
+                        <i class="${this.getItemIcon(item)}"></i>
+                    </div>
+                </div>
+                
+                <div class="item-header">
                     <div class="item-info">
                         <h3 class="item-name">${item.name}</h3>
                         <div class="item-cost">${this.formatCost(item.cost_gp)}</div>
@@ -348,7 +348,7 @@ class EquipmentModule {
         }
         // Armor and shields
         else if (item.item_type === 'armor' || item.item_type === 'shield') {
-            if (item.ac_bonus !== null) {
+            if (item.ac_bonus !== null && item.ac_bonus !== undefined) {
                 stats.push(`<span class="stat"><i class="fas fa-shield-alt"></i> AC ${item.ac_bonus}</span>`);
             }
             if (item.weight_cn && item.weight_cn > 0) {
@@ -360,8 +360,31 @@ class EquipmentModule {
             if (item.weight_cn && item.weight_cn > 0) {
                 stats.push(`<span class="stat"><i class="fas fa-weight-hanging"></i> ${item.weight_cn} cn</span>`);
             }
-            if (item.capacity_cn && item.capacity_cn > 0) {
+            // Always show capacity for containers and carriers
+            if (item.item_category === 'container' || 
+                item.item_category === 'transportation' ||
+                item.name.toLowerCase().includes('backpack') ||
+                item.name.toLowerCase().includes('quiver') ||
+                item.name.toLowerCase().includes('pouch') ||
+                item.name.toLowerCase().includes('sack') ||
+                item.name.toLowerCase().includes('bag') ||
+                item.name.toLowerCase().includes('saddle') ||
+                item.name.toLowerCase().includes('cart') ||
+                item.name.toLowerCase().includes('wagon') ||
+                item.name.toLowerCase().includes('waterskin') ||
+                item.name.toLowerCase().includes('oil') ||
+                item.name.toLowerCase().includes('holy water') ||
+                item.name.toLowerCase().includes('flask') ||
+                item.name.toLowerCase().includes('wine')) {
+                if (item.capacity_cn !== null && item.capacity_cn !== undefined && item.capacity_cn > 0) {
+                    stats.push(`<span class="stat"><i class="fas fa-box"></i> Capacity: ${item.capacity_cn} cn</span>`);
+                }
+            } else if (item.capacity_cn && item.capacity_cn > 0) {
                 stats.push(`<span class="stat"><i class="fas fa-box"></i> Capacity: ${item.capacity_cn} cn</span>`);
+            }
+            // Show ammunition capacity for quivers
+            if (item.name.toLowerCase().includes('quiver') && item.ammunition_capacity && item.ammunition_capacity > 0) {
+                stats.push(`<span class="stat"><i class="fas fa-arrow-right"></i> Holds ${item.ammunition_capacity} arrows/bolts</span>`);
             }
         }
 

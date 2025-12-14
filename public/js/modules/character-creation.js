@@ -1656,13 +1656,21 @@ class CharacterCreationModule {
                                 <span class="stat-value">${calculatedStats.armor_class}</span>
                             </div>
                             <div class="stat-item">
-                                <span class="stat-label">THAC0 (Melee):</span>
-                                <span class="stat-value">${calculatedStats.thac0.melee}</span>
+                                <span class="stat-label">THAC0:</span>
+                                <span class="stat-value">${calculatedStats.thac0.base}</span>
                             </div>
+                            ${calculatedStats.thac0.strength_bonus !== 0 ? `
                             <div class="stat-item">
-                                <span class="stat-label">THAC0 (Ranged):</span>
-                                <span class="stat-value">${calculatedStats.thac0.ranged}</span>
+                                <span class="stat-label">STR to Hit:</span>
+                                <span class="stat-value">${calculatedStats.thac0.strength_bonus > 0 ? '+' : ''}${calculatedStats.thac0.strength_bonus}</span>
                             </div>
+                            ` : ''}
+                            ${calculatedStats.thac0.dexterity_bonus !== 0 ? `
+                            <div class="stat-item">
+                                <span class="stat-label">DEX to Hit:</span>
+                                <span class="stat-value">${calculatedStats.thac0.dexterity_bonus > 0 ? '+' : ''}${calculatedStats.thac0.dexterity_bonus}</span>
+                            </div>
+                            ` : ''}
                         </div>
                     </div>
                     

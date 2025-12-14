@@ -8,7 +8,7 @@
 
 class EmailService {
     private $fromEmail = 'no-reply@becmi.snilld-api.dk';
-    private $fromName = 'BECMI Character Manager';
+    private $fromName = 'BECMI Manager';
     
     /**
      * Send session reminder email
@@ -136,7 +136,7 @@ class EmailService {
             <a href="https://becmi.snilld-api.dk/" class="button">View Session</a>
         </div>
         <div class="footer">
-            <p>BECMI Character Manager - Your digital D&D companion</p>
+            <p>BECMI Manager - Your digital D&D companion</p>
         </div>
     </div>
 </body>
@@ -179,7 +179,7 @@ HTML;
             <p>Please check the platform for any updates or rescheduled sessions.</p>
         </div>
         <div class="footer">
-            <p>BECMI Character Manager - Your digital D&D companion</p>
+            <p>BECMI Manager - Your digital D&D companion</p>
         </div>
     </div>
 </body>
@@ -228,7 +228,7 @@ HTML
             <a href="https://becmi.snilld-api.dk/" class="button">View Your Character</a>
         </div>
         <div class="footer">
-            <p>BECMI Character Manager - Your digital D&D companion</p>
+            <p>BECMI Manager - Your digital D&D companion</p>
         </div>
     </div>
 </body>

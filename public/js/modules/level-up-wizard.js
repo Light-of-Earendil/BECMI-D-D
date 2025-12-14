@@ -297,19 +297,11 @@ class LevelUpWizard {
                     
                     <div class="stat-comparison-grid">
                         <div class="stat-comparison">
-                            <span class="stat-label">THAC0 (Melee):</span>
-                            <span class="old-value">${character.thac0_melee}</span>
+                            <span class="stat-label">THAC0:</span>
+                            <span class="old-value">${character.thac0 || character.thac0_melee}</span>
                             <i class="fas fa-arrow-right"></i>
-                            <span class="new-value">${newThac0.melee}</span>
-                            ${newThac0.melee < character.thac0_melee ? '<i class="fas fa-arrow-down improvement"></i>' : ''}
-                        </div>
-                        
-                        <div class="stat-comparison">
-                            <span class="stat-label">THAC0 (Ranged):</span>
-                            <span class="old-value">${character.thac0_ranged}</span>
-                            <i class="fas fa-arrow-right"></i>
-                            <span class="new-value">${newThac0.ranged}</span>
-                            ${newThac0.ranged < character.thac0_ranged ? '<i class="fas fa-arrow-down improvement"></i>' : ''}
+                            <span class="new-value">${newThac0.base}</span>
+                            ${newThac0.base < (character.thac0 || character.thac0_melee) ? '<i class="fas fa-arrow-down improvement"></i>' : ''}
                         </div>
                     </div>
                     
@@ -721,7 +713,17 @@ class LevelUpWizard {
     }
     
     calculateNewTHAC0(characterClass, level) {
-        // Simplified THAC0 calculation (Rules Cyclopedia p. 264)
+        // THAC0 calculation - only ONE value (Rules Cyclopedia)
+        // Use the rules engine if available, otherwise simplified calculation
+        if (this.app.modules.rulesEngine) {
+            const thac0Data = this.app.modules.rulesEngine.calculateTHAC0({
+                class: characterClass,
+                level: level
+            });
+            return { base: thac0Data.base };
+        }
+        
+        // Fallback simplified calculation
         const baseTHAC0 = 20;
         const classModifier = {
             'fighter': 1, 'dwarf': 1,
@@ -732,7 +734,7 @@ class LevelUpWizard {
         const modifier = classModifier[characterClass] || 2;
         const thac0 = baseTHAC0 - Math.floor((level - 1) / modifier);
         
-        return { melee: thac0, ranged: thac0 };
+        return { base: thac0 };
     }
     
     calculateNewSaves(characterClass, level) {

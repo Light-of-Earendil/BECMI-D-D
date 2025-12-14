@@ -281,7 +281,7 @@ class DMDashboardModule {
                     </div>
                     <div class="stat">
                         <label>THAC0:</label>
-                        <span class="value">${character.combat.thac0_melee}</span>
+                        <span class="value">${character.combat.thac0 || character.combat.thac0_melee}</span>
                     </div>
                     <div class="stat">
                         <label>Move:</label>
@@ -337,10 +337,13 @@ class DMDashboardModule {
         
         this.autoRefreshInterval = setInterval(async () => {
             // Only refresh if we're still on DM dashboard view
-            if (this.currentSessionId && this.app.currentView === 'dm-dashboard') {
+            if (this.currentSessionId) {
                 try {
                     console.log('Auto-refreshing dashboard...');
-                    await this.refreshDashboard();
+                    // Use SessionManagementModule to refresh the dashboard
+                    if (this.app.modules.sessionManagement) {
+                        await this.app.modules.sessionManagement.viewDMDashboard(this.currentSessionId);
+                    }
                 } catch (error) {
                     console.error('Auto-refresh failed:', error);
                 }
@@ -420,37 +423,22 @@ class DMDashboardModule {
     
     /**
      * Setup event handlers
+     * NOTE: The main DM dashboard rendering is handled by SessionManagementModule.
+     * This module only handles refresh and auto-refresh functionality.
      */
     setupEventHandlers() {
-        // View DM dashboard
-        $(document).on('click', '[data-action="view-dm-dashboard"]', async (e) => {
-            e.preventDefault();
-            const sessionId = $(e.currentTarget).data('session-id');
-            
-            try {
-                const content = await this.renderDashboard(sessionId);
-                $('#content-area').html(content);
-                
-                // Start auto-refresh by default
-                this.startAutoRefresh();
-                
-                // Start real-time client
-                this.startRealtimeClient(sessionId);
-                
-                // Update navigation
-                $('.nav-link').removeClass('active');
-                $('.nav-link[data-view="dm-dashboard"]').addClass('active');
-                
-            } catch (error) {
-                console.error('Failed to view DM dashboard:', error);
-                this.app.showError('Failed to load DM dashboard');
-            }
-        });
-        
-        // Refresh dashboard button
+        // Refresh dashboard button (only if we're on the dashboard)
         $(document).on('click', '#refresh-dashboard', async (e) => {
             e.preventDefault();
-            await this.refreshDashboard();
+            // Check if we're on DM dashboard by checking if SessionManagementModule is handling it
+            if (this.app.modules.sessionManagement && this.app.modules.sessionManagement.currentSession) {
+                // Let SessionManagementModule handle the refresh
+                const sessionId = this.app.modules.sessionManagement.currentSession.session_id;
+                await this.app.modules.sessionManagement.viewDMDashboard(sessionId);
+            } else if (this.currentSessionId) {
+                // Fallback: use our own refresh if we have a session ID
+                await this.refreshDashboard();
+            }
         });
         
         // Toggle auto-refresh
@@ -458,8 +446,10 @@ class DMDashboardModule {
             e.preventDefault();
             if (this.autoRefreshInterval) {
                 this.stopAutoRefresh();
+                $(e.currentTarget).html('<i class="fas fa-clock"></i> Auto-refresh: OFF');
             } else {
                 this.startAutoRefresh();
+                $(e.currentTarget).html('<i class="fas fa-clock"></i> Auto-refresh: ON');
             }
         });
         

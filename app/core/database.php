@@ -12,18 +12,6 @@ class Database {
     private $config = [];
     
     /**
-     * Helper function to write debug logs
-     */
-    private function writeDebugLog($data) {
-        $logFile = __DIR__ . '/../../.cursor/debug.log';
-        $logDir = dirname($logFile);
-        if (!is_dir($logDir)) {
-            @mkdir($logDir, 0755, true);
-        }
-        @file_put_contents($logFile, json_encode($data) . "\n", FILE_APPEND | LOCK_EX);
-    }
-    
-    /**
      * Private constructor for singleton pattern
      */
     private function __construct() {
@@ -110,22 +98,11 @@ class Database {
      * Execute a prepared statement
      */
     public function execute($sql, $params = []) {
-        // #region agent log
-        $this->writeDebugLog(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'database.php:100','message'=>'execute() called','data'=>['connection_null'=>$this->connection===null,'sql_preview'=>substr($sql,0,50)],'sessionId'=>'debug-session','runId'=>'post-fix','hypothesisId'=>'A']);
-        // #endregion
         try {
-            // #region agent log
-            $this->writeDebugLog(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'database.php:110','message'=>'Before connection->prepare','data'=>['connection_null'=>$this->connection===null],'sessionId'=>'debug-session','runId'=>'post-fix','hypothesisId'=>'A']);
-            // #endregion
-            // Use getConnection() to ensure connection exists
-            $conn = $this->getConnection();
-            $stmt = $conn->prepare($sql);
+            $stmt = $this->connection->prepare($sql);
             $stmt->execute($params);
             return $stmt;
         } catch (PDOException $e) {
-            // #region agent log
-            $this->writeDebugLog(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'database.php:118','message'=>'PDOException caught','data'=>['error'=>$e->getMessage(),'connection_null'=>$this->connection===null],'sessionId'=>'debug-session','runId'=>'post-fix','hypothesisId'=>'A']);
-            // #endregion
             error_log("Database query failed: " . $e->getMessage());
             error_log("SQL: " . $sql);
             error_log("Params: " . json_encode($params));
@@ -167,15 +144,8 @@ class Database {
      * Execute an INSERT query and return last insert ID
      */
     public function insert($sql, $params = []) {
-        // #region agent log
-        $this->writeDebugLog(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'database.php:164','message'=>'insert() called','data'=>['connection_null'=>$this->connection===null],'sessionId'=>'debug-session','runId'=>'post-fix','hypothesisId'=>'B']);
-        // #endregion
         $this->execute($sql, $params);
-        // #region agent log
-        $this->writeDebugLog(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'database.php:168','message'=>'Before connection->lastInsertId','data'=>['connection_null'=>$this->connection===null],'sessionId'=>'debug-session','runId'=>'post-fix','hypothesisId'=>'B']);
-        // #endregion
-        // Use getConnection() to ensure connection exists
-        return $this->getConnection()->lastInsertId();
+        return $this->connection->lastInsertId();
     }
     
     /**
@@ -219,44 +189,28 @@ class Database {
      * Begin a transaction
      */
     public function beginTransaction() {
-        // #region agent log
-        $this->writeDebugLog(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'database.php:216','message'=>'beginTransaction() called','data'=>['connection_null'=>$this->connection===null],'sessionId'=>'debug-session','runId'=>'post-fix','hypothesisId'=>'C']);
-        // #endregion
-        // Use getConnection() to ensure connection exists
-        return $this->getConnection()->beginTransaction();
+        return $this->connection->beginTransaction();
     }
     
     /**
      * Commit a transaction
      */
     public function commit() {
-        // #region agent log
-        $this->writeDebugLog(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'database.php:227','message'=>'commit() called','data'=>['connection_null'=>$this->connection===null],'sessionId'=>'debug-session','runId'=>'post-fix','hypothesisId'=>'C']);
-        // #endregion
-        // Use getConnection() to ensure connection exists
-        return $this->getConnection()->commit();
+        return $this->connection->commit();
     }
     
     /**
      * Rollback a transaction
      */
     public function rollback() {
-        // #region agent log
-        $this->writeDebugLog(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'database.php:238','message'=>'rollback() called','data'=>['connection_null'=>$this->connection===null],'sessionId'=>'debug-session','runId'=>'post-fix','hypothesisId'=>'C']);
-        // #endregion
-        // Use getConnection() to ensure connection exists
-        return $this->getConnection()->rollback();
+        return $this->connection->rollback();
     }
     
     /**
      * Check if currently in a transaction
      */
     public function inTransaction() {
-        // #region agent log
-        $this->writeDebugLog(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'database.php:249','message'=>'inTransaction() called','data'=>['connection_null'=>$this->connection===null],'sessionId'=>'debug-session','runId'=>'post-fix','hypothesisId'=>'C']);
-        // #endregion
-        // Use getConnection() to ensure connection exists
-        return $this->getConnection()->inTransaction();
+        return $this->connection->inTransaction();
     }
     
     /**

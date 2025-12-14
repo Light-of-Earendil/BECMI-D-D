@@ -147,8 +147,11 @@ try {
             'wisdom' => $character['wisdom'],
             'charisma' => $character['charisma'],
             'armor_class' => $calculatedStats['armor_class'],
-            'thac0_melee' => $calculatedStats['thac0']['melee'],
-            'thac0_ranged' => $calculatedStats['thac0']['ranged'],
+            'thac0' => $calculatedStats['thac0']['base'], // Only one THAC0
+            'thac0_melee' => $calculatedStats['thac0']['base'], // For backward compatibility
+            'thac0_ranged' => $calculatedStats['thac0']['base'], // For backward compatibility
+            'strength_to_hit_bonus' => $calculatedStats['thac0']['strength_bonus'],
+            'dexterity_to_hit_bonus' => $calculatedStats['thac0']['dexterity_bonus'],
             'movement_rate_normal' => $calculatedStats['movement']['normal'],
             'movement_rate_encounter' => $calculatedStats['movement']['encounter'],
             'encumbrance_status' => $calculatedStats['movement']['status'],

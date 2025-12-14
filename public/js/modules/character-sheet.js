@@ -541,13 +541,21 @@ class CharacterSheetModule {
                 <span class="stat-value">${character.armor_class}</span>
             </div>
             <div class="combat-stat">
-                <span class="stat-label">THAC0 (Melee):</span>
-                <span class="stat-value">${character.thac0_melee}</span>
+                <span class="stat-label">THAC0:</span>
+                <span class="stat-value">${character.thac0 || character.thac0_melee}</span>
             </div>
+            ${character.strength_to_hit_bonus !== undefined && character.strength_to_hit_bonus !== 0 ? `
             <div class="combat-stat">
-                <span class="stat-label">THAC0 (Ranged):</span>
-                <span class="stat-value">${character.thac0_ranged}</span>
+                <span class="stat-label">STR to Hit:</span>
+                <span class="stat-value">${character.strength_to_hit_bonus > 0 ? '+' : ''}${character.strength_to_hit_bonus}</span>
             </div>
+            ` : ''}
+            ${character.dexterity_to_hit_bonus !== undefined && character.dexterity_to_hit_bonus !== 0 ? `
+            <div class="combat-stat">
+                <span class="stat-label">DEX to Hit:</span>
+                <span class="stat-value">${character.dexterity_to_hit_bonus > 0 ? '+' : ''}${character.dexterity_to_hit_bonus}</span>
+            </div>
+            ` : ''}
             <div class="combat-stat-hp">
                 <div class="hp-header">
                     <span class="stat-label">Hit Points:</span>

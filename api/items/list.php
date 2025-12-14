@@ -155,7 +155,7 @@ try {
             'can_be_thrown' => (bool)$item['can_be_thrown'],
             
             // Armor properties
-            'ac_bonus' => $item['ac_bonus'] ? (int)$item['ac_bonus'] : null,
+            'ac_bonus' => $item['ac_bonus'] !== null ? (int)$item['ac_bonus'] : null,
             'armor_type' => $item['armor_type'],
             
             // Magical properties

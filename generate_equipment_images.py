@@ -19,13 +19,18 @@ WORKSPACE_ROOT = Path(__file__).parent
 IMAGE_BASE_DIR = WORKSPACE_ROOT / "public" / "images" / "equipment"
 CONFIG_FILE = WORKSPACE_ROOT / "config" / "together-ai.php"
 
-# Database configuration
+# Database configuration - Load from environment variables
+import os
 DB_CONFIG = {
-    'host': 'localhost',
-    'user': 'snilld_dk_db',
-    'password': 'UbqMz8JW4vPG3A',
-    'database': 'becmi_vtt'
+    'host': os.getenv('DB_HOST', 'localhost'),
+    'user': os.getenv('DB_USER', ''),
+    'password': os.getenv('DB_PASSWORD', ''),
+    'database': os.getenv('DB_NAME', 'becmi_vtt')
 }
+
+# Validate required credentials
+if not DB_CONFIG['user'] or not DB_CONFIG['password']:
+    raise ValueError("DB_USER and DB_PASSWORD environment variables must be set")
 
 # Together AI API
 TOGETHER_API_URL = "https://api.together.xyz/v1/images/generations"
