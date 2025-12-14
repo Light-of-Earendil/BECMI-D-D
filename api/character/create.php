@@ -179,7 +179,7 @@ try {
         ]));
         $valuesArray = [
             $userId,
-            $characterData['session_id'],
+            $characterData['session_id'] ?? null,
             $characterData['character_name'],
             $characterData['class'],
             1, // Starting level
@@ -227,6 +227,17 @@ try {
         ];
         
         error_log("Values count: " . count($valuesArray) . " (should be 46)");
+        error_log("Values array: " . json_encode($valuesArray));
+        
+        // Verify counts match before insert
+        $columnCount = 46; // Manually counted from INSERT statement
+        $placeholderCount = substr_count("?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?", "?");
+        $valueCount = count($valuesArray);
+        
+        if ($columnCount !== $placeholderCount || $placeholderCount !== $valueCount) {
+            error_log("MISMATCH DETECTED: Columns=$columnCount, Placeholders=$placeholderCount, Values=$valueCount");
+            throw new Exception("Column/placeholder/value count mismatch: Columns=$columnCount, Placeholders=$placeholderCount, Values=$valueCount");
+        }
         
         // Create character record with proper values array (46 values total - added gender and portrait_url)
         $characterId = $db->insert(
@@ -238,7 +249,7 @@ try {
                 alignment, gender, age, height, weight, hair_color, eye_color, gold_pieces, silver_pieces, copper_pieces,
                 is_active, ability_adjustments, original_strength, original_dexterity, original_constitution, 
                 original_intelligence, original_wisdom, original_charisma, personality, background, portrait_url
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             $valuesArray
         );
         

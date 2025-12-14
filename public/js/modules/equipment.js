@@ -98,6 +98,15 @@ class EquipmentModule {
                         <button class="filter-tab ${this.currentFilter === 'shield' ? 'active' : ''}" data-filter="shield">
                             Shields (${this.getEquipmentCount('shield')})
                         </button>
+                        <button class="filter-tab ${this.currentFilter === 'mount' ? 'active' : ''}" data-filter="mount">
+                            Mounts (${this.getEquipmentCount('mount')})
+                        </button>
+                        <button class="filter-tab ${this.currentFilter === 'vessel' ? 'active' : ''}" data-filter="vessel">
+                            Vessels (${this.getEquipmentCount('vessel')})
+                        </button>
+                        <button class="filter-tab ${this.currentFilter === 'siege' ? 'active' : ''}" data-filter="siege">
+                            Siege Weapons (${this.getEquipmentCount('siege')})
+                        </button>
                         <button class="filter-tab ${this.currentFilter === 'gear' ? 'active' : ''}" data-filter="gear">
                             Gear (${this.getEquipmentCount('gear')})
                         </button>
@@ -117,9 +126,14 @@ class EquipmentModule {
     }
 
     /**
-     * Get equipment count by type
+     * Get equipment count by type or category
      */
     getEquipmentCount(type) {
+        // For mount, vessel, and siege, check item_category
+        if (type === 'mount' || type === 'vessel' || type === 'siege') {
+            return this.equipmentData.filter(item => item.item_category === type).length;
+        }
+        // For other types, check item_type
         return this.equipmentData.filter(item => item.item_type === type).length;
     }
 
@@ -160,7 +174,7 @@ class EquipmentModule {
     }
 
     /**
-     * Group equipment by type
+     * Group equipment by type or category
      */
     groupEquipmentByType(equipment) {
         console.log('groupEquipmentByType called with:', equipment);
@@ -168,10 +182,15 @@ class EquipmentModule {
         
         equipment.forEach(item => {
             console.log('Processing item:', item);
-            if (!grouped[item.item_type]) {
-                grouped[item.item_type] = [];
+            // Use item_category for mount, vessel, and siege, otherwise use item_type
+            const groupKey = (item.item_category === 'mount' || item.item_category === 'vessel' || item.item_category === 'siege') 
+                ? item.item_category 
+                : item.item_type;
+            
+            if (!grouped[groupKey]) {
+                grouped[groupKey] = [];
             }
-            grouped[item.item_type].push(item);
+            grouped[groupKey].push(item);
         });
 
         // Sort items within each category by name
@@ -196,6 +215,9 @@ class EquipmentModule {
             'weapon': 'Weapons',
             'armor': 'Armor',
             'shield': 'Shields',
+            'mount': 'Mounts & Riding Animals',
+            'vessel': 'Ships & Vessels',
+            'siege': 'Siege Weapons',
             'gear': 'Adventuring Gear',
             'consumable': 'Consumables'
         };
@@ -208,19 +230,22 @@ class EquipmentModule {
     renderEquipmentItem(item) {
         const stats = this.getItemStats(item);
         const specialNotes = this.getSpecialNotes(item);
-        const hasImage = item.image_url && item.image_url.trim() !== '';
+        // Check if image_url exists and is not null/empty
+        const hasImage = item.image_url && item.image_url.trim() !== '' && item.image_url !== 'null';
+        
+        console.log('Rendering item:', item.name, 'hasImage:', hasImage, 'image_url:', item.image_url);
         
         return `
-            <div class="equipment-item-card" data-item-type="${item.item_type}">
+            <div class="equipment-item-card" data-item-type="${item.item_type}" data-item-category="${item.item_category || ''}">
                 ${hasImage ? `
                     <div class="item-image">
-                        <img src="${item.image_url}" alt="${item.name}" loading="lazy">
+                        <img src="${item.image_url}" alt="${item.name}" loading="lazy" onerror="this.style.display='none'; this.parentElement.nextElementSibling.querySelector('.item-icon').style.display='flex';">
                     </div>
                 ` : ''}
                 
                 <div class="item-header">
                     ${!hasImage ? `
-                        <div class="item-icon">
+                        <div class="item-icon" style="display: ${hasImage ? 'none' : 'flex'};">
                             <i class="${this.getItemIcon(item)}"></i>
                         </div>
                     ` : ''}
@@ -230,9 +255,7 @@ class EquipmentModule {
                     </div>
                 </div>
                 
-                <div class="item-stats">
-                    ${stats}
-                </div>
+                ${stats ? `<div class="item-stats">${stats}</div>` : ''}
                 
                 ${specialNotes ? `<div class="item-notes">${specialNotes}</div>` : ''}
                 
@@ -245,8 +268,20 @@ class EquipmentModule {
      * Get item icon
      */
     getItemIcon(item) {
+        // Check item_category first for mount, vessel, siege
+        if (item.item_category === 'mount') {
+            return 'fas fa-horse';
+        }
+        if (item.item_category === 'vessel') {
+            return 'fas fa-ship';
+        }
+        if (item.item_category === 'siege') {
+            return 'fas fa-catapult';
+        }
+        
+        // Otherwise use item_type
         const icons = {
-            'weapon': 'fas fa-sword',
+            'weapon': 'fas fa-dice',
             'armor': 'fas fa-shield-alt',
             'shield': 'fas fa-shield',
             'gear': 'fas fa-backpack',
@@ -261,24 +296,73 @@ class EquipmentModule {
     getItemStats(item) {
         let stats = [];
 
-        // Weight
-        if (item.weight_cn && item.weight_cn > 0) {
-            stats.push(`<span class="stat"><i class="fas fa-weight-hanging"></i> ${item.weight_cn} cn</span>`);
+        // Mounts stats
+        if (item.item_category === 'mount') {
+            // Mounts typically don't have weight_cn or movement_rate in database
+            // Stats are usually in description, but we can show cost and basic info
+            if (item.weight_cn && item.weight_cn > 0) {
+                stats.push(`<span class="stat"><i class="fas fa-weight-hanging"></i> ${item.weight_cn} cn</span>`);
+            }
+            if (item.movement_rate && item.movement_rate > 0) {
+                stats.push(`<span class="stat"><i class="fas fa-running"></i> ${item.movement_rate} ft/round</span>`);
+            }
         }
-
-        // Armor Class (for armor/shields)
-        if ((item.item_type === 'armor' || item.item_type === 'shield') && item.ac_bonus !== null) {
-            stats.push(`<span class="stat"><i class="fas fa-shield-alt"></i> AC ${item.ac_bonus}</span>`);
+        // Vessels stats
+        else if (item.item_category === 'vessel') {
+            if (item.capacity_cn && item.capacity_cn > 0) {
+                stats.push(`<span class="stat"><i class="fas fa-users"></i> Capacity: ${item.capacity_cn} cn</span>`);
+            }
+            if (item.movement_rate && item.movement_rate > 0) {
+                stats.push(`<span class="stat"><i class="fas fa-ship"></i> ${item.movement_rate} ft/round</span>`);
+            }
+            if (item.ac_bonus !== null && item.ac_bonus !== 0) {
+                stats.push(`<span class="stat"><i class="fas fa-shield-alt"></i> AC ${item.ac_bonus}</span>`);
+            }
         }
-
-        // Damage (for weapons)
-        if (item.item_type === 'weapon' && item.damage_die) {
-            stats.push(`<span class="stat"><i class="fas fa-sword"></i> ${item.damage_die}</span>`);
+        // Siege weapons stats
+        else if (item.item_category === 'siege') {
+            if (item.damage_die) {
+                stats.push(`<span class="stat"><i class="fas fa-dice"></i> ${item.damage_die}</span>`);
+            }
+            if (item.range_short && item.range_medium && item.range_long) {
+                stats.push(`<span class="stat"><i class="fas fa-crosshairs"></i> ${item.range_short}/${item.range_medium}/${item.range_long}</span>`);
+            }
+            if (item.ac_bonus !== null && item.ac_bonus !== 0) {
+                stats.push(`<span class="stat"><i class="fas fa-shield-alt"></i> AC ${item.ac_bonus}</span>`);
+            }
+            if (item.weight_cn && item.weight_cn > 0) {
+                stats.push(`<span class="stat"><i class="fas fa-weight-hanging"></i> ${item.weight_cn} cn</span>`);
+            }
         }
-
-        // Range (for ranged weapons)
-        if (item.range_short && item.range_medium && item.range_long) {
-            stats.push(`<span class="stat"><i class="fas fa-crosshairs"></i> ${item.range_short}/${item.range_medium}/${item.range_long}</span>`);
+        // Regular weapons
+        else if (item.item_type === 'weapon') {
+            if (item.damage_die) {
+                stats.push(`<span class="stat"><i class="fas fa-dice"></i> ${item.damage_die}</span>`);
+            }
+            if (item.range_short && item.range_medium && item.range_long) {
+                stats.push(`<span class="stat"><i class="fas fa-crosshairs"></i> ${item.range_short}/${item.range_medium}/${item.range_long}</span>`);
+            }
+            if (item.weight_cn && item.weight_cn > 0) {
+                stats.push(`<span class="stat"><i class="fas fa-weight-hanging"></i> ${item.weight_cn} cn</span>`);
+            }
+        }
+        // Armor and shields
+        else if (item.item_type === 'armor' || item.item_type === 'shield') {
+            if (item.ac_bonus !== null) {
+                stats.push(`<span class="stat"><i class="fas fa-shield-alt"></i> AC ${item.ac_bonus}</span>`);
+            }
+            if (item.weight_cn && item.weight_cn > 0) {
+                stats.push(`<span class="stat"><i class="fas fa-weight-hanging"></i> ${item.weight_cn} cn</span>`);
+            }
+        }
+        // Gear and other items
+        else {
+            if (item.weight_cn && item.weight_cn > 0) {
+                stats.push(`<span class="stat"><i class="fas fa-weight-hanging"></i> ${item.weight_cn} cn</span>`);
+            }
+            if (item.capacity_cn && item.capacity_cn > 0) {
+                stats.push(`<span class="stat"><i class="fas fa-box"></i> Capacity: ${item.capacity_cn} cn</span>`);
+            }
         }
 
         // Quantity (for consumables)
@@ -321,14 +405,18 @@ class EquipmentModule {
     }
 
     /**
-     * Filter equipment by type
+     * Filter equipment by type or category
      */
     filterByType(type) {
         this.currentFilter = type;
         
         if (type === 'all') {
             this.filteredEquipment = [...this.equipmentData];
+        } else if (type === 'mount' || type === 'vessel' || type === 'siege') {
+            // Filter by item_category for these special categories
+            this.filteredEquipment = this.equipmentData.filter(item => item.item_category === type);
         } else {
+            // Filter by item_type for other categories
             this.filteredEquipment = this.equipmentData.filter(item => item.item_type === type);
         }
         

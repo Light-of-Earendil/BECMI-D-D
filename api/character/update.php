@@ -70,11 +70,22 @@ try {
     }
     
     // Check if user is DM of the session
-    if (!$hasAccess) {
+    if (!$hasAccess && !empty($existingCharacter['session_id'])) {
+        // #region agent log
+        $logFile = __DIR__ . '/../../.cursor/debug.log';
+        $logDir = dirname($logFile);
+        if (!is_dir($logDir)) {
+            @mkdir($logDir, 0755, true);
+        }
+        @file_put_contents($logFile, json_encode(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'update.php:75','message'=>'Checking session access','data'=>['session_id'=>$existingCharacter['session_id'],'session_id_null'=>$existingCharacter['session_id']===null],'sessionId'=>'debug-session','runId'=>'post-fix','hypothesisId'=>'D'])."\n", FILE_APPEND | LOCK_EX);
+        // #endregion
         $session = $db->selectOne(
             "SELECT dm_user_id FROM game_sessions WHERE session_id = ?",
             [$existingCharacter['session_id']]
         );
+        // #region agent log
+        @file_put_contents($logFile, json_encode(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'update.php:82','message'=>'Session query result','data'=>['session_null'=>$session===null,'session_id'=>$existingCharacter['session_id']],'sessionId'=>'debug-session','runId'=>'post-fix','hypothesisId'=>'D'])."\n", FILE_APPEND | LOCK_EX);
+        // #endregion
         
         if ($session && $session['dm_user_id'] == $userId) {
             $hasAccess = true;

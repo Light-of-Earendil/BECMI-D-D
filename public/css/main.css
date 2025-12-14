@@ -1695,6 +1695,18 @@ input[type="password"]:focus {
     width: 33%;
 }
 
+.stats-row {
+    display: flex;
+    align-items: center;
+    flex-flow: row;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.item-stats .stats-row .stat {
+    color: var(--brass-800);
+}
+
 .character-section .ability-score-item {
     background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400));
     border-radius: var(--radius-sm);
@@ -3553,7 +3565,7 @@ input.hp-input {
 /* Item Image */
 .item-image {
     width: 100%;
-    height: 80px;
+    height: 270px;
     margin-bottom: var(--space-2);
     border-radius: var(--radius-sm);
     overflow: hidden;
@@ -3598,6 +3610,11 @@ input.hp-input {
 
 .item-info {
     flex: 1;
+    color: var(--brass-500);
+}
+
+.item-info h5, .cart-item h5 {
+    color: var(--brass-500);
 }
 
 .item-name {
@@ -3659,6 +3676,24 @@ input.hp-input {
     margin-top: var(--space-1);
     padding-top: var(--space-1);
     border-top: 1px solid rgba(0,0,0,0.1);
+}
+
+#weapons-grid, .skills-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+}
+
+.weapon-card, .skill-ability-group {
+    width: calc(33% - 6px);
+    background-color: var(--wood-600);
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.available-weapons .weapon-card {
+    cursor: pointer;
 }
 
 /* No Results */

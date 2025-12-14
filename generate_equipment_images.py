@@ -31,9 +31,12 @@ DB_CONFIG = {
 TOGETHER_API_URL = "https://api.together.xyz/v1/images/generations"
 MODEL = "black-forest-labs/FLUX.1-schnell-Free"
 DEFAULT_WIDTH = 1024
-DEFAULT_HEIGHT = 768
-DEFAULT_STEPS = 4
+DEFAULT_HEIGHT = 1024  # Square format better for items
+DEFAULT_STEPS = 8  # Increased for better quality
 RATE_LIMIT_DELAY = 3  # seconds between requests
+
+# Negative prompt to avoid unwanted elements
+NEGATIVE_PROMPT = "blurry, low quality, distorted, watermark, text, people, hands, background clutter, shadows, multiple items, cluttered"
 
 
 def get_api_key() -> str:
@@ -118,7 +121,7 @@ def generate_prompt(item: Dict) -> str:
     
     # Base prompt elements
     base = "Photorealistic medieval"
-    quality = "highly detailed on neutral gray background, museum quality photography, 8K resolution, sharp focus"
+    quality = "isolated on clean white background, professional product photography, studio lighting, highly detailed, museum quality, 8K resolution, sharp focus, no blur, no distortion, no watermark"
     
     # Type-specific prompts
     if item_type == 'weapon':
@@ -126,106 +129,106 @@ def generate_prompt(item: Dict) -> str:
         
         # Specific weapon prompts
         if 'sword' in item_name.lower():
-            return f"{base} {item_name}, {quality}, gleaming steel blade with leather-wrapped grip and ornate crossguard"
+            return f"{base} {item_name}, {quality}, gleaming steel blade with leather-wrapped grip and ornate crossguard, professional weapon photography"
         elif 'axe' in item_name.lower():
-            return f"{base} {item_name}, {quality}, sharp steel axe head with wooden handle"
+            return f"{base} {item_name}, {quality}, sharp steel axe head with wooden handle, professional weapon photography"
         elif 'bow' in item_name.lower():
-            return f"{base} {item_name}, {quality}, curved wooden bow with string"
+            return f"{base} {item_name}, {quality}, curved wooden bow with string, professional weapon photography"
         elif 'crossbow' in item_name.lower():
-            return f"{base} {item_name}, {quality}, mechanical crossbow with wooden stock and steel mechanism"
+            return f"{base} {item_name}, {quality}, mechanical crossbow with wooden stock and steel mechanism, professional weapon photography"
         elif 'dagger' in item_name.lower():
-            return f"{base} {item_name}, {quality}, small sharp blade with wrapped grip"
+            return f"{base} {item_name}, {quality}, small sharp blade with wrapped grip, professional weapon photography"
         elif 'mace' in item_name.lower():
-            return f"{base} {item_name}, {quality}, heavy metal mace head with wooden handle"
+            return f"{base} {item_name}, {quality}, heavy metal mace head with wooden handle, professional weapon photography"
         elif 'hammer' in item_name.lower():
-            return f"{base} {item_name}, {quality}, war hammer with steel head and wooden handle"
+            return f"{base} {item_name}, {quality}, war hammer with steel head and wooden handle, professional weapon photography"
         elif 'spear' in item_name.lower():
-            return f"{base} {item_name}, {quality}, long wooden shaft with sharp metal spearhead"
+            return f"{base} {item_name}, {quality}, long wooden shaft with sharp metal spearhead, professional weapon photography"
         elif 'staff' in item_name.lower():
-            return f"{base} {item_name}, {quality}, simple wooden quarterstaff"
+            return f"{base} {item_name}, {quality}, simple wooden quarterstaff, professional weapon photography"
         elif 'pole' in item_name.lower():
-            return f"{base} {item_name}, {quality}, long polearm with metal blade on wooden shaft"
+            return f"{base} {item_name}, {quality}, long polearm with metal blade on wooden shaft, professional weapon photography"
         elif 'javelin' in item_name.lower():
-            return f"{base} {item_name}, {quality}, throwing spear with metal tip"
+            return f"{base} {item_name}, {quality}, throwing spear with metal tip, professional weapon photography"
         elif 'sling' in item_name.lower():
-            return f"{base} leather sling, {quality}, simple leather strap for throwing stones"
+            return f"{base} leather sling, {quality}, simple leather strap for throwing stones, professional weapon photography"
         elif 'blowgun' in item_name.lower():
-            return f"{base} {item_name}, {quality}, hollow wooden tube for shooting darts"
+            return f"{base} {item_name}, {quality}, hollow wooden tube for shooting darts, professional weapon photography"
         elif 'club' in item_name.lower() or 'blackjack' in item_name.lower():
-            return f"{base} {item_name}, {quality}, weighted club for striking"
+            return f"{base} {item_name}, {quality}, weighted club for striking, professional weapon photography"
         else:
-            return f"{base} {item_name} weapon, {quality}, {description}"
+            return f"{base} {item_name} weapon, {quality}, professional weapon photography, {description}"
     
     elif item_type == 'armor':
         armor_type = item.get('armor_type', '')
         
         if 'leather' in item_name.lower():
-            return f"{base} leather armor, {quality}, hardened leather cuirass with straps and buckles"
+            return f"{base} leather armor, {quality}, hardened leather cuirass with straps and buckles, displayed on mannequin or stand, professional museum display"
         elif 'chain' in item_name.lower():
-            return f"{base} chain mail armor, {quality}, interlocking metal rings forming protective coat"
+            return f"{base} chain mail armor, {quality}, interlocking metal rings forming protective coat, displayed on mannequin or stand, professional museum display"
         elif 'plate' in item_name.lower():
-            return f"{base} plate armor, {quality}, polished steel plate armor pieces"
+            return f"{base} plate armor, {quality}, polished steel plate armor pieces, displayed on mannequin or stand, professional museum display"
         elif 'scale' in item_name.lower():
-            return f"{base} scale mail armor, {quality}, overlapping metal scales on leather backing"
+            return f"{base} scale mail armor, {quality}, overlapping metal scales on leather backing, displayed on mannequin or stand, professional museum display"
         elif 'banded' in item_name.lower():
-            return f"{base} banded mail armor, {quality}, metal bands on leather backing"
+            return f"{base} banded mail armor, {quality}, metal bands on leather backing, displayed on mannequin or stand, professional museum display"
         elif 'suit' in item_name.lower():
-            return f"{base} full plate armor suit, {quality}, complete medieval knight armor"
+            return f"{base} full plate armor suit, {quality}, complete medieval knight armor, displayed on mannequin or stand, professional museum display"
         else:
-            return f"{base} {item_name}, {quality}, protective armor piece"
+            return f"{base} {item_name}, {quality}, protective armor piece, displayed on mannequin or stand, professional museum display"
     
     elif item_type == 'shield':
-        return f"{base} {item_name}, {quality}, wooden shield with metal boss and leather straps"
+        return f"{base} {item_name}, {quality}, wooden shield with metal boss and leather straps, displayed on stand, professional museum display"
     
     elif item_type == 'gear':
         # Specific gear prompts
         if 'rope' in item_name.lower():
-            return f"{base} coiled hemp rope, {quality}, thick twisted rope coil"
+            return f"{base} coiled hemp rope, {quality}, thick twisted rope coil, clean background, professional photography"
         elif 'torch' in item_name.lower():
-            return f"{base} wooden torch with flames, {quality}, wooden handle with burning oil-soaked cloth, warm firelight"
+            return f"{base} wooden torch with flames, {quality}, wooden handle with burning oil-soaked cloth, warm firelight, clean background, professional photography"
         elif 'backpack' in item_name.lower():
-            return f"{base} leather backpack, {quality}, brown leather adventuring pack with straps and buckles"
+            return f"{base} leather backpack, {quality}, brown leather adventuring pack with straps and buckles, clean background, professional photography"
         elif 'bedroll' in item_name.lower():
-            return f"{base} bedroll, {quality}, rolled sleeping blanket tied with leather straps"
+            return f"{base} bedroll, {quality}, rolled sleeping blanket tied with leather straps, clean background, professional photography"
         elif 'tinderbox' in item_name.lower() or 'flint' in item_name.lower():
-            return f"{base} tinderbox with flint and steel, {quality}, small wooden box with flint stone and steel striker and dry tinder"
+            return f"{base} tinderbox with flint and steel, {quality}, small wooden box with flint stone and steel striker and dry tinder, clean background, professional photography"
         elif 'waterskin' in item_name.lower() or 'wineskin' in item_name.lower():
-            return f"{base} leather waterskin, {quality}, leather water container with cork stopper"
+            return f"{base} leather waterskin, {quality}, leather water container with cork stopper, clean background, professional photography"
         elif 'rations' in item_name.lower():
-            return f"{base} travel rations, {quality}, dried food provisions in cloth wrapping"
+            return f"{base} travel rations, {quality}, dried food provisions in cloth wrapping, clean background, professional photography"
         elif 'lantern' in item_name.lower():
-            return f"{base} {item_name}, {quality}, metal lantern with glass panes and oil reservoir"
+            return f"{base} {item_name}, {quality}, metal lantern with glass panes and oil reservoir, clean background, professional photography"
         elif 'pouch' in item_name.lower():
-            return f"{base} leather pouch, {quality}, small leather belt pouch with drawstring"
+            return f"{base} leather pouch, {quality}, small leather belt pouch with drawstring, clean background, professional photography"
         elif 'sack' in item_name.lower():
-            return f"{base} {item_name}, {quality}, large cloth or burlap sack"
+            return f"{base} {item_name}, {quality}, large cloth or burlap sack, clean background, professional photography"
         elif 'flask' in item_name.lower() or 'vial' in item_name.lower():
-            return f"{base} glass {item_name}, {quality}, small glass container with cork stopper"
+            return f"{base} glass {item_name}, {quality}, small glass container with cork stopper, clean background, professional photography"
         elif 'holy' in item_name.lower():
-            return f"{base} holy symbol, {quality}, ornate religious symbol on chain"
+            return f"{base} holy symbol, {quality}, ornate religious symbol on chain, clean background, professional photography"
         elif 'mirror' in item_name.lower():
-            return f"{base} hand mirror, {quality}, polished metal mirror in decorative frame"
+            return f"{base} hand mirror, {quality}, polished metal mirror in decorative frame, clean background, professional photography"
         elif 'crowbar' in item_name.lower():
-            return f"{base} iron crowbar, {quality}, heavy iron prying tool"
+            return f"{base} iron crowbar, {quality}, heavy iron prying tool, clean background, professional photography"
         elif 'spike' in item_name.lower():
-            return f"{base} iron spikes, {quality}, metal pitons for climbing"
+            return f"{base} iron spikes, {quality}, metal pitons for climbing, clean background, professional photography"
         elif 'grappling' in item_name.lower():
-            return f"{base} grappling hook, {quality}, metal hook with rope attached"
+            return f"{base} grappling hook, {quality}, metal hook with rope attached, clean background, professional photography"
         else:
-            return f"{base} {item_name}, {quality}, adventuring gear equipment"
+            return f"{base} {item_name}, {quality}, adventuring gear equipment, clean background, professional photography"
     
     elif item_type == 'consumable':
         if 'oil' in item_name.lower():
-            return f"{base} oil flask, {quality}, glass flask containing lamp oil or burning oil"
+            return f"{base} oil flask, {quality}, glass flask containing lamp oil or burning oil, clean background, professional photography"
         elif 'potion' in item_name.lower():
-            return f"{base} {item_name}, {quality}, glass vial with magical liquid"
+            return f"{base} {item_name}, {quality}, glass vial with magical liquid, clean background, professional photography"
         elif 'holy water' in item_name.lower():
-            return f"{base} holy water vial, {quality}, blessed water in ornate glass vial"
+            return f"{base} holy water vial, {quality}, blessed water in ornate glass vial, clean background, professional photography"
         else:
-            return f"{base} {item_name}, {quality}, {description}"
+            return f"{base} {item_name}, {quality}, clean background, professional photography, {description}"
     
     # Default fallback
-    return f"{base} {item_name}, {quality}, medieval equipment item, {description}"
+    return f"{base} {item_name}, {quality}, medieval equipment item, clean background, professional photography, {description}"
 
 
 def get_image_subdirectory(item_type: str) -> str:
@@ -271,7 +274,8 @@ def generate_image(item: Dict, api_key: str) -> Optional[str]:
         "height": DEFAULT_HEIGHT,
         "steps": DEFAULT_STEPS,
         "n": 1,
-        "response_format": "b64_json"
+        "response_format": "b64_json",
+        "negative_prompt": NEGATIVE_PROMPT
     }
     
     try:

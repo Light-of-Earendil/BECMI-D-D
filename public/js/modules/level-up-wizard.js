@@ -288,7 +288,7 @@ class LevelUpWizard {
         return `
             <div class="wizard-step-content">
                 <div class="step-icon">
-                    <i class="fas fa-sword fa-3x"></i>
+                    <i class="fas fa-dice fa-3x"></i>
                 </div>
                 <h3>Class Features & Combat Stats</h3>
                 
@@ -549,7 +549,7 @@ class LevelUpWizard {
                         
                         ${this.wizardData.new_weapon_mastery ? `
                             <div class="summary-item">
-                                <i class="fas fa-sword"></i>
+                                <i class="fas fa-dice"></i>
                                 <span>Weapon mastery improved</span>
                             </div>
                         ` : ''}
@@ -800,7 +800,7 @@ class LevelUpWizard {
         
         // Fighter/Dwarf weapon mastery
         if ((characterClass === 'fighter' || characterClass === 'dwarf') && nextLevel % 3 === 0) {
-            benefits.push({ icon: 'fa-sword', text: 'Improve weapon mastery' });
+            benefits.push({ icon: 'fa-dice', text: 'Improve weapon mastery' });
         }
         
         return benefits;

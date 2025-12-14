@@ -147,11 +147,22 @@ class BECMIApp {
                 this.modules.apiClient.get('/api/session/user.php')
             ]);
             
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/6833b562-b8f9-468a-b58a-35843b6312e5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:150','message':'loadUserData - responses received','data':{charactersResponse_status:charactersResponse?.status,sessionsResponse_status:sessionsResponse?.status,charactersResponse_hasData:!!charactersResponse?.data,sessionsResponse_hasData:!!sessionsResponse?.data},timestamp:Date.now(),sessionId:'debug-session','runId':'post-fix','hypothesisId':'E'})}).catch(()=>{});
+            // #endregion
+            
             const characterPayload = charactersResponse.data || charactersResponse;
             const sessionPayload = sessionsResponse.data || sessionsResponse;
 
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/6833b562-b8f9-468a-b58a-35843b6312e5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:155','message':'loadUserData - payloads extracted','data':{characterPayload_type:typeof characterPayload,characterPayload_hasCharacters:!!characterPayload?.characters,sessionPayload_type:typeof sessionPayload,sessionPayload_hasSessions:!!sessionPayload?.sessions},timestamp:Date.now(),sessionId:'debug-session','runId':'post-fix','hypothesisId':'E'})}).catch(()=>{});
+            // #endregion
+
             if (charactersResponse.status === 'success') {
                 const characters = Array.isArray(characterPayload.characters) ? characterPayload.characters : (charactersResponse.characters || []);
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/6833b562-b8f9-468a-b58a-35843b6312e5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:158','message':'loadUserData - characters extracted','data':{characters_isArray:Array.isArray(characters),characters_length:characters?.length},timestamp:Date.now(),sessionId:'debug-session','runId':'post-fix','hypothesisId':'E'})}).catch(()=>{});
+                // #endregion
                 this.state.characters = characters;
                 if (typeof characterPayload.total_count !== 'undefined') {
                     this.state.totalCharacters = characterPayload.total_count;
@@ -159,11 +170,17 @@ class BECMIApp {
                     this.state.totalCharacters = charactersResponse.total_count;
                 }
             } else {
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/6833b562-b8f9-468a-b58a-35843b6312e5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:163','message':'loadUserData - characters failed','data':{charactersResponse_status:charactersResponse?.status,charactersResponse_message:charactersResponse?.message},timestamp:Date.now(),sessionId:'debug-session','runId':'post-fix','hypothesisId':'E'})}).catch(()=>{});
+                // #endregion
                 throw new Error(charactersResponse.message || 'Failed to load characters');
             }
 
             if (sessionsResponse.status === 'success') {
                 const sessions = Array.isArray(sessionPayload.sessions) ? sessionPayload.sessions : (sessionsResponse.sessions || []);
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/6833b562-b8f9-468a-b58a-35843b6312e5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:168','message':'loadUserData - sessions extracted','data':{sessions_isArray:Array.isArray(sessions),sessions_length:sessions?.length},timestamp:Date.now(),sessionId:'debug-session','runId':'post-fix','hypothesisId':'E'})}).catch(()=>{});
+                // #endregion
                 this.state.sessions = sessions;
                 if (typeof sessionPayload.total_count !== 'undefined') {
                     this.state.totalSessions = sessionPayload.total_count;
@@ -171,6 +188,9 @@ class BECMIApp {
                     this.state.totalSessions = sessionsResponse.total_count;
                 }
             } else {
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/6833b562-b8f9-468a-b58a-35843b6312e5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:174','message':'loadUserData - sessions failed','data':{sessionsResponse_status:sessionsResponse?.status,sessionsResponse_message:sessionsResponse?.message},timestamp:Date.now(),sessionId:'debug-session','runId':'post-fix','hypothesisId':'E'})}).catch(()=>{});
+                // #endregion
                 throw new Error(sessionsResponse.message || 'Failed to load sessions');
             }
 

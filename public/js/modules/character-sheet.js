@@ -280,7 +280,7 @@ class CharacterSheetModule {
      */
     getClassInfo(className) {
         const classData = {
-            'fighter': { color: 'fighter-color', icon: 'fas fa-sword' },
+            'fighter': { color: 'fighter-color', icon: 'fas fa-dice' },
             'magic_user': { color: 'magic-user-color', icon: 'fas fa-hat-wizard' },
             'cleric': { color: 'cleric-color', icon: 'fas fa-cross' },
             'thief': { color: 'thief-color', icon: 'fas fa-mask' },
@@ -717,7 +717,7 @@ class CharacterSheetModule {
      */
     renderEquipmentItem(item, characterId) {
         const iconMap = {
-            'weapon': 'fa-sword',
+            'weapon': 'fa-dice',
             'armor': 'fa-shield-alt',
             'shield': 'fa-shield',
             'gear': 'fa-tools',
@@ -1104,7 +1104,7 @@ class CharacterSheetModule {
      */
     getItemIcon(itemType) {
         const iconMap = {
-            'weapon': 'fa-sword',
+            'weapon': 'fa-dice',
             'armor': 'fa-shield-alt',
             'shield': 'fa-shield',
             'gear': 'fa-tools',
@@ -1217,7 +1217,7 @@ class CharacterSheetModule {
             ${masteries.map(mastery => `
                 <div class="mastery-item">
                     <div class="mastery-weapon">
-                        <i class="fas fa-sword"></i>
+                        <i class="fas fa-dice"></i>
                         <span class="weapon-name">${mastery.weapon_name}</span>
                         ${mastery.damage_die ? `<span class="weapon-damage">${mastery.damage_die}</span>` : ''}
                     </div>

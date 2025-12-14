@@ -159,7 +159,21 @@ class APIClient {
                 }
                 
                 // Parse JSON response
-                const result = await response.json();
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/6833b562-b8f9-468a-b58a-35843b6312e5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api-client.js:162','message':'Before JSON parse','data':{method,url,status:response.status},timestamp:Date.now(),sessionId:'debug-session','runId':'post-fix','hypothesisId':'F'})}).catch(()=>{});
+                // #endregion
+                let result;
+                try {
+                    result = await response.json();
+                    // #region agent log
+                    fetch('http://127.0.0.1:7243/ingest/6833b562-b8f9-468a-b58a-35843b6312e5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api-client.js:167','message':'JSON parse success','data':{method,url,result_status:result?.status,result_hasData:!!result?.data},timestamp:Date.now(),sessionId:'debug-session','runId':'post-fix','hypothesisId':'F'})}).catch(()=>{});
+                    // #endregion
+                } catch (jsonError) {
+                    // #region agent log
+                    fetch('http://127.0.0.1:7243/ingest/6833b562-b8f9-468a-b58a-35843b6312e5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api-client.js:170','message':'JSON parse error','data':{method,url,error:jsonError.message},timestamp:Date.now(),sessionId:'debug-session','runId':'post-fix','hypothesisId':'F'})}).catch(()=>{});
+                    // #endregion
+                    throw new Error(`Invalid JSON response: ${jsonError.message}`);
+                }
                 
                 // Log successful response
                 console.log(`[API] ${method} ${url} - success`);

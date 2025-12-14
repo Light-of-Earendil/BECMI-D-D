@@ -167,7 +167,7 @@ class DMDashboardModule {
             </div>
             
             <div class="stat-card class-distribution">
-                <div class="stat-icon"><i class="fas fa-sword"></i></div>
+                <div class="stat-icon"><i class="fas fa-dice"></i></div>
                 <div class="stat-content">
                     <div class="stat-label">Party Composition</div>
                     <div class="stat-value class-list">
@@ -315,7 +315,7 @@ class DMDashboardModule {
      */
     getClassInfo(className) {
         const classData = {
-            'fighter': { color: 'fighter-color', icon: 'fas fa-sword' },
+            'fighter': { color: 'fighter-color', icon: 'fas fa-dice' },
             'magic_user': { color: 'magic-user-color', icon: 'fas fa-hat-wizard' },
             'cleric': { color: 'cleric-color', icon: 'fas fa-cross' },
             'thief': { color: 'thief-color', icon: 'fas fa-mask' },

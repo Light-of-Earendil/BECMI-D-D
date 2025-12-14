@@ -1239,7 +1239,7 @@ class CharacterCreationModule {
                 const rankDisplay = masteryRank.replace('_', ' ').toUpperCase();
                 
                 return `<div class="selected-weapon-item">
-                    <i class="fas fa-sword"></i>
+                    <i class="fas fa-dice"></i>
                     <span class="weapon-name">${weapon.name}</span>
                     <span class="weapon-damage">${weapon.damage_die}</span>
                     <span class="mastery-rank badge badge-${this.getMasteryRankColor(masteryRank)}">${rankDisplay}</span>
@@ -1285,7 +1285,7 @@ class CharacterCreationModule {
             
             return `<div class="weapon-card ${isSelected ? 'selected' : ''}" data-weapon-id="${weapon.item_id}">
                 <div class="weapon-icon">
-                    <i class="fas fa-sword"></i>
+                    <i class="fas fa-dice"></i>
                 </div>
                 <div class="weapon-info">
                     <h6>${weapon.name}</h6>

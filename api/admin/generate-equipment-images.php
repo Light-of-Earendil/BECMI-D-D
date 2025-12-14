@@ -33,12 +33,22 @@ try {
     // Get offset parameter (for pagination)
     $offset = isset($_GET['offset']) ? intval($_GET['offset']) : 0;
     
-    // Fetch items without images
-    $query = "SELECT item_id, name, description, item_type 
-              FROM items 
-              WHERE image_url IS NULL OR image_url = ''
-              ORDER BY item_type, name
-              LIMIT :limit OFFSET :offset";
+    // Get overwrite parameter (to regenerate existing images)
+    $overwrite = isset($_GET['overwrite']) && $_GET['overwrite'] == '1';
+    
+    // Fetch items - either all items (if overwrite) or only missing images
+    if ($overwrite) {
+        $query = "SELECT item_id, name, description, item_type 
+                  FROM items 
+                  ORDER BY item_type, name
+                  LIMIT :limit OFFSET :offset";
+    } else {
+        $query = "SELECT item_id, name, description, item_type 
+                  FROM items 
+                  WHERE image_url IS NULL OR image_url = ''
+                  ORDER BY item_type, name
+                  LIMIT :limit OFFSET :offset";
+    }
     $stmt = $db->prepare($query);
     $stmt->bindParam(':limit', $batchSize, PDO::PARAM_INT);
     $stmt->bindParam(':offset', $offset, PDO::PARAM_INT);
@@ -75,50 +85,142 @@ try {
     
     $apiUrl = 'https://api.together.xyz/v1/images/generations';
     $model = 'black-forest-labs/FLUX.1-schnell-Free';
+    $negativePrompt = "blurry, low quality, distorted, watermark, text, people, hands, background clutter, shadows, multiple items, cluttered";
     
-    // Function to create prompt
+    // Function to create prompt (matching Python version)
     function createEquipmentPrompt($item) {
-        $basePrompt = "Photorealistic medieval {$item['name']}, ";
+        $base = "Photorealistic medieval";
+        $quality = "isolated on clean white background, professional product photography, studio lighting, highly detailed, museum quality, 8K resolution, sharp focus, no blur, no distortion, no watermark";
+        $itemName = $item['name'];
+        $itemType = $item['item_type'];
+        $description = !empty($item['description']) ? strtolower($item['description']) : '';
         
-        switch ($item['item_type']) {
+        $nameLower = strtolower($itemName);
+        
+        switch ($itemType) {
             case 'weapon':
-                $basePrompt .= "highly detailed weapon on dark wooden surface, dramatic lighting, museum quality photography, 8K resolution, sharp focus";
+                if (strpos($nameLower, 'sword') !== false) {
+                    return "{$base} {$itemName}, {$quality}, gleaming steel blade with leather-wrapped grip and ornate crossguard, professional weapon photography";
+                } elseif (strpos($nameLower, 'axe') !== false) {
+                    return "{$base} {$itemName}, {$quality}, sharp steel axe head with wooden handle, professional weapon photography";
+                } elseif (strpos($nameLower, 'bow') !== false) {
+                    return "{$base} {$itemName}, {$quality}, curved wooden bow with string, professional weapon photography";
+                } elseif (strpos($nameLower, 'crossbow') !== false) {
+                    return "{$base} {$itemName}, {$quality}, mechanical crossbow with wooden stock and steel mechanism, professional weapon photography";
+                } elseif (strpos($nameLower, 'dagger') !== false) {
+                    return "{$base} {$itemName}, {$quality}, small sharp blade with wrapped grip, professional weapon photography";
+                } elseif (strpos($nameLower, 'mace') !== false) {
+                    return "{$base} {$itemName}, {$quality}, heavy metal mace head with wooden handle, professional weapon photography";
+                } elseif (strpos($nameLower, 'hammer') !== false) {
+                    return "{$base} {$itemName}, {$quality}, war hammer with steel head and wooden handle, professional weapon photography";
+                } elseif (strpos($nameLower, 'spear') !== false) {
+                    return "{$base} {$itemName}, {$quality}, long wooden shaft with sharp metal spearhead, professional weapon photography";
+                } elseif (strpos($nameLower, 'staff') !== false) {
+                    return "{$base} {$itemName}, {$quality}, simple wooden quarterstaff, professional weapon photography";
+                } elseif (strpos($nameLower, 'pole') !== false) {
+                    return "{$base} {$itemName}, {$quality}, long polearm with metal blade on wooden shaft, professional weapon photography";
+                } elseif (strpos($nameLower, 'javelin') !== false) {
+                    return "{$base} {$itemName}, {$quality}, throwing spear with metal tip, professional weapon photography";
+                } elseif (strpos($nameLower, 'sling') !== false) {
+                    return "{$base} leather sling, {$quality}, simple leather strap for throwing stones, professional weapon photography";
+                } elseif (strpos($nameLower, 'blowgun') !== false) {
+                    return "{$base} {$itemName}, {$quality}, hollow wooden tube for shooting darts, professional weapon photography";
+                } elseif (strpos($nameLower, 'club') !== false || strpos($nameLower, 'blackjack') !== false) {
+                    return "{$base} {$itemName}, {$quality}, weighted club for striking, professional weapon photography";
+                } else {
+                    return "{$base} {$itemName} weapon, {$quality}, professional weapon photography, {$description}";
+                }
                 break;
+                
             case 'armor':
-                $basePrompt .= "highly detailed armor piece on display stand, dramatic lighting, museum quality photography, 8K resolution, sharp focus";
+                if (strpos($nameLower, 'leather') !== false) {
+                    return "{$base} leather armor, {$quality}, hardened leather cuirass with straps and buckles, displayed on mannequin or stand, professional museum display";
+                } elseif (strpos($nameLower, 'chain') !== false) {
+                    return "{$base} chain mail armor, {$quality}, interlocking metal rings forming protective coat, displayed on mannequin or stand, professional museum display";
+                } elseif (strpos($nameLower, 'plate') !== false) {
+                    return "{$base} plate armor, {$quality}, polished steel plate armor pieces, displayed on mannequin or stand, professional museum display";
+                } elseif (strpos($nameLower, 'scale') !== false) {
+                    return "{$base} scale mail armor, {$quality}, overlapping metal scales on leather backing, displayed on mannequin or stand, professional museum display";
+                } elseif (strpos($nameLower, 'banded') !== false) {
+                    return "{$base} banded mail armor, {$quality}, metal bands on leather backing, displayed on mannequin or stand, professional museum display";
+                } elseif (strpos($nameLower, 'suit') !== false) {
+                    return "{$base} full plate armor suit, {$quality}, complete medieval knight armor, displayed on mannequin or stand, professional museum display";
+                } else {
+                    return "{$base} {$itemName}, {$quality}, protective armor piece, displayed on mannequin or stand, professional museum display";
+                }
                 break;
+                
             case 'shield':
-                $basePrompt .= "highly detailed shield on display, dramatic lighting, museum quality photography, 8K resolution, sharp focus";
-                break;
+                return "{$base} {$itemName}, {$quality}, wooden shield with metal boss and leather straps, displayed on stand, professional museum display";
+                
             case 'gear':
-                $basePrompt .= "highly detailed medieval adventuring equipment, dramatic lighting, museum quality photography, 8K resolution, sharp focus";
+                if (strpos($nameLower, 'rope') !== false) {
+                    return "{$base} coiled hemp rope, {$quality}, thick twisted rope coil, clean background, professional photography";
+                } elseif (strpos($nameLower, 'torch') !== false) {
+                    return "{$base} wooden torch with flames, {$quality}, wooden handle with burning oil-soaked cloth, warm firelight, clean background, professional photography";
+                } elseif (strpos($nameLower, 'backpack') !== false) {
+                    return "{$base} leather backpack, {$quality}, brown leather adventuring pack with straps and buckles, clean background, professional photography";
+                } elseif (strpos($nameLower, 'bedroll') !== false) {
+                    return "{$base} bedroll, {$quality}, rolled sleeping blanket tied with leather straps, clean background, professional photography";
+                } elseif (strpos($nameLower, 'tinderbox') !== false || strpos($nameLower, 'flint') !== false) {
+                    return "{$base} tinderbox with flint and steel, {$quality}, small wooden box with flint stone and steel striker and dry tinder, clean background, professional photography";
+                } elseif (strpos($nameLower, 'waterskin') !== false || strpos($nameLower, 'wineskin') !== false) {
+                    return "{$base} leather waterskin, {$quality}, leather water container with cork stopper, clean background, professional photography";
+                } elseif (strpos($nameLower, 'rations') !== false) {
+                    return "{$base} travel rations, {$quality}, dried food provisions in cloth wrapping, clean background, professional photography";
+                } elseif (strpos($nameLower, 'lantern') !== false) {
+                    return "{$base} {$itemName}, {$quality}, metal lantern with glass panes and oil reservoir, clean background, professional photography";
+                } elseif (strpos($nameLower, 'pouch') !== false) {
+                    return "{$base} leather pouch, {$quality}, small leather belt pouch with drawstring, clean background, professional photography";
+                } elseif (strpos($nameLower, 'sack') !== false) {
+                    return "{$base} {$itemName}, {$quality}, large cloth or burlap sack, clean background, professional photography";
+                } elseif (strpos($nameLower, 'flask') !== false || strpos($nameLower, 'vial') !== false) {
+                    return "{$base} glass {$itemName}, {$quality}, small glass container with cork stopper, clean background, professional photography";
+                } elseif (strpos($nameLower, 'holy') !== false) {
+                    return "{$base} holy symbol, {$quality}, ornate religious symbol on chain, clean background, professional photography";
+                } elseif (strpos($nameLower, 'mirror') !== false) {
+                    return "{$base} hand mirror, {$quality}, polished metal mirror in decorative frame, clean background, professional photography";
+                } elseif (strpos($nameLower, 'crowbar') !== false) {
+                    return "{$base} iron crowbar, {$quality}, heavy iron prying tool, clean background, professional photography";
+                } elseif (strpos($nameLower, 'spike') !== false) {
+                    return "{$base} iron spikes, {$quality}, metal pitons for climbing, clean background, professional photography";
+                } elseif (strpos($nameLower, 'grappling') !== false) {
+                    return "{$base} grappling hook, {$quality}, metal hook with rope attached, clean background, professional photography";
+                } else {
+                    return "{$base} {$itemName}, {$quality}, adventuring gear equipment, clean background, professional photography";
+                }
                 break;
+                
             case 'consumable':
-                $basePrompt .= "highly detailed medieval consumable item, dramatic lighting, museum quality photography, 8K resolution, sharp focus";
+                if (strpos($nameLower, 'oil') !== false) {
+                    return "{$base} oil flask, {$quality}, glass flask containing lamp oil or burning oil, clean background, professional photography";
+                } elseif (strpos($nameLower, 'potion') !== false) {
+                    return "{$base} {$itemName}, {$quality}, glass vial with magical liquid, clean background, professional photography";
+                } elseif (strpos($nameLower, 'holy water') !== false) {
+                    return "{$base} holy water vial, {$quality}, blessed water in ornate glass vial, clean background, professional photography";
+                } else {
+                    return "{$base} {$itemName}, {$quality}, clean background, professional photography, {$description}";
+                }
                 break;
+                
             default:
-                $basePrompt .= "highly detailed medieval item, dramatic lighting, museum quality photography, 8K resolution, sharp focus";
+                return "{$base} {$itemName}, {$quality}, medieval equipment item, clean background, professional photography, {$description}";
         }
-        
-        if (!empty($item['description'])) {
-            $basePrompt .= ", " . strtolower($item['description']);
-        }
-        
-        return $basePrompt;
     }
     
     // Function to generate image
-    function generateImage($item, $apiKey, $apiUrl, $model) {
+    function generateImage($item, $apiKey, $apiUrl, $model, $negativePrompt) {
         $prompt = createEquipmentPrompt($item);
         
         $requestData = [
             'model' => $model,
             'prompt' => $prompt,
             'width' => 1024,
-            'height' => 768,
-            'steps' => 4,
+            'height' => 1024,  // Square format better for items
+            'steps' => 8,  // Increased for better quality
             'n' => 1,
-            'response_format' => 'b64_json'
+            'response_format' => 'b64_json',
+            'negative_prompt' => $negativePrompt
         ];
         
         $ch = curl_init($apiUrl);
@@ -182,7 +284,7 @@ try {
         }
         
         // Generate image
-        $imageBase64 = generateImage($item, $apiKey, $apiUrl, $model);
+        $imageBase64 = generateImage($item, $apiKey, $apiUrl, $model, $negativePrompt);
         
         if ($imageBase64 === null) {
             $result['success'] = false;
@@ -226,7 +328,11 @@ try {
     }
     
     // Get total count
-    $countQuery = "SELECT COUNT(*) as total FROM items WHERE image_url IS NULL OR image_url = ''";
+    if ($overwrite) {
+        $countQuery = "SELECT COUNT(*) as total FROM items";
+    } else {
+        $countQuery = "SELECT COUNT(*) as total FROM items WHERE image_url IS NULL OR image_url = ''";
+    }
     $countStmt = $db->prepare($countQuery);
     $countStmt->execute();
     $totalRemaining = $countStmt->fetch(PDO::FETCH_ASSOC)['total'];
