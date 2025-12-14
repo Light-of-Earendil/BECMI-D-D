@@ -231,6 +231,12 @@ class BECMIApp {
         // Modal close handlers - only close if clicking on modal background, not content
         $(document).on('click', '.modal', (e) => {
             if (e.target === e.currentTarget) {
+                // NEVER close login or register modals on background click - user must log in!
+                if (e.currentTarget.id === 'login-modal' || e.currentTarget.id === 'register-modal') {
+                    console.log('Preventing auth modal close on background click - user must authenticate');
+                    return;
+                }
+                
                 // Don't close character creation modal on background click - user could lose progress!
                 if (e.currentTarget.id === 'character-creation-modal') {
                     console.log('Preventing character creation modal close on background click');
@@ -240,11 +246,6 @@ class BECMIApp {
                 // Only close if clicking on the modal background itself
                 console.log('Closing modal:', e.currentTarget.id);
                 $(e.currentTarget).removeClass('show');
-                
-                // If closing login modal and user is not authenticated, show main app
-                if (e.currentTarget.id === 'login-modal' && !this.state.user) {
-                    this.showMainApp();
-                }
             }
         });
         
@@ -264,6 +265,13 @@ class BECMIApp {
     navigateToView(viewName) {
         if (!viewName) {
             console.error('navigateToView called with no view name');
+            return;
+        }
+        
+        // SECURITY: Never navigate without authentication (except to login view)
+        if (viewName !== 'login' && !this.state.user) {
+            console.warn('Attempted to navigate without authentication - showing login modal');
+            this.showLoginModal();
             return;
         }
         
@@ -378,9 +386,16 @@ class BECMIApp {
     }
     
     /**
-     * Show main application
+     * Show main application (only if user is authenticated)
      */
     showMainApp() {
+        // SECURITY: Never show app without authentication
+        if (!this.state.user) {
+            console.warn('Attempted to show main app without authentication - showing login modal instead');
+            this.showLoginModal();
+            return;
+        }
+        
         $('#app').addClass('loaded');
         $('.modal').removeClass('show');
     }
