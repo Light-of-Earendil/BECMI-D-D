@@ -174,12 +174,30 @@ class Security {
      * Attempt to send an email. Falls back to logging if mail() fails.
      */
     public static function sendEmail($to, $subject, $message, $headers = []) {
+        // Normalize header keys to handle both 'Content-Type' and 'Content-type'
+        $normalizedHeaders = [];
+        foreach ($headers as $key => $value) {
+            $normalizedKey = ucwords(strtolower(str_replace('-', '-', $key)), '-');
+            // Handle special case for Content-Type
+            if (stripos($key, 'content-type') !== false || stripos($key, 'content-type') !== false) {
+                $normalizedKey = 'Content-Type';
+            }
+            $normalizedHeaders[$normalizedKey] = $value;
+        }
+        
         $defaultHeaders = [
             'Content-Type' => 'text/plain; charset=UTF-8',
             'From' => $_ENV['MAIL_FROM'] ?? 'no-reply@' . (explode(':', $_SERVER['HTTP_HOST'] ?? 'localhost')[0])
         ];
 
-        $merged = array_merge($defaultHeaders, $headers);
+        // Merge with normalized headers (normalized headers take precedence)
+        $merged = array_merge($defaultHeaders, $normalizedHeaders);
+        
+        // If Content-Type contains 'html', ensure it's set correctly
+        if (isset($merged['Content-Type']) && stripos($merged['Content-Type'], 'html') !== false) {
+            $merged['Content-Type'] = 'text/html; charset=UTF-8';
+        }
+        
         $formattedHeaders = '';
         foreach ($merged as $key => $value) {
             $formattedHeaders .= $key . ': ' . $value . "\r\n";
@@ -386,6 +404,11 @@ class Security {
             error_log("WARNING: Failed to add CSRF token to success response: " . $e->getMessage());
         }
         
+        // Clear output buffer before sending JSON
+        if (ob_get_level()) {
+            ob_clean();
+        }
+        
         echo json_encode($response);
         exit;
     }
@@ -394,6 +417,11 @@ class Security {
      * Send error response
      */
     public static function sendErrorResponse($message = 'An error occurred', $code = 500) {
+        // Clear output buffer before sending JSON
+        if (ob_get_level()) {
+            ob_clean();
+        }
+        
         http_response_code($code);
         header('Content-Type: application/json');
         echo json_encode([

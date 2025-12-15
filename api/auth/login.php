@@ -27,7 +27,7 @@ try {
     $errors = [];
     
     if (empty($input['username'])) {
-        $errors['username'] = 'Username is required';
+        $errors['username'] = 'Username or email is required';
     }
     
     if (empty($input['password'])) {
@@ -39,16 +39,10 @@ try {
     }
     
     // Sanitize input
-    $username = Security::sanitizeInput($input['username']);
+    $loginIdentifier = Security::sanitizeInput($input['username']);
     $password = $input['password'];
     
-    error_log("LOGIN ATTEMPT: Username: $username, Password length: " . strlen($password));
-    
-    // Validate username format
-    if (!Security::validateUsername($username)) {
-        error_log("LOGIN FAILED: Invalid username format for: $username");
-        Security::sendValidationErrorResponse(['username' => 'Invalid username format']);
-    }
+    error_log("LOGIN ATTEMPT: Identifier: $loginIdentifier, Password length: " . strlen($password));
     
     // Check rate limiting (more lenient for development)
     $rateLimitKey = "login_" . Security::getClientIP();
@@ -60,16 +54,33 @@ try {
     // Get database connection
     $db = getDB();
     
-    // Find user by username
-    $user = $db->selectOne(
-        "SELECT user_id, username, email, password_hash, is_active FROM users WHERE username = ?",
-        [$username]
-    );
+    // Determine if identifier is email or username
+    $isEmail = Security::validateEmail($loginIdentifier);
+    
+    // Find user by username or email
+    if ($isEmail) {
+        $user = $db->selectOne(
+            "SELECT user_id, username, email, password_hash, is_active FROM users WHERE email = ?",
+            [$loginIdentifier]
+        );
+        error_log("LOGIN: Searching by email: $loginIdentifier");
+    } else {
+        // Validate username format if it's not an email
+        if (!Security::validateUsername($loginIdentifier)) {
+            error_log("LOGIN FAILED: Invalid username format for: $loginIdentifier");
+            Security::sendValidationErrorResponse(['username' => 'Invalid username format']);
+        }
+        $user = $db->selectOne(
+            "SELECT user_id, username, email, password_hash, is_active FROM users WHERE username = ?",
+            [$loginIdentifier]
+        );
+        error_log("LOGIN: Searching by username: $loginIdentifier");
+    }
     
     if (!$user) {
-        error_log("LOGIN FAILED: User not found: $username");
-        Security::logSecurityEvent('login_failed', ['username' => $username, 'reason' => 'user_not_found']);
-        Security::sendErrorResponse('Invalid username or password', 401);
+        error_log("LOGIN FAILED: User not found: $loginIdentifier");
+        Security::logSecurityEvent('login_failed', ['identifier' => $loginIdentifier, 'reason' => 'user_not_found']);
+        Security::sendErrorResponse('Invalid username/email or password', 401);
     }
     
     error_log("LOGIN: User found - user_id: {$user['user_id']}, is_active: {$user['is_active']}");
@@ -88,9 +99,9 @@ try {
     error_log("LOGIN: Password verification result: " . ($passwordVerified ? 'SUCCESS' : 'FAILED'));
     
     if (!$passwordVerified) {
-        error_log("LOGIN FAILED: Invalid password for username: $username (user_id: {$user['user_id']})");
-        Security::logSecurityEvent('login_failed', ['username' => $username, 'reason' => 'invalid_password']);
-        Security::sendErrorResponse('Invalid username or password', 401);
+        error_log("LOGIN FAILED: Invalid password for identifier: $loginIdentifier (user_id: {$user['user_id']})");
+        Security::logSecurityEvent('login_failed', ['identifier' => $loginIdentifier, 'reason' => 'invalid_password']);
+        Security::sendErrorResponse('Invalid username/email or password', 401);
     }
     
     error_log("LOGIN: Password verified successfully for user_id: {$user['user_id']}");
@@ -105,7 +116,7 @@ try {
     }
     
     // Update user's last login
-    $db->update(
+    $db->execute(
         "UPDATE users SET last_login = NOW() WHERE user_id = ?",
         [$user['user_id']]
     );
@@ -117,7 +128,7 @@ try {
     $_SESSION['csrf_token'] = $csrfToken;
     
     // Log successful login
-    Security::logSecurityEvent('login_success', ['username' => $username]);
+    Security::logSecurityEvent('login_success', ['username' => $user['username'], 'identifier' => $loginIdentifier]);
     
     // Return success response
     Security::sendSuccessResponse([

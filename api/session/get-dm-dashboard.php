@@ -136,6 +136,8 @@ try {
             [$playerId, $sessionId]
         );
         
+        // Note: Abilities are already included in the SELECT above (strength, dexterity, etc.)
+        
         // Format character data
         $formattedCharacters = array_map(function($char) use ($db) {
             require_once '../../app/services/becmi-rules.php';
@@ -144,8 +146,92 @@ try {
                 ? ($char['current_hp'] / $char['max_hp']) * 100 
                 : 0;
             
+            // Get character inventory for AC calculation
+            $inventory = $db->select(
+                "SELECT ci.*, i.name, i.description, i.weight_cn, i.cost_gp, i.item_type, 
+                        i.damage_die, i.damage_type, i.ac_bonus, i.weapon_type, i.range_short, i.range_long
+                 FROM character_inventory ci 
+                 JOIN items i ON ci.item_id = i.item_id 
+                 WHERE ci.character_id = ? 
+                 ORDER BY ci.is_equipped DESC, i.item_type, i.name",
+                [$char['character_id']]
+            );
+            
             // Recalculate THAC0 correctly (only base value)
             $thac0Data = BECMIRulesEngine::calculateTHAC0($char);
+            
+            // Recalculate AC with inventory (armor, shield, dexterity)
+            $armorClass = BECMIRulesEngine::calculateArmorClass($char, $inventory);
+            
+            // Get XP needed for next level
+            $xpForNextLevel = BECMIRulesEngine::getExperienceForNextLevel($char['class'], $char['level']);
+            
+            // Get character skills
+            $skills = $db->select(
+                "SELECT skill_name, bonus, learned_at_level, notes 
+                 FROM character_skills 
+                 WHERE character_id = ? 
+                 ORDER BY skill_name",
+                [$char['character_id']]
+            );
+            
+            // Get character spells (if spellcasting class)
+            $spells = [];
+            $spellsByLevel = [];
+            $memorizedByLevel = [];
+            $memorizedSpells = [];
+            $spellSlotsByLevel = [];
+            
+            if (in_array($char['class'], ['magic_user', 'cleric', 'elf', 'druid'])) {
+                // Get spell slots available at this level
+                // getSpellSlots returns an associative array with level as key (1-indexed)
+                // Format: [1 => slots, 2 => slots, 3 => slots, ...]
+                $spellSlots = BECMIRulesEngine::getSpellSlots($char['class'], $char['level']);
+                $spellSlotsByLevel = $spellSlots; // Already in the correct format
+                
+                $spellData = $db->select(
+                    "SELECT cs.spell_id, cs.spell_name, cs.spell_level, cs.spell_type,
+                            cs.is_memorized, cs.times_cast_today,
+                            s.range_text, s.duration_text
+                     FROM character_spells cs
+                     JOIN spells s ON cs.spell_id = s.spell_id
+                     WHERE cs.character_id = ?
+                     ORDER BY cs.spell_level, cs.spell_name",
+                    [$char['character_id']]
+                );
+                
+                foreach ($spellData as $spell) {
+                    $spellLevel = (int) $spell['spell_level'];
+                    $isMemorized = (bool) $spell['is_memorized'];
+                    
+                    $spells[] = [
+                        'spell_id' => (int) $spell['spell_id'],
+                        'spell_name' => $spell['spell_name'],
+                        'spell_level' => $spellLevel,
+                        'spell_type' => $spell['spell_type'],
+                        'is_memorized' => $isMemorized,
+                        'times_cast_today' => (int) $spell['times_cast_today']
+                    ];
+                    
+                    if (!isset($spellsByLevel[$spellLevel])) {
+                        $spellsByLevel[$spellLevel] = [];
+                    }
+                    $spellsByLevel[$spellLevel][] = $spell['spell_name'];
+                    
+                    if ($isMemorized) {
+                        if (!isset($memorizedByLevel[$spellLevel])) {
+                            $memorizedByLevel[$spellLevel] = 0;
+                        }
+                        $memorizedByLevel[$spellLevel]++;
+                        
+                        // Add to memorized spells list
+                        if (!isset($memorizedSpells[$spellLevel])) {
+                            $memorizedSpells[$spellLevel] = [];
+                        }
+                        $memorizedSpells[$spellLevel][] = $spell['spell_name'];
+                    }
+                }
+            }
             
             return [
                 'character_id' => (int) $char['character_id'],
@@ -153,6 +239,7 @@ try {
                 'class' => $char['class'],
                 'level' => (int) $char['level'],
                 'experience_points' => (int) $char['experience_points'],
+                'xp_for_next_level' => $xpForNextLevel ? (int) $xpForNextLevel : null,
                 'hp' => [
                     'current' => (int) $char['current_hp'],
                     'max' => (int) $char['max_hp'],
@@ -168,7 +255,7 @@ try {
                     'charisma' => (int) $char['charisma']
                 ],
                 'combat' => [
-                    'armor_class' => (int) $char['armor_class'],
+                    'armor_class' => (int) $armorClass, // Recalculated with inventory
                     'thac0' => (int) $thac0Data['base'], // Only ONE THAC0
                     'strength_to_hit_bonus' => (int) $thac0Data['strength_bonus'], // Separate bonus
                     'dexterity_to_hit_bonus' => (int) $thac0Data['dexterity_bonus'] // Separate bonus
@@ -197,6 +284,23 @@ try {
                     'gold' => (int) $char['gold_pieces'],
                     'silver' => (int) $char['silver_pieces'],
                     'copper' => (int) $char['copper_pieces']
+                ],
+                'skills' => array_map(function($skill) {
+                    return [
+                        'skill_name' => $skill['skill_name'],
+                        'bonus' => (int) $skill['bonus'],
+                        'learned_at_level' => (int) $skill['learned_at_level'],
+                        'notes' => $skill['notes']
+                    ];
+                }, $skills),
+                'spells' => [
+                    'all' => $spells,
+                    'by_level' => $spellsByLevel,
+                    'slots_by_level' => $spellSlotsByLevel, // Spell slots available per level
+                    'memorized_by_level' => $memorizedByLevel,
+                    'memorized_spells' => $memorizedSpells, // Actual memorized spell names by level
+                    'total' => count($spells),
+                    'total_memorized' => array_sum($memorizedByLevel)
                 ],
                 'created_at' => $char['created_at'],
                 'updated_at' => $char['updated_at']

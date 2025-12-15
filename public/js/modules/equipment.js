@@ -240,7 +240,7 @@ class EquipmentModule {
                 <div class="item-image-container">
                     ${hasImage ? `
                         <div class="item-image">
-                            <img src="${item.image_url}" alt="${item.name}" loading="lazy" onerror="this.style.display='none'; const icon = this.closest('.item-image-container').querySelector('.item-icon'); if (icon) icon.style.display='flex';">
+                            <img src="${item.image_url}?v=${Date.now()}" alt="${item.name}" loading="lazy" onerror="this.style.display='none'; const icon = this.closest('.item-image-container').querySelector('.item-icon'); if (icon) icon.style.display='flex';">
                         </div>
                     ` : ''}
                     <div class="item-icon" style="display: ${hasImage ? 'none' : 'flex'};">
@@ -334,10 +334,21 @@ class EquipmentModule {
                 stats.push(`<span class="stat"><i class="fas fa-weight-hanging"></i> ${item.weight_cn} cn</span>`);
             }
         }
-        // Regular weapons
+        // Regular weapons (including shield weapons)
         else if (item.item_type === 'weapon') {
-            if (item.damage_die) {
-                stats.push(`<span class="stat"><i class="fas fa-dice"></i> ${item.damage_die}</span>`);
+            // Shield weapons: show damage (Basic "BS" level) and AC bonus
+            if (item.item_category === 'shield') {
+                if (item.damage_die) {
+                    stats.push(`<span class="stat"><i class="fas fa-dice"></i> BS ${item.damage_die}</span>`);
+                }
+                if (item.ac_bonus !== null && item.ac_bonus !== undefined) {
+                    stats.push(`<span class="stat"><i class="fas fa-shield-alt"></i> AC ${item.ac_bonus}</span>`);
+                }
+            } else {
+                // Regular weapons
+                if (item.damage_die) {
+                    stats.push(`<span class="stat"><i class="fas fa-dice"></i> ${item.damage_die}</span>`);
+                }
             }
             if (item.range_short && item.range_medium && item.range_long) {
                 stats.push(`<span class="stat"><i class="fas fa-crosshairs"></i> ${item.range_short}/${item.range_medium}/${item.range_long}</span>`);
@@ -348,6 +359,10 @@ class EquipmentModule {
         }
         // Armor and shields
         else if (item.item_type === 'armor' || item.item_type === 'shield') {
+            // Shield weapons: show Basic "BS" damage if they have damage_die
+            if (item.item_type === 'shield' && item.damage_die) {
+                stats.push(`<span class="stat"><i class="fas fa-dice"></i> ${item.damage_die}</span>`);
+            }
             if (item.ac_bonus !== null && item.ac_bonus !== undefined) {
                 stats.push(`<span class="stat"><i class="fas fa-shield-alt"></i> AC ${item.ac_bonus}</span>`);
             }

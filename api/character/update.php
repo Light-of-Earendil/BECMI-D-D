@@ -64,8 +64,9 @@ try {
     
     // Verify user owns this character OR is the DM
     $hasAccess = false;
+    $isOwner = $existingCharacter['user_id'] == $userId;
     
-    if ($existingCharacter['user_id'] == $userId) {
+    if ($isOwner) {
         $hasAccess = true;
     }
     
@@ -109,7 +110,8 @@ try {
         'gold_pieces',
         'silver_pieces',
         'copper_pieces',
-        'portrait_url'
+        'portrait_url',
+        'session_id' // Allow assigning/unassigning character to/from session
     ];
     
     $abilityFields = [
@@ -127,8 +129,72 @@ try {
     $updateFields = [];
     $updateValues = [];
     
-    // Process simple fields
+    // Special handling for session_id (must be validated before processing)
+    if (isset($updateData['session_id'])) {
+        $newSessionId = $updateData['session_id'] === '' || $updateData['session_id'] === null ? null : (int) $updateData['session_id'];
+        $oldSessionId = $existingCharacter['session_id'] ? (int) $existingCharacter['session_id'] : null;
+        
+        if ($newSessionId !== $oldSessionId) {
+            // Only allow owners to change session_id
+            if (!$isOwner) {
+                Security::sendValidationErrorResponse(['session_id' => 'Only the character owner can assign/unassign from sessions']);
+            }
+            
+            // If assigning to a session, validate access
+            if ($newSessionId !== null) {
+                // Check if session exists and user has access
+                $sessionCheck = $db->selectOne(
+                    "SELECT gs.dm_user_id, sp.status
+                     FROM game_sessions gs
+                     LEFT JOIN session_players sp ON sp.session_id = gs.session_id AND sp.user_id = ?
+                     WHERE gs.session_id = ?",
+                    [$userId, $newSessionId]
+                );
+                
+                if (!$sessionCheck) {
+                    Security::sendValidationErrorResponse(['session_id' => 'Session not found']);
+                }
+                
+                // Check if user is DM or accepted player
+                $isDM = $sessionCheck['dm_user_id'] == $userId;
+                $isAcceptedPlayer = $sessionCheck['status'] === 'accepted';
+                
+                if (!$isDM && !$isAcceptedPlayer) {
+                    Security::sendValidationErrorResponse(['session_id' => 'You must be the DM or an accepted player to assign characters to this session']);
+                }
+                
+                // Check if user already has a character in this session
+                $existingCharInSession = $db->selectOne(
+                    "SELECT character_id FROM characters 
+                     WHERE user_id = ? AND session_id = ? AND character_id != ? AND is_active = 1",
+                    [$userId, $newSessionId, $characterId]
+                );
+                
+                if ($existingCharInSession) {
+                    Security::sendValidationErrorResponse(['session_id' => 'You already have a character in this session']);
+                }
+            }
+            
+            // Add to update
+            $updateFields[] = "session_id = ?";
+            $updateValues[] = $newSessionId;
+            
+            $changes[] = [
+                'field' => 'session_id',
+                'old' => $oldSessionId,
+                'new' => $newSessionId
+            ];
+            
+            error_log("CHARACTER UPDATE - Session assignment change: from session " . ($oldSessionId ?? 'none') . " to session " . ($newSessionId ?? 'none'));
+        }
+    }
+    
+    // Process simple fields (excluding session_id which is handled above)
     foreach ($simpleFields as $field) {
+        if ($field === 'session_id') {
+            continue; // Skip, already handled above
+        }
+        
         if (isset($updateData[$field]) && $updateData[$field] !== $existingCharacter[$field]) {
             $updateFields[] = "$field = ?";
             $updateValues[] = $updateData[$field];

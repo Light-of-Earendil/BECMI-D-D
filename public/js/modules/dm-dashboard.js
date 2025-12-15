@@ -971,13 +971,19 @@ class DMDashboardModule {
      */
     async showAwardXPModal(sessionId) {
         try {
+            // Load dashboard data if not already loaded
             if (!this.currentDashboard || !this.currentDashboard.players) {
-                this.app.showError('Dashboard data not loaded');
-                return;
+                const dashboardData = await this.loadDashboard(sessionId);
+                this.currentDashboard = dashboardData;
+            }
+            
+            // Also try using dashboardData if currentDashboard is not set
+            if (!this.currentDashboard && this.dashboardData) {
+                this.currentDashboard = this.dashboardData;
             }
             
             // Get all characters in this session
-            const allCharacters = this.currentDashboard.players.flatMap(player => player.characters);
+            const allCharacters = (this.currentDashboard?.players || this.dashboardData?.players || []).flatMap(player => player.characters || []);
             
             if (allCharacters.length === 0) {
                 this.app.showError('No characters in this session to award XP to');
@@ -985,90 +991,106 @@ class DMDashboardModule {
             }
             
             const modal = $(`
-                <div class="modal fade" id="awardXPModal" tabindex="-1" role="dialog">
-                    <div class="modal-dialog modal-lg" role="document">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title">
-                                    <i class="fas fa-star"></i> Award Experience Points
-                                </h5>
-                                <button type="button" class="close" data-dismiss="modal">
-                                    <span>&times;</span>
-                                </button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="xp-award-form">
-                                    <div class="form-group">
-                                        <label>Select Characters:</label>
-                                        <div class="character-checkboxes">
-                                            <label class="checkbox-label select-all">
-                                                <input type="checkbox" id="select-all-characters">
-                                                <strong>Select All Characters</strong>
+                <div id="awardXPModal" class="modal">
+                    <div class="modal-content" style="max-width: 700px;">
+                        <div class="modal-header">
+                            <h2><i class="fas fa-star"></i> Award Experience Points</h2>
+                            <p>Select characters and award XP for their achievements</p>
+                        </div>
+                        <div class="modal-body" style="padding: var(--space-6);">
+                            <div class="xp-award-form">
+                                <div class="form-group" style="margin-bottom: var(--space-4);">
+                                    <label style="display: block; margin-bottom: var(--space-2); font-weight: bold;">Select Characters:</label>
+                                    <div class="character-checkboxes" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--wood-700); padding: var(--space-3); border-radius: var(--radius-md); background: var(--wood-800);">
+                                        <label class="checkbox-label select-all" style="display: block; margin-bottom: var(--space-2); padding: var(--space-2); background: var(--wood-700); border-radius: var(--radius-sm); cursor: pointer;">
+                                            <input type="checkbox" id="select-all-characters" style="margin-right: var(--space-2);">
+                                            <strong>Select All Characters</strong>
+                                        </label>
+                                        ${allCharacters.map(char => {
+                                            const abilities = char.abilities || {};
+                                            return `
+                                            <label class="checkbox-label" style="display: block; margin-bottom: var(--space-1); padding: var(--space-2); cursor: pointer; border-radius: var(--radius-sm);">
+                                                <input type="checkbox" 
+                                                       class="character-checkbox" 
+                                                       data-character-id="${char.character_id}"
+                                                       data-character-name="${char.character_name}"
+                                                       data-character-class="${char.class}"
+                                                       data-strength="${abilities.strength || 10}"
+                                                       data-dexterity="${abilities.dexterity || 10}"
+                                                       data-constitution="${abilities.constitution || 10}"
+                                                       data-intelligence="${abilities.intelligence || 10}"
+                                                       data-wisdom="${abilities.wisdom || 10}"
+                                                       data-charisma="${abilities.charisma || 10}"
+                                                       style="margin-right: var(--space-2);">
+                                                ${char.character_name} (Level ${char.level} ${char.class})
                                             </label>
-                                            ${allCharacters.map(char => `
-                                                <label class="checkbox-label">
-                                                    <input type="checkbox" 
-                                                           class="character-checkbox" 
-                                                           data-character-id="${char.character_id}"
-                                                           data-character-name="${char.character_name}">
-                                                    ${char.character_name} (Level ${char.level} ${char.class})
-                                                </label>
-                                            `).join('')}
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="form-group">
-                                        <label for="xp-amount">XP Amount:</label>
-                                        <input type="number" 
-                                               id="xp-amount" 
-                                               class="form-control" 
-                                               min="1" 
-                                               placeholder="Enter XP to award"
-                                               required>
-                                        <div class="quick-xp-buttons">
-                                            <button class="btn btn-sm btn-outline-secondary" data-xp="100">+100</button>
-                                            <button class="btn btn-sm btn-outline-secondary" data-xp="250">+250</button>
-                                            <button class="btn btn-sm btn-outline-secondary" data-xp="500">+500</button>
-                                            <button class="btn btn-sm btn-outline-secondary" data-xp="1000">+1000</button>
-                                            <button class="btn btn-sm btn-outline-secondary" data-xp="2500">+2500</button>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="form-group">
-                                        <label for="xp-reason">Reason:</label>
-                                        <input type="text" 
-                                               id="xp-reason" 
-                                               class="form-control" 
-                                               placeholder="e.g., Defeated dragon, Completed quest"
-                                               required>
-                                    </div>
-                                    
-                                    <div class="xp-preview" id="xp-preview" style="display: none;">
-                                        <h6>Award Summary:</h6>
-                                        <p id="preview-text"></p>
+                                        `;
+                                        }).join('')}
                                     </div>
                                 </div>
+                                
+                                <div class="form-group" style="margin-bottom: var(--space-4);">
+                                    <label for="xp-amount" style="display: block; margin-bottom: var(--space-2); font-weight: bold;">XP Amount:</label>
+                                    <input type="number" 
+                                           id="xp-amount" 
+                                           class="form-control" 
+                                           min="1" 
+                                           placeholder="Enter XP to award"
+                                           required
+                                           style="width: 100%; padding: var(--space-3); margin-bottom: var(--space-2);">
+                                    <div class="quick-xp-buttons" style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+                                        <button class="btn btn-sm btn-outline-secondary" data-xp="100" type="button">+100</button>
+                                        <button class="btn btn-sm btn-outline-secondary" data-xp="250" type="button">+250</button>
+                                        <button class="btn btn-sm btn-outline-secondary" data-xp="500" type="button">+500</button>
+                                        <button class="btn btn-sm btn-outline-secondary" data-xp="1000" type="button">+1000</button>
+                                        <button class="btn btn-sm btn-outline-secondary" data-xp="2500" type="button">+2500</button>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group" style="margin-bottom: var(--space-4);">
+                                    <label for="xp-reason" style="display: block; margin-bottom: var(--space-2); font-weight: bold;">Reason:</label>
+                                    <input type="text" 
+                                           id="xp-reason" 
+                                           class="form-control" 
+                                           placeholder="e.g., Defeated dragon, Completed quest"
+                                           required
+                                           style="width: 100%; padding: var(--space-3);">
+                                </div>
+                                
+                                <div class="xp-preview" id="xp-preview" style="display: none; padding: var(--space-3); background: var(--wood-700); border-radius: var(--radius-md); margin-top: var(--space-4);">
+                                    <h6 style="margin-bottom: var(--space-2);">Award Summary:</h6>
+                                    <p id="preview-text"></p>
+                                </div>
                             </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                                <button type="button" class="btn btn-success" id="confirm-award-xp" disabled>
-                                    <i class="fas fa-check"></i> Award XP
-                                </button>
-                            </div>
+                        </div>
+                        <div class="modal-footer" style="padding: var(--space-4) var(--space-6); border-top: 2px solid var(--wood-900); display: flex; justify-content: flex-end; gap: var(--space-2);">
+                            <button type="button" class="btn btn-secondary" id="cancel-award-xp">Cancel</button>
+                            <button type="button" class="btn btn-success" id="confirm-award-xp" disabled>
+                                <i class="fas fa-check"></i> Award XP
+                            </button>
                         </div>
                     </div>
                 </div>
             `);
             
             $('body').append(modal);
-            $('#awardXPModal').modal('show');
+            $('#awardXPModal').addClass('show');
             
             // Setup modal handlers
             this.setupAwardXPHandlers(sessionId);
             
-            // Cleanup when closed
-            $('#awardXPModal').on('hidden.bs.modal', () => {
-                $('#awardXPModal').remove();
+            // Close button handler
+            $('#cancel-award-xp').on('click', () => {
+                $('#awardXPModal').removeClass('show');
+                setTimeout(() => $('#awardXPModal').remove(), 300);
+            });
+            
+            // Close on background click (but not on content click)
+            $('#awardXPModal').on('click', (e) => {
+                if (e.target === e.currentTarget) {
+                    $('#awardXPModal').removeClass('show');
+                    setTimeout(() => $('#awardXPModal').remove(), 300);
+                }
             });
             
         } catch (error) {
@@ -1098,7 +1120,50 @@ class DMDashboardModule {
             
             if (selectedCharacters.length > 0 && xpAmount > 0) {
                 const charNames = selectedCharacters.map(c => c.name).join(', ');
-                $('#preview-text').text(`Award ${xpAmount.toLocaleString()} XP to: ${charNames}`);
+                // Calculate XP per character (divided and rounded up)
+                const baseXpPerCharacter = Math.ceil(xpAmount / selectedCharacters.length);
+                
+                // Calculate adjusted XP with prime requisite bonuses/penalties
+                let previewHtml = `<strong>Base XP per character:</strong> ${baseXpPerCharacter.toLocaleString()} XP<br>`;
+                previewHtml += `<strong>Characters:</strong> ${selectedCharacters.length}<br><br>`;
+                previewHtml += `<strong>Adjusted XP (with prime requisite bonus/penalty):</strong><br>`;
+                
+                let totalAdjustedXp = 0;
+                $('.character-checkbox:checked').each(function() {
+                    const charId = $(this).data('character-id');
+                    const charName = $(this).data('character-name');
+                    const charClass = $(this).data('character-class');
+                    const abilities = {
+                        strength: parseInt($(this).data('strength')) || 10,
+                        dexterity: parseInt($(this).data('dexterity')) || 10,
+                        constitution: parseInt($(this).data('constitution')) || 10,
+                        intelligence: parseInt($(this).data('intelligence')) || 10,
+                        wisdom: parseInt($(this).data('wisdom')) || 10,
+                        charisma: parseInt($(this).data('charisma')) || 10
+                    };
+                    
+                    // Calculate XP bonus if BECMIRulesEngine is available
+                    let adjustedXp = baseXpPerCharacter;
+                    let bonusText = '';
+                    if (window.BECMIRulesEngine) {
+                        const rulesEngine = new window.BECMIRulesEngine();
+                        const multiplier = rulesEngine.getExperienceBonus(charClass, abilities);
+                        adjustedXp = Math.round(baseXpPerCharacter * multiplier);
+                        const bonus = adjustedXp - baseXpPerCharacter;
+                        if (bonus !== 0) {
+                            const percent = Math.round((multiplier - 1) * 100);
+                            bonusText = ` (${bonus > 0 ? '+' : ''}${bonus} XP, ${percent > 0 ? '+' : ''}${percent}%)`;
+                        }
+                    }
+                    
+                    totalAdjustedXp += adjustedXp;
+                    previewHtml += `&nbsp;&nbsp;• ${charName}: ${adjustedXp.toLocaleString()} XP${bonusText}<br>`;
+                });
+                
+                previewHtml += `<br><strong>Total adjusted XP:</strong> ${totalAdjustedXp.toLocaleString()} XP<br>`;
+                previewHtml += `<strong>Recipients:</strong> ${charNames}`;
+                
+                $('#preview-text').html(previewHtml);
                 $('#xp-preview').show();
             } else {
                 $('#xp-preview').hide();
@@ -1149,9 +1214,29 @@ class DMDashboardModule {
             });
             
             if (response.status === 'success') {
-                $('#awardXPModal').modal('hide');
+                $('#awardXPModal').removeClass('show');
+                setTimeout(() => $('#awardXPModal').remove(), 300);
                 
-                this.app.showSuccess(`Awarded ${xpAmount.toLocaleString()} XP to ${response.data.characters_updated} character(s)`);
+                // Build success message showing actual XP awarded (with bonuses/penalties)
+                let successMessage = '';
+                if (response.data.characters && response.data.characters.length > 0) {
+                    const xpDetails = response.data.characters.map(char => {
+                        let detail = `${char.character_name}: ${char.xp_adjusted.toLocaleString()} XP`;
+                        if (char.xp_bonus !== 0) {
+                            const bonusText = char.xp_bonus > 0 ? `+${char.xp_bonus}` : char.xp_bonus;
+                            const percentText = char.xp_multiplier > 1 ? ` (+${Math.round((char.xp_multiplier - 1) * 100)}%)` : 
+                                               char.xp_multiplier < 1 ? ` (${Math.round((char.xp_multiplier - 1) * 100)}%)` : '';
+                            detail += ` (base: ${char.xp_base.toLocaleString()}${percentText})`;
+                        }
+                        return detail;
+                    }).join('\n');
+                    successMessage = `Awarded XP:\n${xpDetails}`;
+                } else {
+                    const xpPerChar = response.data.xp_per_character || xpAmount;
+                    successMessage = `Awarded ${xpPerChar.toLocaleString()} XP to each of ${response.data.characters_updated} character(s) (${xpAmount.toLocaleString()} XP total)`;
+                }
+                
+                this.app.showSuccess(successMessage);
                 
                 // Show notification if any characters can level up
                 if (response.data.level_up_count > 0) {
@@ -1159,8 +1244,12 @@ class DMDashboardModule {
                     this.app.showSuccess(`${response.data.level_up_count} character(s) ready to level up: ${charNames}`);
                 }
                 
-                // Refresh dashboard
-                await this.refreshDashboard();
+                // Refresh dashboard by calling SessionManagementModule
+                if (this.app.modules.sessionManagement) {
+                    await this.app.modules.sessionManagement.viewDMDashboard(sessionId);
+                } else if (this.refreshDashboard) {
+                    await this.refreshDashboard();
+                }
                 
             } else {
                 throw new Error(response.message || 'Failed to award XP');

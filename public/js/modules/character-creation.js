@@ -1363,7 +1363,7 @@ class CharacterCreationModule {
             return `
             <div class="equipment-item" data-item-id="${item.item_id}">
                 ${imagePath ? `<div class="item-image">
-                    <img src="${imagePath}" alt="${item.name}" onerror="this.style.display='none'">
+                    <img src="${imagePath}?v=${Date.now()}" alt="${item.name}" onerror="this.style.display='none'">
                 </div>` : ''}
                 <div class="item-info">
                     <h5>${item.name}</h5>

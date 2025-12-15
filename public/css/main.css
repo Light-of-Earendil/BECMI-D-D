@@ -936,6 +936,8 @@ label {
 
 .modal-content.character-edit {
     max-width: 700px;
+    left: 50%;
+    transform: translateX(-50%);
 }
 
 .modal-content.session-creation {
@@ -1801,6 +1803,10 @@ input[type="password"]:focus {
     margin-bottom: var(--space-2);
 }
 
+.xp-award-form label {
+    color: var(--parchment-100);
+}
+
 .hp-bar,
 .xp-progress-bar-track {
     height: 16px;
@@ -2237,6 +2243,10 @@ input.hp-input {
     flex-wrap: wrap;
     gap: var(--space-3);
     margin: 0;
+}
+
+.characters-grid .card-header .character-name {
+    color: var(--brass-800);
 }
 
 /* Dashboard Character List - 3 columns */
@@ -3431,6 +3441,10 @@ input.hp-input {
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 4px rgba(0,0,0,0.15);
 }
 
+#equipment-search {
+    padding-left: 40px;
+}
+
 .search-input:focus {
     outline: none;
     border-color: var(--brass-400);
@@ -3567,7 +3581,7 @@ input.hp-input {
 .item-image-container {
     position: relative;
     width: 100%;
-    min-height: 200px;
+    min-height: 270px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3722,10 +3736,14 @@ input.hp-input {
 }
 
 .weapon-card, .skill-ability-group {
-    width: calc(33% - 6px);
+    width: calc(100% - 6px);
     background-color: var(--wood-600);
     padding: 10px;
     border-radius: 5px;
+}
+
+.skill-card {
+    cursor: pointer;
 }
 
 .available-weapons .weapon-card {
@@ -4158,6 +4176,169 @@ input.hp-input {
 
 .players-table tbody tr:hover {
     background: rgba(202, 162, 74, 0.1);
+}
+
+/* Character Assignment Section */
+.assign-character-section {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: rgba(139, 69, 19, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(139, 69, 19, 0.2);
+}
+
+.assign-character-section h4 {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    color: var(--brown-800);
+}
+
+.assign-character-section > p {
+    margin-bottom: 1rem;
+    color: var(--brown-700);
+}
+
+.available-characters {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.character-assignment-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 1rem;
+    background: white;
+    border: 1px solid rgba(139, 69, 19, 0.3);
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.character-assignment-card:hover {
+    border-color: var(--brown-600);
+    box-shadow: 0 2px 8px rgba(139, 69, 19, 0.15);
+    transform: translateY(-2px);
+}
+
+.character-assignment-card .character-info {
+    margin-bottom: 1rem;
+}
+
+.character-assignment-card h5 {
+    margin: 0 0 0.5rem 0;
+    color: var(--parchment-800);
+    font-size: 1.1rem;
+}
+
+.character-assignment-card .character-details {
+    margin: 0;
+    color: var(--parchment-800);
+    font-size: 0.9rem;
+}
+
+.character-assignment-card .text-warning {
+    color: #d97706;
+    font-size: 0.85rem;
+    font-style: italic;
+}
+
+.character-assignment-card .btn {
+    width: 100%;
+    margin-top: auto;
+}
+
+/* DM Dashboard Character Card - Spells Section */
+.spells-mini {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.spell-level-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--brown-700);
+}
+
+.spell-level-info strong {
+    color: var(--brown-800);
+    min-width: 80px;
+}
+
+.memorized-indicator {
+    color: var(--success-500);
+    font-size: 0.75rem;
+}
+
+.spells-summary {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(139, 69, 19, 0.2);
+    color: var(--brown-800);
+    font-weight: 600;
+}
+
+.spell-level-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.memorized-spells-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+    padding-left: 1rem;
+    font-size: 0.8rem;
+}
+
+.memorized-spell-name {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--success-600);
+    font-weight: 500;
+}
+
+.memorized-spell-name i {
+    font-size: 0.7rem;
+}
+
+/* DM Dashboard Character Card - Skills Section */
+.skills-mini {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    font-size: 0.875rem;
+}
+
+.skill-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid rgba(139, 69, 19, 0.1);
+}
+
+.skill-item:last-child {
+    border-bottom: none;
+}
+
+.skill-name {
+    color: var(--brown-700);
+    flex: 1;
+}
+
+.skill-bonus {
+    color: var(--brown-800);
+    font-weight: 600;
+    font-size: 0.85rem;
 }
 
 .player-status-badge {
@@ -4883,7 +5064,16 @@ input.hp-input {
 
 .dm-character-card .character-hp {
     flex: 1;
-    max-width: 300px;
+    max-width: 450px;
+}
+
+.dm-player-card .player-characters .character-header {
+    border: 0px !important;
+}
+
+.dm-player-card .player-characters .character-header:before {
+    border: 0px !important;
+    box-shadow: none !important;
 }
 
 .dm-character-card .hp-bar {
@@ -4996,6 +5186,32 @@ input.hp-input {
     padding: 0;
 }
 
+.stat-group.skills {
+    width: 200%;
+}
+
+.stat-group.skills h5, .stat-group.spells h5 {
+    width: 33%;
+}
+
+
+.skills-mini, .spells-mini {
+    display: flex;
+    flex-direction: row;
+    gap: 0.4rem;
+    font-size: 0.875rem;
+    flex-wrap: wrap;
+    grid-area: none;
+}
+
+.stat-group.spells, .stat-group.skills {
+    width: 200%;
+    border: 0 !important;
+    box-shadow: none;
+    background: transparent;
+    left: 100%;
+}
+
 .character-stats-grid .stat-group h5 {
     font-family: "Cinzel", Georgia, serif;
     font-size: 0.875rem;
@@ -5004,7 +5220,6 @@ input.hp-input {
     text-transform: uppercase;
     letter-spacing: 1px;
     font-weight: 600;
-    border-bottom: 1px solid rgba(202, 162, 74, 0.2);
     padding-bottom: var(--space-1);
 }
 

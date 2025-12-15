@@ -106,11 +106,27 @@ class APIClient {
                     try {
                         fullResponseText = await response.text();
                         
-                        // CRITICAL: For 500 errors, ALWAYS show full response text (PHP errors!)
+                        // CRITICAL: For 500 errors, ALWAYS show FULL response text (PHP errors!)
                         if (response.status === 500) {
+                            console.error('========================================');
                             console.error('=== HTTP 500 ERROR - FULL PHP RESPONSE ===');
+                            console.error('========================================');
                             console.error(fullResponseText);
+                            console.error('========================================');
                             console.error('=== END PHP RESPONSE ===');
+                            console.error('========================================');
+                            console.error('Response length:', fullResponseText.length, 'characters');
+                            
+                            // Also try to extract line number if it's a PHP error
+                            const lineMatch = fullResponseText.match(/on line (\d+)/i);
+                            if (lineMatch) {
+                                console.error('PHP Error on line:', lineMatch[1]);
+                            }
+                            
+                            const fileMatch = fullResponseText.match(/in (.+\.php)/i);
+                            if (fileMatch) {
+                                console.error('PHP Error in file:', fileMatch[1]);
+                            }
                         } else {
                             console.error('[API Client] Error response text:', fullResponseText);
                         }
@@ -128,13 +144,10 @@ class APIClient {
                             // Not JSON - this is likely a PHP error page
                             console.error('[API Client] Response is not JSON - likely PHP error');
                             
-                            // For 500 errors, try to extract useful info
+                            // For 500 errors, use full response text
                             if (response.status === 500 && fullResponseText.length > 0) {
-                                // Try to extract PHP error from HTML or plain text
-                                const lines = fullResponseText.split('\n').slice(0, 10); // First 10 lines
-                                const errorSnippet = lines.join('\n');
-                                console.error('Error snippet:', errorSnippet);
-                                errorMessage = `Server error: ${errorSnippet.substring(0, 200)}...`;
+                                // Show first 500 characters in error message, but full text is already logged above
+                                errorMessage = `Server error (500): ${fullResponseText.substring(0, 500)}${fullResponseText.length > 500 ? '...' : ''}`;
                             } else if (fullResponseText.length > 0 && fullResponseText.length < 1000) {
                                 errorMessage += ' - ' + fullResponseText;
                             }
@@ -154,7 +167,9 @@ class APIClient {
                     });
                     
                     const apiError = new Error(errorMessage);
-                    apiError.responseText = fullResponseText;
+                    apiError.responseText = fullResponseText; // Store full response text for later logging
+                    apiError.status = response.status;
+                    apiError.statusText = response.statusText;
                     throw apiError;
                 }
                 
@@ -197,9 +212,15 @@ class APIClient {
         // All retries failed
         console.error(`[API] ${method} ${url} - all attempts failed:`, lastError);
         
-        // Log the full response text to see the actual PHP error
+        // Log the full response text to see the actual PHP error (especially for 500 errors)
         if (lastError.responseText) {
-            console.error('Full API Error Response:', lastError.responseText);
+            console.error('========================================');
+            console.error('=== FINAL ERROR - FULL RESPONSE TEXT ===');
+            console.error('========================================');
+            console.error(lastError.responseText);
+            console.error('========================================');
+            console.error('Response length:', lastError.responseText.length, 'characters');
+            console.error('========================================');
         }
         
         throw new Error(`API request failed after ${this.retryAttempts} attempts: ${lastError.message}`);

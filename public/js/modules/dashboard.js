@@ -199,7 +199,7 @@ class DashboardModule {
                 ${recentCharacters.map(character => `<div class="character-item" data-character-id="${character.character_id}">
                         <div class="character-avatar">
                             ${character.portrait_url ? 
-                                `<img src="${character.portrait_url}" alt="${character.character_name}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                `<img src="${character.portrait_url}?v=${Date.now()}" alt="${character.character_name}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                                 <i class="fas fa-user-circle" style="display:none;"></i>` : 
                                 `<i class="fas fa-user-circle"></i>`
                             }

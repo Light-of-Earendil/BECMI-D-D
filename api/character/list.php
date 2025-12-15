@@ -41,25 +41,8 @@ try {
         [$userId]
     );
     
-    // Get characters from sessions where user is a player
-    $sessionCharacters = $db->select(
-        "SELECT c.character_id, c.character_name, c.class, c.level, c.current_hp, c.max_hp,
-                c.strength, c.dexterity, c.constitution, c.intelligence, c.wisdom, c.charisma,
-                c.alignment, c.gender, c.portrait_url, c.created_at, c.updated_at,
-                gs.session_title, gs.session_datetime, gs.status as session_status,
-                u.username as dm_username, owner.username as character_owner
-         FROM characters c 
-         JOIN game_sessions gs ON c.session_id = gs.session_id 
-         JOIN users u ON gs.dm_user_id = u.user_id 
-         JOIN users owner ON c.user_id = owner.user_id
-         JOIN session_players sp ON gs.session_id = sp.session_id 
-         WHERE sp.user_id = ? AND c.user_id != ? AND c.is_active = 1 
-         ORDER BY c.created_at DESC",
-        [$userId, $userId]
-    );
-    
-    // Combine and format character data
-    $allCharacters = array_merge($characters, $sessionCharacters);
+    // Only show user's own characters (removed query for other players' characters)
+    $allCharacters = $characters;
     
     // Add calculated fields for each character
     foreach ($allCharacters as &$character) {

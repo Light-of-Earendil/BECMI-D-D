@@ -411,6 +411,44 @@ class SessionManagementModule {
             this.declineInvitation(sessionId);
         });
         
+        // Assign character to session
+        $(document).on('click', '[data-action="assign-character"]', async (e) => {
+            e.preventDefault();
+            const characterId = $(e.currentTarget).data('character-id');
+            const characterName = $(e.currentTarget).data('character-name');
+            const sessionId = $(e.currentTarget).data('session-id');
+            
+            if (!characterId || !sessionId) {
+                this.app.showError('Missing character or session ID');
+                return;
+            }
+            
+            // Confirm assignment
+            if (!confirm(`Assign "${characterName}" to this session?`)) {
+                return;
+            }
+            
+            try {
+                const response = await this.apiClient.put('/api/character/update.php', {
+                    character_id: characterId,
+                    session_id: sessionId
+                });
+                
+                if (response.status === 'success') {
+                    this.app.showSuccess(`Character "${characterName}" assigned to session successfully`);
+                    
+                    // Reload available characters and players list
+                    await this.loadAvailableCharacters(sessionId);
+                    await this.loadAndRenderPlayers(sessionId);
+                } else {
+                    this.app.showError(response.message || 'Failed to assign character');
+                }
+            } catch (error) {
+                console.error('Failed to assign character:', error);
+                this.app.showError('Failed to assign character: ' + error.message);
+            }
+        });
+        
         // DM Dashboard actions
         $(document).on('click', '[data-action="view-dm-dashboard"]', (e) => {
             e.preventDefault();
@@ -424,6 +462,15 @@ class SessionManagementModule {
             const sessionId = $(e.currentTarget).data('session-id') || this.currentSession?.session_id;
             if (sessionId) {
                 await this.viewDMDashboard(sessionId);
+            }
+        });
+        
+        // Award XP button
+        $(document).on('click', '#award-xp-btn', async (e) => {
+            e.preventDefault();
+            const sessionId = $(e.currentTarget).data('session-id') || this.currentSession?.session_id;
+            if (sessionId && this.app.modules.dmDashboard) {
+                await this.app.modules.dmDashboard.showAwardXPModal(sessionId);
             }
         });
         
@@ -468,6 +515,63 @@ class SessionManagementModule {
             const characterId = $(e.currentTarget).data('character-id');
             const characterName = $(e.currentTarget).data('character-name');
             this.dmSetHP(characterId, characterName);
+        });
+        
+        // Award standard bonus (1/20 of next level XP)
+        $(document).on('click', '[data-action="award-standard-bonus"]', async (e) => {
+            e.preventDefault();
+            const characterId = $(e.currentTarget).data('character-id');
+            const characterName = $(e.currentTarget).data('character-name');
+            const xpAmount = $(e.currentTarget).data('xp-amount');
+            const sessionId = this.currentSession?.session_id;
+            
+            if (!sessionId) {
+                this.app.showError('Session ID not found');
+                return;
+            }
+            
+            // Confirm action
+            if (!confirm(`Award ${xpAmount.toLocaleString()} XP (1/20 of next level) to ${characterName}?\n\nStandard bonus for: quests, good roleplay, saving allies, exceptional skill use`)) {
+                return;
+            }
+            
+            try {
+                const response = await this.apiClient.post('/api/character/grant-xp.php', {
+                    session_id: sessionId,
+                    character_ids: [characterId],
+                    xp_amount: xpAmount,
+                    reason: 'Standard Bonus (1/20 of next level) - Quest completion, good roleplay, saving allies, or exceptional skill use'
+                });
+                
+                if (response.status === 'success') {
+                    // Show actual XP awarded (with bonus/penalty)
+                    const char = response.data.characters && response.data.characters[0];
+                    if (char && char.xp_adjusted !== undefined) {
+                        let message = `Awarded ${char.xp_adjusted.toLocaleString()} XP to ${characterName}`;
+                        if (char.xp_bonus !== 0) {
+                            const percentText = char.xp_multiplier > 1 ? ` (+${Math.round((char.xp_multiplier - 1) * 100)}%)` : 
+                                               char.xp_multiplier < 1 ? ` (${Math.round((char.xp_multiplier - 1) * 100)}%)` : '';
+                            message += ` (base: ${char.xp_base.toLocaleString()}${percentText})`;
+                        }
+                        this.app.showSuccess(message);
+                    } else {
+                        this.app.showSuccess(`Awarded ${xpAmount.toLocaleString()} XP to ${characterName}`);
+                    }
+                    
+                    // Show notification if character can level up
+                    if (response.data.level_up_count > 0) {
+                        this.app.showSuccess(`${characterName} is ready to level up!`);
+                    }
+                    
+                    // Refresh dashboard
+                    await this.viewDMDashboard(sessionId);
+                } else {
+                    this.app.showError(response.message || 'Failed to award XP');
+                }
+            } catch (error) {
+                console.error('Failed to award standard bonus:', error);
+                this.app.showError('Failed to award XP: ' + error.message);
+            }
         });
         
         // Initiative Tracker actions
@@ -532,6 +636,11 @@ class SessionManagementModule {
             
             if (!playersList.length) {
                 return; // Not on session details view
+            }
+            
+            // Load available characters for assignment (if player, not DM)
+            if (!this.currentSession.is_dm) {
+                await this.loadAvailableCharacters(sessionId);
             }
             
             if (playersData.players.length === 0) {
@@ -668,6 +777,15 @@ class SessionManagementModule {
                                 </button>
                             ` : ''}
                         </div>
+                        ${!session.is_dm ? `
+                            <div class="assign-character-section" id="assign-character-section">
+                                <h4>Your Characters</h4>
+                                <p>Assign one of your existing characters to this session:</p>
+                                <div id="available-characters-list">
+                                    <p>Loading your characters...</p>
+                                </div>
+                            </div>
+                        ` : ''}
                         <div class="players-list" id="session-players-list">
                             <p>Loading players...</p>
                         </div>
@@ -903,6 +1021,63 @@ class SessionManagementModule {
         } catch (error) {
             console.error('Failed to load DM dashboard:', error);
             throw error;
+        }
+    }
+    
+    /**
+     * Load available characters for assignment to session
+     * 
+     * @param {number} sessionId - ID of session
+     */
+    async loadAvailableCharacters(sessionId) {
+        try {
+            const response = await this.apiClient.get('/api/character/list.php');
+            
+            if (response.status === 'success' && response.data.characters) {
+                // Filter to only show unassigned characters or characters not in this session
+                const availableCharacters = response.data.characters.filter(char => 
+                    !char.session_id || char.session_id !== sessionId
+                );
+                
+                const container = $('#available-characters-list');
+                if (!container.length) {
+                    return; // Not on session details view
+                }
+                
+                if (availableCharacters.length === 0) {
+                    container.html('<p class="text-muted">You have no available characters to assign. Create a character first!</p>');
+                    return;
+                }
+                
+                container.html(`
+                    <div class="available-characters">
+                        ${availableCharacters.map(char => `
+                            <div class="character-assignment-card">
+                                <div class="character-info">
+                                    <h5>${char.character_name}</h5>
+                                    <p class="character-details">
+                                        Level ${char.level} ${char.class.replace('_', ' ').charAt(0).toUpperCase() + char.class.replace('_', ' ').slice(1)}
+                                        ${char.session_id ? ` <span class="text-warning">(Currently in another session)</span>` : ''}
+                                    </p>
+                                </div>
+                                <button class="btn btn-primary btn-sm" 
+                                        data-action="assign-character" 
+                                        data-character-id="${char.character_id}"
+                                        data-character-name="${char.character_name}"
+                                        data-session-id="${sessionId}">
+                                    <i class="fas fa-plus"></i> Assign to Session
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                `);
+            }
+        } catch (error) {
+            console.error('Failed to load available characters:', error);
+            const container = $('#available-characters-list');
+            if (container.length) {
+                container.html('<p class="error-text">Failed to load your characters</p>');
+            }
         }
     }
     
@@ -1214,6 +1389,12 @@ class SessionManagementModule {
             console.log('Loading dashboard for session:', sessionId);
             
             const dashboardData = await this.loadDMDashboard(sessionId);
+            
+            // Store dashboard data in DMDashboardModule for XP award modal
+            if (this.app.modules.dmDashboard) {
+                this.app.modules.dmDashboard.currentDashboard = dashboardData;
+                this.app.modules.dmDashboard.dashboardData = dashboardData;
+            }
             console.log('Dashboard data loaded:', dashboardData);
             
             // Load initiative data
@@ -1270,6 +1451,9 @@ class SessionManagementModule {
                     <div class="header-actions">
                         <button class="btn btn-secondary" data-action="back-to-sessions">
                             <i class="fas fa-arrow-left"></i> Back to Sessions
+                        </button>
+                        <button class="btn btn-success" id="award-xp-btn" data-session-id="${session.session_id}">
+                            <i class="fas fa-star"></i> Award XP
                         </button>
                         <button class="btn btn-primary" data-action="invite-player" data-session-id="${session.session_id}">
                             <i class="fas fa-user-plus"></i> Invite Player
@@ -1558,17 +1742,19 @@ class SessionManagementModule {
                 </div>
                 
                 <div class="character-stats-grid">
+                    ${character.abilities ? `
                     <div class="stat-group">
                         <h5>Abilities</h5>
                         <div class="abilities-mini">
-                            <span title="Strength">STR ${character.abilities.strength}</span>
-                            <span title="Dexterity">DEX ${character.abilities.dexterity}</span>
-                            <span title="Constitution">CON ${character.abilities.constitution}</span>
-                            <span title="Intelligence">INT ${character.abilities.intelligence}</span>
-                            <span title="Wisdom">WIS ${character.abilities.wisdom}</span>
-                            <span title="Charisma">CHA ${character.abilities.charisma}</span>
+                            <span title="Strength">STR ${character.abilities.strength || 'N/A'}</span>
+                            <span title="Dexterity">DEX ${character.abilities.dexterity || 'N/A'}</span>
+                            <span title="Constitution">CON ${character.abilities.constitution || 'N/A'}</span>
+                            <span title="Intelligence">INT ${character.abilities.intelligence || 'N/A'}</span>
+                            <span title="Wisdom">WIS ${character.abilities.wisdom || 'N/A'}</span>
+                            <span title="Charisma">CHA ${character.abilities.charisma || 'N/A'}</span>
                         </div>
                     </div>
+                    ` : ''}
                     
                     <div class="stat-group">
                         <h5>Combat</h5>
@@ -1577,6 +1763,24 @@ class SessionManagementModule {
                             <span><strong>THAC0:</strong> ${character.combat.thac0}</span>
                             ${character.combat.strength_to_hit_bonus !== 0 ? `<span><strong>STR to Hit:</strong> ${character.combat.strength_to_hit_bonus > 0 ? '+' : ''}${character.combat.strength_to_hit_bonus}</span>` : ''}
                             ${character.combat.dexterity_to_hit_bonus !== 0 ? `<span><strong>DEX to Hit:</strong> ${character.combat.dexterity_to_hit_bonus > 0 ? '+' : ''}${character.combat.dexterity_to_hit_bonus}</span>` : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="stat-group">
+                        <h5>Experience</h5>
+                        <div class="xp-stats">
+                            <div><strong>XP:</strong> ${(character.experience_points || 0).toLocaleString()}</div>
+                            ${character.xp_for_next_level ? `<div><strong>Next Level:</strong><br>${character.xp_for_next_level.toLocaleString()} XP</div>` : ''}
+                            ${character.xp_for_next_level ? `
+                                <button class="btn btn-xs btn-info" 
+                                        data-action="award-standard-bonus" 
+                                        data-character-id="${character.character_id}"
+                                        data-character-name="${character.character_name}"
+                                        data-xp-amount="${Math.ceil(character.xp_for_next_level / 20)}"
+                                        title="Award 1/20 of next level XP (Standard Bonus for quests, good roleplay, saving allies, exceptional skill use)">
+                                    <i class="fas fa-star"></i> +${Math.ceil(character.xp_for_next_level / 20).toLocaleString()} XP
+                                </button>
+                            ` : ''}
                         </div>
                     </div>
                     
@@ -1590,6 +1794,54 @@ class SessionManagementModule {
                             <span title="Spells/Rods/Staves">Sp ${character.saving_throws.spells}</span>
                         </div>
                     </div>
+                    
+                    ${character.skills && character.skills.length > 0 ? `
+                    <div class="stat-group skills">
+                        <h5>Skills</h5>
+                        <div class="skills-mini">
+                            ${character.skills.map(skill => `
+                                <div class="skill-item">
+                                    <span class="skill-name">${skill.skill_name}</span>
+                                    ${skill.bonus !== 0 ? `<span class="skill-bonus">${skill.bonus > 0 ? '+' : ''}${skill.bonus}</span>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    ${character.spells && character.spells.total > 0 ? `
+                    <div class="stat-group spells">
+                        <h5>Spells</h5>
+                        <div class="spells-mini">
+                            ${Object.entries(character.spells.by_level || {}).map(([level, spellNames]) => {
+                                const memorized = character.spells.memorized_by_level[level] || 0;
+                                // Use spell slots if available, otherwise fall back to total spells in spellbook
+                                const total = character.spells.slots_by_level && character.spells.slots_by_level[level] 
+                                    ? character.spells.slots_by_level[level] 
+                                    : spellNames.length;
+                                const memorizedSpells = character.spells.memorized_spells && character.spells.memorized_spells[level] || [];
+                                return `<div class="spell-level-info">
+                                    <div class="spell-level-header">
+                                        <strong>Level ${level}:</strong> ${memorized}/${total} memorized
+                                        ${memorized > 0 ? `<span class="memorized-indicator"><i class="fas fa-check-circle"></i></span>` : ''}
+                                    </div>
+                                    ${memorizedSpells.length > 0 ? `
+                                        <div class="memorized-spells-list">
+                                            ${memorizedSpells.map(spell => `
+                                                <span class="memorized-spell-name"><i class="fas fa-magic"></i> ${spell}</span>
+                                            `).join('')}
+                                        </div>
+                                    ` : ''}
+                                </div>`;
+                            }).join('')}
+                            ${character.spells.total_memorized > 0 ? `
+                                <div class="spells-summary">
+                                    <strong>Total Memorized:</strong> ${character.spells.total_memorized}
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                    ` : ''}
                 </div>
                 
                 <div class="character-actions">

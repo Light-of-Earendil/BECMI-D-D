@@ -119,13 +119,13 @@ function sendInvitationEmail($playerUser, $session, $dmUserId) {
     </html>
     ";
     
-    // Send email
+    // Send email with proper HTML headers
     $headers = [
-        'MIME-Version: 1.0',
-        'Content-type: text/html; charset=UTF-8',
-        'From: BECMI VTT <noreply@snilld-api.dk>',
-        'Reply-To: ' . $dmUsername . ' <noreply@snilld-api.dk>',
-        'X-Mailer: BECMI VTT System'
+        'MIME-Version' => '1.0',
+        'Content-Type' => 'text/html; charset=UTF-8',
+        'From' => 'BECMI VTT <noreply@snilld-api.dk>',
+        'Reply-To' => $dmUsername . ' <noreply@snilld-api.dk>',
+        'X-Mailer' => 'BECMI VTT System'
     ];
     
     $sent = Security::sendEmail($playerEmail, $subject, $message, $headers);

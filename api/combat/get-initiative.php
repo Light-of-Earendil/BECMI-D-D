@@ -5,11 +5,40 @@
  * Returns initiative order for a session sorted by initiative roll (DESC), then dexterity (DESC).
  */
 
-require_once '../../app/core/database.php';
-require_once '../../app/core/security.php';
+// Enable error logging but disable display
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
+error_reporting(E_ALL);
+
+// Start output buffering
+if (!ob_get_level()) {
+    ob_start();
+}
+
+try {
+    require_once '../../app/core/database.php';
+    require_once '../../app/core/security.php';
+} catch (Exception $e) {
+    if (ob_get_level()) {
+        ob_clean();
+    }
+    header('Content-Type: application/json');
+    http_response_code(500);
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Failed to load required files: ' . $e->getMessage(),
+        'code' => 'LOAD_ERROR'
+    ]);
+    exit;
+}
 
 // Initialize security
 Security::init();
+
+// Clear any output
+if (ob_get_level()) {
+    ob_clean();
+}
 
 // Set content type
 header('Content-Type: application/json');
@@ -50,23 +79,41 @@ try {
         Security::sendErrorResponse('Only the DM can view initiative', 403);
     }
     
-    // Get initiative order
-    $initiatives = $db->select(
-        "SELECT ci.initiative_id, ci.character_id, ci.entity_name, ci.entity_type,
-                ci.initiative_roll, ci.dexterity, ci.is_active,
-                c.current_hp, c.max_hp, c.class, c.level
-         FROM combat_initiatives ci
-         LEFT JOIN characters c ON ci.character_id = c.character_id
-         WHERE ci.session_id = ? AND ci.is_active = 1
-         ORDER BY ci.initiative_roll DESC, ci.dexterity DESC, ci.entity_name ASC",
-        [$sessionId]
-    );
+    // Get initiative order (handle missing tables gracefully)
+    $initiatives = [];
+    $currentTurn = null;
     
-    // Get current turn
-    $currentTurn = $db->selectOne(
-        "SELECT current_initiative_id, round_number FROM combat_current_turn WHERE session_id = ?",
-        [$sessionId]
-    );
+    try {
+        // Check if combat_initiatives table exists
+        $tableExists = $db->selectOne(
+            "SELECT COUNT(*) as count FROM information_schema.tables 
+             WHERE table_schema = DATABASE() AND table_name = 'combat_initiatives'"
+        );
+        
+        if ($tableExists && $tableExists['count'] > 0) {
+            $initiatives = $db->select(
+                "SELECT ci.initiative_id, ci.character_id, ci.entity_name, ci.entity_type,
+                        ci.initiative_roll, ci.dexterity, ci.is_active,
+                        c.current_hp, c.max_hp, c.class, c.level
+                 FROM combat_initiatives ci
+                 LEFT JOIN characters c ON ci.character_id = c.character_id
+                 WHERE ci.session_id = ? AND ci.is_active = 1
+                 ORDER BY ci.initiative_roll DESC, ci.dexterity DESC, ci.entity_name ASC",
+                [$sessionId]
+            );
+            
+            // Get current turn
+            $currentTurn = $db->selectOne(
+                "SELECT current_initiative_id, round_number FROM combat_current_turn WHERE session_id = ?",
+                [$sessionId]
+            );
+        }
+    } catch (Exception $e) {
+        // Tables don't exist - return empty initiative list
+        error_log("Combat tables not found, returning empty initiative list: " . $e->getMessage());
+        $initiatives = [];
+        $currentTurn = null;
+    }
     
     // Format initiative data
     $formattedInitiatives = array_map(function($init) use ($currentTurn) {
@@ -98,8 +145,15 @@ try {
     ], 'Initiative order retrieved');
     
 } catch (Exception $e) {
+    // Clear any output before sending error
+    if (ob_get_level()) {
+        ob_clean();
+    }
+    
     error_log("Get initiative error: " . $e->getMessage());
-    Security::sendErrorResponse('Failed to get initiative order', 500);
+    error_log("Get initiative error trace: " . $e->getTraceAsString());
+    error_log("Get initiative error file: " . $e->getFile() . " line " . $e->getLine());
+    
+    Security::sendErrorResponse('Failed to get initiative order: ' . $e->getMessage(), 500);
 }
-?>
 

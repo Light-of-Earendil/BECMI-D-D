@@ -525,14 +525,20 @@ class BECMIRulesEngine {
                 // BECMI armor AC values (lower is better) - ARMOR REPLACES base AC
                 const armorACTable = {
                     'leather armor': 7,
-                    'scale armor': 6, 
+                    'leather armour': 7,
+                    'scale armor': 6,
+                    'scale armour': 6,
                     'chain mail': 5,
                     'banded armor': 4,
+                    'banded armour': 4,
                     'plate mail': 3,
-                    'suit armor': 0
+                    'plate armour': 3,
+                    'plate armor': 3,
+                    'suit armor': 0,
+                    'suit armour': 0
                 };
                 
-                const armorName = equippedArmor.name.toLowerCase();
+                const armorName = equippedArmor.name.toLowerCase().trim();
                 baseAC = armorACTable[armorName] || 9; // ARMOR REPLACES base AC
                 
                 // Add magical bonus if applicable
@@ -606,6 +612,107 @@ class BECMIRulesEngine {
         }
         
         return xpTable[classType][currentLevel] || null;
+    }
+    
+    /**
+     * Get class prime requisites
+     * 
+     * @param {string} classType - Character class
+     * @returns {Array<string>} Array of prime requisite ability names
+     */
+    getClassPrimeRequisites(classType) {
+        const primeRequisites = {
+            'fighter': ['strength'],
+            'cleric': ['wisdom'],
+            'magic_user': ['intelligence'],
+            'thief': ['dexterity'],
+            'dwarf': ['strength'],
+            'elf': ['strength', 'intelligence'],
+            'halfling': ['strength', 'dexterity'],
+            'druid': ['wisdom'],
+            'mystic': ['strength', 'dexterity']
+        };
+        
+        return primeRequisites[classType] || [];
+    }
+    
+    /**
+     * Calculate experience bonus from prime requisite
+     * Rules Cyclopedia Chapter 1, page 1061-1103
+     * 
+     * @param {string} classType - Character class
+     * @param {Object} abilities - Character abilities
+     * @returns {number} XP multiplier (0.8, 0.9, 1.0, 1.05, or 1.10)
+     */
+    getExperienceBonus(classType, abilities) {
+        const primeReqs = this.getClassPrimeRequisites(classType);
+        
+        // Special handling for classes with two prime requisites
+        if (primeReqs.length === 2) {
+            const req1 = abilities[primeReqs[0]] || 10;
+            const req2 = abilities[primeReqs[1]] || 10;
+            
+            // Elf: Str 13-18 AND Int 13-15: +5%, Str 13-18 AND Int 16-18: +10%
+            if (classType === 'elf') {
+                if (req1 >= 13 && req1 <= 18 && req2 >= 13 && req2 <= 18) {
+                    if (req2 >= 16) {
+                        return 1.10; // +10% (Int 16-18)
+                    }
+                    return 1.05; // +5% (Int 13-15)
+                }
+                return 1.0; // No bonus
+            }
+            
+            // Halfling: Str 13-18 OR Dex 13-18: +5%, Str 13-18 AND Dex 13-18: +10%
+            if (classType === 'halfling') {
+                const str13to18 = (req1 >= 13 && req1 <= 18);
+                const dex13to18 = (req2 >= 13 && req2 <= 18);
+                
+                if (str13to18 && dex13to18) {
+                    return 1.10; // +10% (both 13-18)
+                }
+                if (str13to18 || dex13to18) {
+                    return 1.05; // +5% (one 13-18)
+                }
+                return 1.0; // No bonus
+            }
+            
+            // Mystic: Str 3-5: -10%, Str 6-8: -5%, Str 13-15: +5%, Str 16-18: +10%
+            // (Uses Strength as primary, but has both Str and Dex as requisites)
+            if (classType === 'mystic') {
+                const str = req1; // Assuming first is strength
+                if (str >= 16) return 1.10; // +10%
+                if (str >= 13) return 1.05; // +5%
+                if (str <= 5) return 0.90; // -10%
+                if (str <= 8) return 0.95; // -5%
+                return 1.0; // No bonus
+            }
+            
+            // Default for other dual-requisite classes: both must meet threshold
+            if (req1 >= 13 && req2 >= 13) {
+                if (req1 >= 16 && req2 >= 16) {
+                    return 1.10; // +10%
+                }
+                return 1.05; // +5%
+            }
+            
+            // Penalties for low scores (use lowest)
+            const lowest = Math.min(req1, req2);
+            if (lowest <= 5) return 0.80; // -20%
+            if (lowest <= 8) return 0.90; // -10%
+            
+            return 1.0; // No bonus
+        }
+        
+        // Single prime requisite
+        const primeValue = abilities[primeReqs[0]] || 10;
+        
+        if (primeValue >= 16) return 1.10; // +10%
+        if (primeValue >= 13) return 1.05; // +5%
+        if (primeValue <= 5) return 0.80; // -20%
+        if (primeValue <= 8) return 0.90; // -10%
+        
+        return 1.0; // No bonus or penalty
     }
     
     /**
