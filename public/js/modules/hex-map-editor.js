@@ -453,14 +453,63 @@ class HexMapEditorModule {
             const x = (e.clientX - rect.left) * scaleX;
             const y = (e.clientY - rect.top) * scaleY;
             
-            // pixelToHex will handle the offset internally
+            // Check if click is on a marker icon
+            // Markers are drawn at center.x, center.y - size * 0.2 with radius iconSize * 0.6
+            let clickedMarker = null;
+            
+            // First try: Check hex coordinate (fast path)
             const hex = this.pixelToHex(x, y);
             const key = `${hex.q},${hex.r}`;
-            const marker = this.markers.get(key);
+            let marker = this.markers.get(key);
             
-            if (marker) {
-                if (confirm(`Delete ${marker.marker_name || marker.marker_type}?`)) {
-                    await this.deleteMarker(marker.marker_id);
+            if (marker && marker.marker_id) {
+                // Verify click is actually on the marker icon area
+                const center = this.hexToPixel(marker.q, marker.r);
+                const size = this.hexSize * this.zoom;
+                const iconSize = size * 0.4;
+                const iconY = center.y - size * 0.2;
+                const iconRadius = iconSize * 0.6;
+                
+                // Check if click is within marker icon circle
+                const dx = x - center.x;
+                const dy = y - iconY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist <= iconRadius * 1.5) { // Add some tolerance
+                    clickedMarker = marker;
+                }
+            }
+            
+            // Second try: Check all markers if hex coordinate didn't work
+            if (!clickedMarker) {
+                this.markers.forEach((marker, key) => {
+                    if (clickedMarker) return; // Already found one
+                    
+                    if (!marker.marker_id) {
+                        console.warn('Marker missing marker_id:', marker);
+                        return;
+                    }
+                    
+                    const center = this.hexToPixel(marker.q, marker.r);
+                    const size = this.hexSize * this.zoom;
+                    const iconSize = size * 0.4;
+                    const iconY = center.y - size * 0.2;
+                    const iconRadius = iconSize * 0.6;
+                    
+                    // Check if click is within marker icon circle
+                    const dx = x - center.x;
+                    const dy = y - iconY;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (dist <= iconRadius * 1.5) { // Add some tolerance
+                        clickedMarker = marker;
+                    }
+                });
+            }
+            
+            if (clickedMarker && clickedMarker.marker_id) {
+                if (confirm(`Delete ${clickedMarker.marker_name || clickedMarker.marker_type}?`)) {
+                    await this.deleteMarker(clickedMarker.marker_id);
                 }
             }
         });
@@ -1372,13 +1421,21 @@ class HexMapEditorModule {
             delete tile.roads[edge];
             
             // Also remove from neighbor if it exists
+            // Edge i connects to neighbor (i+1) % 6 (edge indices are offset from neighbor indices)
             const neighbors = this.getHexNeighbors(q, r);
-            const neighbor = neighbors[edge];
+            const neighborIndex = (edge + 1) % 6;
+            const neighbor = neighbors[neighborIndex];
             if (neighbor) {
                 const neighborKey = `${neighbor.q},${neighbor.r}`;
                 const neighborTile = this.tiles.get(neighborKey);
                 if (neighborTile && neighborTile.roads) {
-                    // Opposite edge (edge + 3 mod 6)
+                    // Opposite edge: if edge i connects to neighbor (i+1) % 6,
+                    // then from neighbor's perspective, edge (i+3) % 6 connects back
+                    // This is because: if our edge i → their neighbor (i+1) % 6,
+                    // then from their perspective, we are their neighbor ((i+1)+3) % 6 = (i+4) % 6
+                    // Wait, let me recalculate: if edge i connects to neighbor (i+1) % 6,
+                    // then from neighbor (i+1) % 6's perspective, we are at neighbor index...
+                    // Actually, the standard opposite edge formula is (i+3) % 6
                     const oppositeEdge = (edge + 3) % 6;
                     delete neighborTile.roads[oppositeEdge];
                     
@@ -1404,8 +1461,10 @@ class HexMapEditorModule {
             tile.roads[edge] = true;
             
             // Automatically connect to neighbor
+            // Edge i connects to neighbor (i+1) % 6 (edge indices are offset from neighbor indices)
             const neighbors = this.getHexNeighbors(q, r);
-            const neighbor = neighbors[edge];
+            const neighborIndex = (edge + 1) % 6;
+            const neighbor = neighbors[neighborIndex];
             if (neighbor) {
                 const neighborKey = `${neighbor.q},${neighbor.r}`;
                 let neighborTile = this.tiles.get(neighborKey);
@@ -1427,7 +1486,9 @@ class HexMapEditorModule {
                     neighborTile.roads = {};
                 }
                 
-                // Set opposite edge (edge + 3 mod 6)
+                // Set opposite edge: if edge i connects to neighbor (i+1) % 6,
+                // then from neighbor's perspective, edge (i+3) % 6 connects back
+                // Standard opposite edge formula: (i+3) % 6
                 const oppositeEdge = (edge + 3) % 6;
                 neighborTile.roads[oppositeEdge] = true;
                 
@@ -1492,10 +1553,12 @@ class HexMapEditorModule {
         const neighbors = this.getHexNeighbors(q, r);
         
         // Draw each road edge - connect to neighbor center
+        // Edge i connects to neighbor (i+1) % 6 (edge indices are offset from neighbor indices)
         Object.keys(roads).forEach(edgeStr => {
             const edge = parseInt(edgeStr);
             if (roads[edge] && edge >= 0 && edge < 6) {
-                const neighbor = neighbors[edge];
+                const neighborIndex = (edge + 1) % 6;
+                const neighbor = neighbors[neighborIndex];
                 if (neighbor) {
                     const neighborCenter = this.hexToPixel(neighbor.q, neighbor.r);
                     
