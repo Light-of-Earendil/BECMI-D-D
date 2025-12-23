@@ -84,6 +84,8 @@ class BECMIApp {
         this.modules.levelUpWizard = new LevelUpWizard(this);
         this.modules.calendar = new CalendarModule(this);
         this.modules.notifications = new NotificationsModule(this);
+        this.modules.hexMapEditor = new HexMapEditorModule(this);
+        this.modules.hexMapPlay = new HexMapPlayModule(this);
         
         // Initialize all modules
         Object.values(this.modules).forEach(module => {
@@ -314,6 +316,67 @@ class BECMIApp {
     }
     
     /**
+     * Navigate to a route (supports URL parameters)
+     * Can be called from modules: app.navigate('/hex-map-editor/123')
+     */
+    async navigate(route) {
+        // Parse route like "/hex-map-editor/123" or "/hex-map-play/123"
+        const parts = route.split('/').filter(p => p);
+        
+        if (parts.length === 0) {
+            this.navigateToView('dashboard');
+            return;
+        }
+        
+        const viewName = parts[0];
+        const param = parts[1] ? parseInt(parts[1]) : null;
+        
+        const contentArea = $('#content-area');
+        if (contentArea.length === 0) {
+            console.error('Content area not found!');
+            return;
+        }
+        
+        contentArea.html('<div class="loading-spinner"><i class="fas fa-dice-d20 fa-spin"></i><p>Loading...</p></div>');
+        
+        // Handle hex map routes
+        if (viewName === 'hex-map-editor') {
+            try {
+                const content = await this.modules.hexMapEditor.renderEditor(param);
+                contentArea.html(content);
+                this.modules.hexMapEditor.setupEventListeners();
+                this.currentView = 'hex-map-editor';
+                this.eventBus.emit('viewLoaded', { view: 'hex-map-editor' });
+            } catch (error) {
+                console.error('Failed to load hex map editor:', error);
+                contentArea.html('<div class="alert alert-danger">Error loading hex map editor: ' + error.message + '</div>');
+            }
+            return;
+        }
+        
+        if (viewName === 'hex-map-play') {
+            if (!param) {
+                this.showError('Map ID required for play mode');
+                return;
+            }
+            try {
+                const content = await this.modules.hexMapPlay.renderPlayView(param);
+                contentArea.html(content);
+                this.modules.hexMapPlay.setupEventListeners();
+                this.currentView = 'hex-map-play';
+                this.eventBus.emit('viewLoaded', { view: 'hex-map-play' });
+            } catch (error) {
+                console.error('Failed to load hex map play:', error);
+                contentArea.html('<div class="alert alert-danger">Error loading hex map play: ' + error.message + '</div>');
+            }
+            return;
+        }
+        
+        // Fall back to standard view navigation
+        this.navigateToView(viewName);
+    }
+    
+    /**
      * Load content for a specific view
      */
     async loadViewContent(viewName) {
@@ -350,6 +413,11 @@ class BECMIApp {
                     break;
                 case 'calendar':
                     content = await this.modules.calendar.render();
+                    break;
+                case 'hex-maps':
+                    // Show hex map list/editor
+                    content = await this.modules.hexMapEditor.renderEditor();
+                    this.modules.hexMapEditor.setupEventListeners();
                     break;
                 default:
                     content = '<div class="card"><h2>View not found</h2><p>The requested view could not be loaded.</p></div>';

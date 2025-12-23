@@ -1,4 +1,4 @@
-﻿/* ==========================================================================
+/* ==========================================================================
    BECMI VTT — Old Wood + Parchment Theme
    Middelalder Low Fantasy RPG UI Design
    ========================================================================== */
@@ -838,6 +838,16 @@ label {
 .content-area {
     max-width: 1280px;
     margin: 0 auto;
+}
+
+/* Hex map editor should use full viewport */
+.content-area:has(.hex-map-editor),
+.content-area:has(.hex-map-play) {
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    height: calc(100vh - 80px); /* Full height minus header */
+    overflow: hidden;
 }
 
 .view {
@@ -5858,4 +5868,366 @@ textarea:focus-visible {
         box-shadow: none;
         border: 1px solid #ccc;
     }
+}
+
+/* --------------------------------------------------------------------------
+   Hex Map Editor Styles
+   -------------------------------------------------------------------------- */
+
+.hex-map-editor {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: calc(100vh - 80px);
+    width: 100%;
+}
+
+.editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-4);
+    background: linear-gradient(180deg, var(--wood-600), var(--wood-800));
+    border-bottom: 2px solid var(--wood-900);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    flex-shrink: 0;
+}
+
+.editor-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: var(--text-strong);
+}
+
+.editor-actions {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+}
+
+.editor-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    gap: var(--space-4);
+    padding: var(--space-4);
+    min-height: 0; /* Important for flex children */
+}
+
+.editor-sidebar {
+    width: 280px;
+    min-width: 250px;
+    max-width: 320px;
+    background: linear-gradient(180deg, var(--wood-600), var(--wood-800));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-wood);
+    padding: var(--space-4);
+    overflow-y: auto;
+    flex-shrink: 0;
+    max-height: 100%;
+}
+
+.sidebar-section {
+    margin-bottom: var(--space-6);
+}
+
+.sidebar-section h3 {
+    font-size: 1.1rem;
+    color: var(--text-strong);
+    margin-bottom: var(--space-3);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--wood-900);
+}
+
+.editor-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0; /* Important for flex */
+    background: linear-gradient(180deg, var(--wood-600), var(--wood-800));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-wood);
+    padding: var(--space-4);
+    overflow: hidden;
+    min-height: 0; /* Important for flex children */
+}
+
+.canvas-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.canvas-container {
+    flex: 1;
+    min-height: 400px; /* Minimum visible area */
+    background: #1a1a1a;
+    border-radius: var(--radius-sm);
+    border: 2px solid var(--wood-900);
+    box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
+    overflow: hidden;
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+#hex-canvas,
+#hex-play-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: crosshair;
+}
+
+#hex-canvas.panning,
+#hex-play-canvas.panning {
+    cursor: grabbing !important;
+}
+
+.canvas-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+    flex-shrink: 0;
+}
+
+.canvas-info {
+    margin-left: auto;
+    color: var(--text-soft);
+    font-size: 0.9rem;
+}
+
+.terrain-palette {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-2);
+}
+
+.terrain-item {
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all var(--t-fast) var(--ease);
+    text-align: center;
+    color: var(--text-ink);
+    font-weight: 600;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.terrain-item i {
+    font-size: 1.2rem;
+    opacity: 0.9;
+}
+
+.terrain-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.terrain-item.selected {
+    border-color: var(--brass-300);
+    box-shadow: 
+        0 0 0 2px var(--brass-300),
+        inset 0 2px 4px rgba(0,0,0,0.2);
+    transform: scale(1.05);
+}
+
+.tool-buttons {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.tool-buttons .btn {
+    flex: 1;
+    min-width: 80px;
+}
+
+.tool-buttons .btn.active {
+    background: linear-gradient(180deg, var(--brass-300), var(--brass-500));
+    color: var(--text-ink);
+    box-shadow: 
+        0 0 0 2px var(--brass-300),
+        inset 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.settlement-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.settlement-buttons .btn {
+    width: 100%;
+    justify-content: flex-start;
+}
+
+.settlement-buttons .btn.active {
+    background: linear-gradient(180deg, var(--brass-300), var(--brass-500));
+    color: var(--text-ink);
+    box-shadow: 
+        0 0 0 2px var(--brass-300),
+        inset 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.border-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.border-buttons .btn {
+    width: 100%;
+    justify-content: flex-start;
+}
+
+.border-buttons .btn.active {
+    background: linear-gradient(180deg, var(--brass-300), var(--brass-500));
+    color: var(--text-ink);
+    box-shadow: 
+        0 0 0 2px var(--brass-300),
+        inset 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Hex Map Play Styles */
+.hex-map-play {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: calc(100vh - 80px);
+    width: 100%;
+}
+
+.play-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-4);
+    background: linear-gradient(180deg, var(--wood-600), var(--wood-800));
+    border-bottom: 2px solid var(--wood-900);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    flex-shrink: 0;
+}
+
+.play-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: var(--text-strong);
+}
+
+.play-actions {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.play-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    gap: var(--space-4);
+    padding: var(--space-4);
+    min-height: 0;
+}
+
+.play-sidebar {
+    width: 250px;
+    min-width: 250px;
+    background: linear-gradient(180deg, var(--wood-600), var(--wood-800));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-wood);
+    padding: var(--space-4);
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+
+.play-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: linear-gradient(180deg, var(--wood-600), var(--wood-800));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-wood);
+    padding: var(--space-4);
+    overflow: hidden;
+}
+
+/* Maps Grid (for map list view) */
+.maps-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: var(--space-4);
+    padding: var(--space-4);
+}
+
+.map-card {
+    background: linear-gradient(180deg, var(--wood-600), var(--wood-800));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-wood);
+    padding: var(--space-4);
+    transition: transform var(--t-fast) var(--ease);
+}
+
+.map-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 
+        0 4px 12px rgba(0,0,0,0.4),
+        var(--shadow-wood);
+}
+
+.map-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-3);
+}
+
+.map-card-header h3 {
+    margin: 0;
+    color: var(--text-strong);
+}
+
+.map-card-body {
+    margin-bottom: var(--space-3);
+}
+
+.map-meta {
+    display: flex;
+    gap: var(--space-4);
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    margin-top: var(--space-2);
+}
+
+.map-card-actions {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--space-12);
+    color: var(--text-soft);
+}
+
+.empty-state i {
+    color: var(--brass-300);
+    margin-bottom: var(--space-4);
+}
+
+.empty-state h2 {
+    color: var(--text-strong);
+    margin-bottom: var(--space-2);
+}
+
+.empty-state p {
+    margin-bottom: var(--space-4);
+    color: var(--text-dim);
 }

@@ -173,12 +173,60 @@ class APIClient {
                     throw apiError;
                 }
                 
-                // Parse JSON response
+                // Read response as text first (so we can use it for error messages)
+                let responseText = await response.text();
+                
+                // Strip any HTML notices/warnings that might be output before JSON
+                // Look for JSON object/array at the start or after HTML
+                const jsonMatch = responseText.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+                if (jsonMatch) {
+                    // Use only the JSON part
+                    responseText = jsonMatch[1];
+                } else if (responseText.trim().startsWith('{') || responseText.trim().startsWith('[')) {
+                    // Already starts with JSON, but might have leading whitespace
+                    responseText = responseText.trim();
+                }
+                
+                // Try to parse as JSON
                 let result;
                 try {
-                    result = await response.json();
+                    result = JSON.parse(responseText);
                 } catch (jsonError) {
-                    throw new Error(`Invalid JSON response: ${jsonError.message}`);
+                    // Log full error for debugging
+                    console.error('========================================');
+                    console.error('[API Client] JSON parse error - Full response:');
+                    console.error('========================================');
+                    console.error(responseText);
+                    console.error('========================================');
+                    console.error('Response length:', responseText.length);
+                    console.error('Response status:', response.status);
+                    console.error('Response statusText:', response.statusText);
+                    console.error('========================================');
+                    
+                    // Extract error message from HTML if possible
+                    let errorMsg = jsonError.message;
+                    if (responseText.includes('<b>')) {
+                        // Try to extract PHP error message
+                        const match = responseText.match(/<b>(.*?)<\/b>/);
+                        if (match && match[1]) {
+                            errorMsg = `PHP Error: ${match[1]}`;
+                        }
+                    } else if (responseText.includes('Fatal error') || responseText.includes('Parse error') || responseText.includes('Warning')) {
+                        // Try to extract PHP error from various formats
+                        const fatalMatch = responseText.match(/(Fatal error|Parse error|Warning|Notice):\s*(.*?)(?:in\s+.*?\.php|$)/i);
+                        if (fatalMatch && fatalMatch[2]) {
+                            errorMsg = `PHP Error: ${fatalMatch[2].trim()}`;
+                        }
+                    }
+                    
+                    throw new Error(`Invalid JSON response: ${errorMsg}. Response starts with: ${responseText.substring(0, 200)}`);
+                }
+                
+                // Check if the response indicates an authentication error
+                if (result.status === 'error' && result.code === 'UNAUTHORIZED') {
+                    // Handle authentication error - might need to redirect to login
+                    console.warn('[API Client] Authentication required - session may have expired');
+                    // Don't throw here, let the calling code handle it
                 }
                 
                 // Log successful response
@@ -191,7 +239,8 @@ class APIClient {
                 console.warn(`[API] ${method} ${url} - attempt ${attempt} failed:`, error.message);
                 
                 // Don't retry on authentication errors or server errors
-                if (error.message.includes('401') || error.message.includes('403')) {
+                if (error.message.includes('401') || error.message.includes('403') || 
+                    (error.response && error.response.code === 'UNAUTHORIZED')) {
                     console.log('[API] Not retrying - authentication error');
                     break;
                 }
