@@ -1306,14 +1306,15 @@ class HexMapEditorModule {
             tile.borders[edge] = this.selectedBorderType;
         }
         
-        // Save border immediately
+        // Save border immediately - include both borders and roads to prevent data loss
         try {
             await this.apiClient.post('/api/hex-maps/tiles/create.php', {
                 map_id: this.currentMapId,
                 q: q,
                 r: r,
                 terrain_type: tile.terrain_type || null,
-                borders: tile.borders
+                borders: tile.borders,
+                roads: tile.roads || null  // Include roads to prevent overwriting existing roads
             });
         } catch (error) {
             console.error('Failed to save border:', error);
@@ -1381,15 +1382,16 @@ class HexMapEditorModule {
                     const oppositeEdge = (edge + 3) % 6;
                     delete neighborTile.roads[oppositeEdge];
                     
-                    // Save neighbor if it has other data
-                    if (neighborTile.terrain_type || Object.keys(neighborTile.roads || {}).length > 0) {
+                    // Save neighbor if it has other data - include both borders and roads to prevent data loss
+                    if (neighborTile.terrain_type || Object.keys(neighborTile.roads || {}).length > 0 || Object.keys(neighborTile.borders || {}).length > 0) {
                         try {
                             await this.apiClient.post('/api/hex-maps/tiles/create.php', {
                                 map_id: this.currentMapId,
                                 q: neighbor.q,
                                 r: neighbor.r,
                                 terrain_type: neighborTile.terrain_type || null,
-                                roads: neighborTile.roads
+                                borders: neighborTile.borders || null,  // Include borders to prevent overwriting existing borders
+                                roads: neighborTile.roads || null
                             });
                         } catch (error) {
                             console.error('Failed to save neighbor road removal:', error);
@@ -1429,14 +1431,15 @@ class HexMapEditorModule {
                 const oppositeEdge = (edge + 3) % 6;
                 neighborTile.roads[oppositeEdge] = true;
                 
-                // Save neighbor
+                // Save neighbor - include both borders and roads to prevent data loss
                 try {
                     await this.apiClient.post('/api/hex-maps/tiles/create.php', {
                         map_id: this.currentMapId,
                         q: neighbor.q,
                         r: neighbor.r,
                         terrain_type: neighborTile.terrain_type || null,
-                        roads: neighborTile.roads
+                        borders: neighborTile.borders || null,  // Include borders to prevent overwriting existing borders
+                        roads: neighborTile.roads || null
                     });
                 } catch (error) {
                     console.error('Failed to save neighbor road connection:', error);
@@ -1444,14 +1447,15 @@ class HexMapEditorModule {
             }
         }
         
-        // Save road immediately
+        // Save road immediately - include both borders and roads to prevent data loss
         try {
             await this.apiClient.post('/api/hex-maps/tiles/create.php', {
                 map_id: this.currentMapId,
                 q: q,
                 r: r,
                 terrain_type: tile.terrain_type || null,
-                roads: tile.roads
+                borders: tile.borders || null,  // Include borders to prevent overwriting existing borders
+                roads: tile.roads || null
             });
         } catch (error) {
             console.error('Failed to save road:', error);

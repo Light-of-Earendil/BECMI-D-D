@@ -139,7 +139,7 @@ try {
             foreach ($targetUserIds as $targetUid) {
                 $db->execute(
                     "INSERT INTO hex_visibility (map_id, user_id, q, r, visibility_level, discovered_at, last_viewed_at)
-                     VALUES (?, ?, ?, ?, 2, COALESCE(discovered_at, NOW()), NOW())
+                     VALUES (?, ?, ?, ?, 2, NOW(), NOW())
                      ON DUPLICATE KEY UPDATE visibility_level = 2, last_viewed_at = NOW()",
                     [$mapId, $targetUid, $q, $r]
                 );
