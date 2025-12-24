@@ -1330,7 +1330,9 @@ class HexMapEditorModule {
         if (this.selectedTool === 'place_settlement') {
             this.placeSettlement(hex.q, hex.r);
         } else if (this.selectedTool === 'erase') {
-            this.eraseHex(hex.q, hex.r);
+            this.eraseHex(hex.q, hex.r).catch(error => {
+                console.error('Error erasing hex:', error);
+            });
         } else if (this.selectedTool === 'draw_border' || this.selectedTool === 'erase_border') {
             // Find which edge was clicked
             const edge = this.getEdgeAtPoint(hex.q, hex.r, x, y);
@@ -1869,10 +1871,26 @@ class HexMapEditorModule {
     }
     
     /**
-     * Erase a hex (remove terrain)
+     * Erase a hex (remove terrain and/or markers)
      */
-    eraseHex(q, r) {
+    async eraseHex(q, r) {
         const key = `${q},${r}`;
+        
+        // Check if there's a marker on this hex
+        const marker = this.markers.get(key);
+        if (marker && marker.marker_id) {
+            // Delete the marker from the database
+            try {
+                await this.deleteMarker(marker.marker_id);
+                // deleteMarker already removes from this.markers and redraws
+                // But we still need to handle terrain deletion below
+            } catch (error) {
+                console.error('Failed to delete marker:', error);
+                // Continue with terrain deletion even if marker deletion fails
+            }
+        }
+        
+        // Delete terrain
         this.tiles.delete(key);
         
         // Redraw
@@ -1880,11 +1898,6 @@ class HexMapEditorModule {
         if (canvas) {
             const ctx = canvas.getContext('2d');
             this.drawHex(ctx, q, r, null);
-            // Redraw marker if exists
-            const marker = this.markers.get(key);
-            if (marker) {
-                this.drawMarker(ctx, marker);
-            }
         }
     }
     
