@@ -195,6 +195,11 @@ try {
         );
     } else {
         // Create new tile
+        // If terrain_type is null, use default 'plains' (matching API documentation and batch.php behavior)
+        if ($terrainType === null) {
+            $terrainType = 'plains';
+        }
+        
         $tileId = $db->insert(
             "INSERT INTO hex_tiles (
                 map_id, q, r, terrain_type, terrain_name, description, notes,

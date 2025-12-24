@@ -9,10 +9,10 @@
 -- Edge indices: 0=top, 1=top-right, 2=bottom-right, 3=bottom, 4=bottom-left, 5=top-left
 -- Value is true if road exists on that edge
 ALTER TABLE hex_tiles 
-ADD COLUMN roads JSON NULL COMMENT 'Road information: {"0": true, "2": true} means edges 0 and 2 have roads';
+ADD COLUMN roads JSON NULL COMMENT 'Road information: {"1": true, "3": true} means neighbors 1 and 3 have roads (center-to-center connections)';
 
--- Add index for faster road queries
-ALTER TABLE hex_tiles 
-ADD INDEX idx_roads (map_id, (CAST(roads AS CHAR(255) ARRAY)));
+-- Note: Multi-valued indexes only work with JSON arrays, not objects.
+-- Since roads stores objects like {"1": true}, we cannot create a functional index.
+-- Queries will use the existing map_id index for filtering.
 
 COMMIT;

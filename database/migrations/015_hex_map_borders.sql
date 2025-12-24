@@ -10,8 +10,8 @@
 ALTER TABLE hex_tiles 
 ADD COLUMN borders JSON NULL COMMENT 'Border information: {"0": "national", "2": "regional"} means edge 0 has national border, edge 2 has regional border';
 
--- Add index for faster border queries
-ALTER TABLE hex_tiles 
-ADD INDEX idx_borders (map_id, (CAST(borders AS CHAR(255) ARRAY)));
+-- Note: Multi-valued indexes only work with JSON arrays, not objects.
+-- Since borders stores objects like {"0": "national"}, we cannot create a functional index.
+-- Queries will use the existing map_id index for filtering.
 
 COMMIT;
