@@ -101,7 +101,10 @@ try {
     }
     
     // Get tile data
-    $terrainType = Security::sanitizeInput($input['terrain_type'] ?? 'plains');
+    // Only set terrain_type if explicitly provided (not null) - roads should not change terrain
+    $terrainType = isset($input['terrain_type']) && $input['terrain_type'] !== null 
+        ? Security::sanitizeInput($input['terrain_type']) 
+        : null;
     $terrainName = Security::sanitizeInput($input['terrain_name'] ?? '');
     $description = Security::sanitizeInput($input['description'] ?? '');
     $notes = Security::sanitizeInput($input['notes'] ?? '');
@@ -152,6 +155,16 @@ try {
     if ($existingTile) {
         // Update existing tile
         $tileId = $existingTile['tile_id'];
+        
+        // If terrain_type is null, preserve existing terrain_type (don't overwrite when just adding roads/borders)
+        if ($terrainType === null) {
+            $existingTileData = $db->selectOne(
+                "SELECT terrain_type FROM hex_tiles WHERE tile_id = ?",
+                [$tileId]
+            );
+            $terrainType = $existingTileData['terrain_type'] ?? null;
+        }
+        
         $db->update(
             "UPDATE hex_tiles SET
                 terrain_type = ?,

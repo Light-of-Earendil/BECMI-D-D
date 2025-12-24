@@ -311,6 +311,11 @@ class BECMIApp {
             this.modules.equipment.cleanup();
         }
         
+        // Cleanup hex map play module interval if active
+        if (this.modules.hexMapPlay && this.modules.hexMapPlay.cleanup) {
+            this.modules.hexMapPlay.cleanup();
+        }
+        
         // Emit cleanup event
         this.eventBus.emit('viewCleanup', { view: this.currentView });
     }
@@ -330,6 +335,9 @@ class BECMIApp {
         
         const viewName = parts[0];
         const param = parts[1] ? parseInt(parts[1]) : null;
+        
+        // Cleanup current view before navigating
+        this.cleanupCurrentView();
         
         const contentArea = $('#content-area');
         if (contentArea.length === 0) {

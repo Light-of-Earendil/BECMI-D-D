@@ -97,6 +97,10 @@ try {
         Security::sendErrorResponse('You do not have access to this hex map', 403);
     }
     
+    // Determine if user is DM (creator or session DM)
+    $isDM = ($map['created_by_user_id'] == $userId) || 
+            ($map['session_id'] && $map['session_dm_user_id'] == $userId);
+    
     // Format map data
     $mapData = [
         'map_id' => (int) $map['map_id'],
@@ -117,16 +121,22 @@ try {
     
     $response = ['map' => $mapData];
     
-    // Include markers
-    $markers = $db->select(
-        "SELECT marker_id, q, r, marker_type, marker_name, marker_description,
-                marker_icon, marker_color, is_visible_to_players,
-                created_at, updated_at
-         FROM hex_map_markers
-         WHERE map_id = ?
-         ORDER BY marker_type, marker_name",
-        [$mapId]
-    );
+    // Include markers - filter by visibility for non-DM users
+    $markerQuery = "SELECT marker_id, q, r, marker_type, marker_name, marker_description,
+                           marker_icon, marker_color, is_visible_to_players,
+                           created_at, updated_at
+                    FROM hex_map_markers
+                    WHERE map_id = ?";
+    $markerParams = [$mapId];
+    
+    // If user is not DM, only return markers visible to players
+    if (!$isDM) {
+        $markerQuery .= " AND is_visible_to_players = TRUE";
+    }
+    
+    $markerQuery .= " ORDER BY marker_type, marker_name";
+    
+    $markers = $db->select($markerQuery, $markerParams);
     
     $formattedMarkers = array_map(function($marker) {
         return [
