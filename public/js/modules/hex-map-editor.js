@@ -1381,7 +1381,11 @@ class HexMapEditorModule {
         
         if (this.selectedTool === 'erase_road') {
             // Remove road
+            const hadRoad = tile.roads[edge] === true;
             delete tile.roads[edge];
+            
+            // Check if current tile becomes empty after road removal
+            const currentTileHasData = tile.terrain_type || Object.keys(tile.roads || {}).length > 0 || Object.keys(tile.borders || {}).length > 0;
             
             // Also remove from neighbor if it exists
             const neighbors = this.getHexNeighbors(q, r);
@@ -1392,14 +1396,14 @@ class HexMapEditorModule {
                 if (neighborTile && neighborTile.roads) {
                     // Opposite edge (edge + 3 mod 6)
                     const oppositeEdge = (edge + 3) % 6;
-                    const hadRoad = neighborTile.roads[oppositeEdge] === true;
+                    const neighborHadRoad = neighborTile.roads[oppositeEdge] === true;
                     delete neighborTile.roads[oppositeEdge];
                     
                     // Always save neighbor when we modify its roads to keep database in sync
                     // Check if tile has any data left after road deletion
-                    const hasOtherData = neighborTile.terrain_type || Object.keys(neighborTile.roads || {}).length > 0 || Object.keys(neighborTile.borders || {}).length > 0;
+                    const neighborHasOtherData = neighborTile.terrain_type || Object.keys(neighborTile.roads || {}).length > 0 || Object.keys(neighborTile.borders || {}).length > 0;
                     
-                    if (hasOtherData) {
+                    if (neighborHasOtherData) {
                         // Save updated tile with remaining data
                         try {
                             await this.apiClient.post('/api/hex-maps/tiles/create.php', {
@@ -1410,12 +1414,16 @@ class HexMapEditorModule {
                                 borders: neighborTile.borders || null,  // Include borders to prevent overwriting existing borders
                                 roads: neighborTile.roads || null
                             });
+                            // Add to initialTileKeys if it wasn't there (tile now exists in database)
+                            if (!this.initialTileKeys.has(neighborKey)) {
+                                this.initialTileKeys.add(neighborKey);
+                            }
                         } catch (error) {
                             console.error('Failed to save neighbor road removal:', error);
                         }
-                    } else if (hadRoad) {
+                    } else if (neighborHadRoad) {
                         // Tile had a road but now has no data - delete it from database
-                        // Check if tile was in initialTileKeys (existed in database when loaded)
+                        // Check if tile exists in database (either in initialTileKeys or was saved during this session)
                         if (this.initialTileKeys.has(neighborKey)) {
                             // Tile exists in database - delete it
                             try {
@@ -1428,9 +1436,48 @@ class HexMapEditorModule {
                                 console.error('Failed to delete empty neighbor tile:', error);
                             }
                         }
-                        // Remove from local tiles map since it's empty
+                        // Remove from local tiles map and initialTileKeys since it's empty
                         this.tiles.delete(neighborKey);
+                        this.initialTileKeys.delete(neighborKey);
                     }
+                }
+            }
+            
+            // Handle current tile - check if it's empty and delete if so
+            if (!currentTileHasData && hadRoad) {
+                // Current tile is empty - delete it from database if it exists there
+                if (this.initialTileKeys.has(key)) {
+                    // Tile exists in database - delete it
+                    try {
+                        await this.apiClient.post('/api/hex-maps/tiles/delete.php', {
+                            map_id: this.currentMapId,
+                            q: q,
+                            r: r
+                        });
+                    } catch (error) {
+                        console.error('Failed to delete empty current tile:', error);
+                    }
+                }
+                // Remove from local tiles map and initialTileKeys since it's empty
+                this.tiles.delete(key);
+                this.initialTileKeys.delete(key);
+            } else if (currentTileHasData) {
+                // Current tile has data - save it
+                try {
+                    await this.apiClient.post('/api/hex-maps/tiles/create.php', {
+                        map_id: this.currentMapId,
+                        q: q,
+                        r: r,
+                        terrain_type: tile.terrain_type || null,
+                        borders: tile.borders || null,  // Include borders to prevent overwriting existing borders
+                        roads: tile.roads || null
+                    });
+                    // Add to initialTileKeys if it wasn't there (tile now exists in database)
+                    if (!this.initialTileKeys.has(key)) {
+                        this.initialTileKeys.add(key);
+                    }
+                } catch (error) {
+                    console.error('Failed to save current tile after road removal:', error);
                 }
             }
         } else if (this.selectedTool === 'place_road') {
@@ -1475,24 +1522,32 @@ class HexMapEditorModule {
                         borders: neighborTile.borders || null,  // Include borders to prevent overwriting existing borders
                         roads: neighborTile.roads || null
                     });
+                    // Add to initialTileKeys if it wasn't there (tile now exists in database)
+                    if (!this.initialTileKeys.has(neighborKey)) {
+                        this.initialTileKeys.add(neighborKey);
+                    }
                 } catch (error) {
                     console.error('Failed to save neighbor road connection:', error);
                 }
             }
-        }
-        
-        // Save road immediately - include both borders and roads to prevent data loss
-        try {
-            await this.apiClient.post('/api/hex-maps/tiles/create.php', {
-                map_id: this.currentMapId,
-                q: q,
-                r: r,
-                terrain_type: tile.terrain_type || null,
-                borders: tile.borders || null,  // Include borders to prevent overwriting existing borders
-                roads: tile.roads || null
-            });
-        } catch (error) {
-            console.error('Failed to save road:', error);
+            
+            // Save current tile immediately - include both borders and roads to prevent data loss
+            try {
+                await this.apiClient.post('/api/hex-maps/tiles/create.php', {
+                    map_id: this.currentMapId,
+                    q: q,
+                    r: r,
+                    terrain_type: tile.terrain_type || null,
+                    borders: tile.borders || null,  // Include borders to prevent overwriting existing borders
+                    roads: tile.roads || null
+                });
+                // Add to initialTileKeys if it wasn't there (tile now exists in database)
+                if (!this.initialTileKeys.has(key)) {
+                    this.initialTileKeys.add(key);
+                }
+            } catch (error) {
+                console.error('Failed to save road:', error);
+            }
         }
         
         // Redraw entire grid to show roads properly
