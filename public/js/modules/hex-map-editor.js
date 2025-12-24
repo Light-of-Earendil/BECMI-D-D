@@ -458,7 +458,7 @@ class HexMapEditorModule {
             const key = `${hex.q},${hex.r}`;
             const marker = this.markers.get(key);
             
-            if (marker) {
+            if (marker && marker.marker_id) {
                 if (confirm(`Delete ${marker.marker_name || marker.marker_type}?`)) {
                     await this.deleteMarker(marker.marker_id);
                 }
