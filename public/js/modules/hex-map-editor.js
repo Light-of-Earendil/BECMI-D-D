@@ -34,7 +34,6 @@ class HexMapEditorModule {
         this.hoverHex = null; // For border hover feedback
         this.hoverPixelX = null;
         this.hoverPixelY = null;
-        this.roadStartHex = null; // For road placement: {q, r} of the starting hex
         this.hexSize = 50;
         this.offsetX = 0;
         this.offsetY = 0;
@@ -282,7 +281,7 @@ class HexMapEditorModule {
                                 <i class="fas fa-eraser"></i> Erase Road
                             </button>
                         </div>
-                        <small class="form-text text-muted">Click a hex to start a road, then click a neighboring hex to connect them. Click the same hex again to cancel.</small>
+                        <small class="form-text text-muted">Click on a hex edge to place a road. Roads automatically connect to neighboring roads.</small>
                     </div>
                 </div>
                 
@@ -320,7 +319,8 @@ class HexMapEditorModule {
             { type: 'water', name: 'Water', color: '#4169E1', icon: 'fa-water' },
             { type: 'desert', name: 'Desert', color: '#F4A460', icon: 'fa-sun' },
             { type: 'swamp', name: 'Swamp', color: '#556B2F', icon: 'fa-frog' },
-            { type: 'hill', name: 'Hill', color: '#8B7355', icon: 'fa-hill-rockslide' }
+            { type: 'hill', name: 'Hill', color: '#8B7355', icon: 'fa-hill-rockslide' },
+            { type: 'road', name: 'Road', color: '#D2B48C', icon: 'fa-road' }
         ];
         
         return terrains.map(terrain => `
@@ -453,63 +453,14 @@ class HexMapEditorModule {
             const x = (e.clientX - rect.left) * scaleX;
             const y = (e.clientY - rect.top) * scaleY;
             
-            // Check if click is on a marker icon
-            // Markers are drawn at center.x, center.y - size * 0.2 with radius iconSize * 0.6
-            let clickedMarker = null;
-            
-            // First try: Check hex coordinate (fast path)
+            // pixelToHex will handle the offset internally
             const hex = this.pixelToHex(x, y);
             const key = `${hex.q},${hex.r}`;
-            let marker = this.markers.get(key);
+            const marker = this.markers.get(key);
             
-            if (marker && marker.marker_id) {
-                // Verify click is actually on the marker icon area
-                const center = this.hexToPixel(marker.q, marker.r);
-                const size = this.hexSize * this.zoom;
-                const iconSize = size * 0.4;
-                const iconY = center.y - size * 0.2;
-                const iconRadius = iconSize * 0.6;
-                
-                // Check if click is within marker icon circle
-                const dx = x - center.x;
-                const dy = y - iconY;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                
-                if (dist <= iconRadius * 1.5) { // Add some tolerance
-                    clickedMarker = marker;
-                }
-            }
-            
-            // Second try: Check all markers if hex coordinate didn't work
-            if (!clickedMarker) {
-                this.markers.forEach((marker, key) => {
-                    if (clickedMarker) return; // Already found one
-                    
-                    if (!marker.marker_id) {
-                        console.warn('Marker missing marker_id:', marker);
-                        return;
-                    }
-                    
-                    const center = this.hexToPixel(marker.q, marker.r);
-                    const size = this.hexSize * this.zoom;
-                    const iconSize = size * 0.4;
-                    const iconY = center.y - size * 0.2;
-                    const iconRadius = iconSize * 0.6;
-                    
-                    // Check if click is within marker icon circle
-                    const dx = x - center.x;
-                    const dy = y - iconY;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    
-                    if (dist <= iconRadius * 1.5) { // Add some tolerance
-                        clickedMarker = marker;
-                    }
-                });
-            }
-            
-            if (clickedMarker && clickedMarker.marker_id) {
-                if (confirm(`Delete ${clickedMarker.marker_name || clickedMarker.marker_type}?`)) {
-                    await this.deleteMarker(clickedMarker.marker_id);
+            if (marker) {
+                if (confirm(`Delete ${marker.marker_name || marker.marker_type}?`)) {
+                    await this.deleteMarker(marker.marker_id);
                 }
             }
         });
@@ -542,20 +493,9 @@ class HexMapEditorModule {
         $(document).on('click', '.tool-buttons .btn', (e) => {
             const tool = $(e.currentTarget).data('tool');
             if (tool) {
-                // Reset road start hex when switching away from road tool
-                if (this.selectedTool === 'place_road' && tool !== 'place_road') {
-                    this.roadStartHex = null;
-                }
                 this.selectedTool = tool;
                 $('.tool-buttons .btn').removeClass('active');
                 $(e.currentTarget).addClass('active');
-                
-                // Redraw to clear any road placement feedback
-                const canvas = document.getElementById('hex-canvas');
-                if (canvas) {
-                    const ctx = canvas.getContext('2d');
-                    this.drawHexGrid(ctx);
-                }
             }
         });
         
@@ -581,7 +521,6 @@ class HexMapEditorModule {
             if (tool === 'erase_border') {
                 this.selectedTool = 'erase_border';
                 this.selectedBorderType = null;
-                this.roadStartHex = null; // Reset road start when switching tools
                 $('.border-buttons .btn').removeClass('active');
                 $('.tool-buttons .btn').removeClass('active');
                 $('.settlement-buttons .btn').removeClass('active');
@@ -589,42 +528,10 @@ class HexMapEditorModule {
             } else if (border && tool) {
                 this.selectedBorderType = border;
                 this.selectedTool = tool;
-                this.roadStartHex = null; // Reset road start when switching tools
                 $('.border-buttons .btn').removeClass('active');
                 $('.tool-buttons .btn').removeClass('active');
                 $('.settlement-buttons .btn').removeClass('active');
                 $(e.currentTarget).addClass('active');
-            }
-            
-            // Redraw to clear any road placement feedback
-            const canvas = document.getElementById('hex-canvas');
-            if (canvas) {
-                const ctx = canvas.getContext('2d');
-                this.drawHexGrid(ctx);
-            }
-        });
-        
-        // Road tool selection - reset start hex when clicking road buttons
-        $(document).on('click', '#place-road-btn, #erase-road-btn', (e) => {
-            const tool = $(e.currentTarget).data('tool');
-            if (tool) {
-                // Set the selected tool (road buttons are not in .tool-buttons, so need separate handler)
-                this.selectedTool = tool;
-                $('.tool-buttons .btn').removeClass('active');
-                $('.border-buttons .btn').removeClass('active');
-                $(e.currentTarget).addClass('active');
-                
-                // If switching from place_road to erase_road or vice versa, reset start hex
-                if (this.selectedTool === 'place_road' || this.selectedTool === 'erase_road') {
-                    this.roadStartHex = null;
-                }
-                
-                // Redraw to clear any road placement feedback
-                const canvas = document.getElementById('hex-canvas');
-                if (canvas) {
-                    const ctx = canvas.getContext('2d');
-                    this.drawHexGrid(ctx);
-                }
             }
         });
         
@@ -682,12 +589,9 @@ class HexMapEditorModule {
                 this.handleMouseMove(e, canvas);
                 // Show border/road edge feedback when hovering
                 if (this.selectedTool === 'draw_border' || this.selectedTool === 'erase_border' ||
-            this.selectedTool === 'draw_border' || this.selectedTool === 'erase_border') {
-            this.handleMouseMoveBorder(e, canvas);
-        } else if (this.selectedTool === 'place_road') {
-            // Show visual feedback for road placement
-            this.handleMouseMoveRoad(e, canvas);
-        }
+                    this.selectedTool === 'place_road' || this.selectedTool === 'erase_road') {
+                    this.handleMouseMoveBorder(e, canvas);
+                }
             }
         });
         
@@ -1016,59 +920,13 @@ class HexMapEditorModule {
             this.drawMarker(ctx, marker);
         });
         
-        // Draw border hover feedback if applicable
-        if (this.hoverHex && (this.selectedTool === 'draw_border' || this.selectedTool === 'erase_border')) {
+        // Draw border/road hover feedback if applicable
+        if (this.hoverHex && (this.selectedTool === 'draw_border' || this.selectedTool === 'erase_border' ||
+            this.selectedTool === 'place_road' || this.selectedTool === 'erase_road')) {
             const edge = this.getEdgeAtPoint(this.hoverHex.q, this.hoverHex.r, this.hoverPixelX, this.hoverPixelY);
             if (edge !== null) {
                 this.drawEdgeHoverFeedback(ctx, this.hoverHex.q, this.hoverHex.r, edge);
             }
-        }
-        
-        // Draw road placement feedback
-        if (this.selectedTool === 'place_road' && this.roadStartHex && this.hoverHex) {
-            const startCenter = this.hexToPixel(this.roadStartHex.q, this.roadStartHex.r);
-            const hoverCenter = this.hexToPixel(this.hoverHex.q, this.hoverHex.r);
-            
-            // Check if hover hex is a neighbor
-            const neighbors = this.getHexNeighbors(this.roadStartHex.q, this.roadStartHex.r);
-            let isNeighbor = false;
-            for (let i = 0; i < 6; i++) {
-                if (neighbors[i].q === this.hoverHex.q && neighbors[i].r === this.hoverHex.r) {
-                    isNeighbor = true;
-                    break;
-                }
-            }
-            
-            if (isNeighbor) {
-                // Draw preview line from start to hover
-                ctx.beginPath();
-                ctx.moveTo(startCenter.x, startCenter.y);
-                ctx.lineTo(hoverCenter.x, hoverCenter.y);
-                ctx.strokeStyle = 'rgba(139, 69, 19, 0.6)'; // Semi-transparent brown
-                ctx.lineWidth = Math.max(4 * this.zoom, 3);
-                ctx.lineCap = 'round';
-                ctx.setLineDash([5, 5]); // Dashed line for preview
-                ctx.stroke();
-                ctx.setLineDash([]); // Reset
-            }
-            
-            // Highlight start hex
-            const size = this.hexSize * this.zoom;
-            ctx.strokeStyle = 'rgba(139, 69, 19, 0.8)'; // Brown
-            ctx.lineWidth = 4 * this.zoom;
-            ctx.beginPath();
-            for (let i = 0; i < 6; i++) {
-                const angle = (Math.PI / 3 * i) - (Math.PI / 2);
-                const x = startCenter.x + size * Math.cos(angle);
-                const y = startCenter.y + size * Math.sin(angle);
-                if (i === 0) {
-                    ctx.moveTo(x, y);
-                } else {
-                    ctx.lineTo(x, y);
-                }
-            }
-            ctx.closePath();
-            ctx.stroke();
         }
     }
     
@@ -1145,8 +1003,9 @@ class HexMapEditorModule {
                 'mountain': '#696969',    // Dim gray - rocky peaks
                 'water': '#1E90FF',       // Dodger blue - clear water
                 'desert': '#DEB887',      // Burlywood - sandy desert
-                'swamp': '#556B2F',        // Dark olive - murky swamp
-                'hill': '#8B7355'         // Dark khaki - rolling hills
+                'swamp': '#556B2F',       // Dark olive - murky swamp
+                'hill': '#8B7355',        // Dark khaki - rolling hills
+                'road': '#F5DEB3'         // Wheat - light path/road
             };
             const color = terrainColors[tile.terrain_type] || '#90EE90';
             ctx.fillStyle = color;
@@ -1226,7 +1085,8 @@ class HexMapEditorModule {
                 'water': '💧',
                 'desert': '☀️',
                 'swamp': '🐸',
-                'hill': '⛰️'
+                'hill': '⛰️',
+                'road': '🛤️'
             };
             
             const symbol = terrainIcons[tile.terrain_type];
@@ -1339,16 +1199,12 @@ class HexMapEditorModule {
             if (edge !== null) {
                 this.toggleBorder(hex.q, hex.r, edge);
             }
-        } else if (this.selectedTool === 'place_road') {
-            // Road placement: click hex to start, click neighbor to connect
-            console.log('[Road Placement] Click detected with place_road tool:', { q: hex.q, r: hex.r });
-            this.handleRoadPlacement(hex.q, hex.r).catch(error => {
-                console.error('[Road Placement] Error in handleRoadPlacement:', error);
-            });
-        } else if (this.selectedTool === 'erase_road') {
-            // Erase road: click a hex to remove road to it from the clicked hex
-            // For now, just remove all roads from this hex (can be improved later)
-            this.eraseRoadFromHex(hex.q, hex.r);
+        } else if (this.selectedTool === 'place_road' || this.selectedTool === 'erase_road') {
+            // Find which edge was clicked
+            const edge = this.getEdgeAtPoint(hex.q, hex.r, x, y);
+            if (edge !== null) {
+                this.toggleRoad(hex.q, hex.r, edge);
+            }
         } else if (this.selectedTool === 'paint') {
             this.paintHex(hex.q, hex.r);
             this.isDrawing = true;
@@ -1490,247 +1346,124 @@ class HexMapEditorModule {
     }
     
     /**
-     * Handle road placement: two-click system
-     * First click: set start hex
-     * Second click: connect start hex to clicked hex (if neighbor)
+     * Toggle road on a hex edge (with automatic connection to neighbors)
      */
-    async handleRoadPlacement(q, r) {
-        // If no start hex, set this as the start
-        if (!this.roadStartHex) {
-            this.roadStartHex = { q, r };
-            // Visual feedback: highlight the start hex
-            const canvas = document.getElementById('hex-canvas');
-            if (canvas) {
-                const ctx = canvas.getContext('2d');
-                this.drawHexGrid(ctx);
-                // Draw highlight on start hex
-                const center = this.hexToPixel(q, r);
-                const size = this.hexSize * this.zoom;
-                ctx.strokeStyle = 'rgba(139, 69, 19, 0.8)'; // Brown
-                ctx.lineWidth = 4 * this.zoom;
-                ctx.beginPath();
-                for (let i = 0; i < 6; i++) {
-                    const angle = (Math.PI / 3 * i) - (Math.PI / 2);
-                    const x = center.x + size * Math.cos(angle);
-                    const y = center.y + size * Math.sin(angle);
-                    if (i === 0) {
-                        ctx.moveTo(x, y);
-                    } else {
-                        ctx.lineTo(x, y);
-                    }
-                }
-                ctx.closePath();
-                ctx.stroke();
-            }
-            return;
-        }
-        
-        // If clicking the same hex, cancel
-        if (this.roadStartHex.q === q && this.roadStartHex.r === r) {
-            this.roadStartHex = null;
-            const canvas = document.getElementById('hex-canvas');
-            if (canvas) {
-                const ctx = canvas.getContext('2d');
-                this.drawHexGrid(ctx);
-            }
-            return;
-        }
-        
-        // Check if clicked hex is a neighbor of start hex
-        const neighbors = this.getHexNeighbors(this.roadStartHex.q, this.roadStartHex.r);
-        console.log('[Road Placement] Checking neighbors:', { start: this.roadStartHex, clicked: { q, r }, neighbors });
-        let neighborIndex = -1;
-        for (let i = 0; i < 6; i++) {
-            if (neighbors[i].q === q && neighbors[i].r === r) {
-                neighborIndex = i;
-                break;
-            }
-        }
-        
-        if (neighborIndex === -1) {
-            // Not a neighbor - set new start hex
-            console.log('[Road Placement] Not a neighbor, setting new start hex');
-            this.roadStartHex = { q, r };
-            const canvas = document.getElementById('hex-canvas');
-            if (canvas) {
-                const ctx = canvas.getContext('2d');
-                this.drawHexGrid(ctx);
-                // Draw highlight on new start hex
-                const center = this.hexToPixel(q, r);
-                const size = this.hexSize * this.zoom;
-                ctx.strokeStyle = 'rgba(139, 69, 19, 0.8)'; // Brown
-                ctx.lineWidth = 4 * this.zoom;
-                ctx.beginPath();
-                for (let i = 0; i < 6; i++) {
-                    const angle = (Math.PI / 3 * i) - (Math.PI / 2);
-                    const x = center.x + size * Math.cos(angle);
-                    const y = center.y + size * Math.sin(angle);
-                    if (i === 0) {
-                        ctx.moveTo(x, y);
-                    } else {
-                        ctx.lineTo(x, y);
-                    }
-                }
-                ctx.closePath();
-                ctx.stroke();
-            }
-            return;
-        }
-        
-        // Connect the two hexes with a road
-        await this.connectRoads(this.roadStartHex.q, this.roadStartHex.r, q, r, neighborIndex);
-        
-        // Reset start hex
-        this.roadStartHex = null;
-        
-        // Redraw
-        const canvas = document.getElementById('hex-canvas');
-        if (canvas) {
-            const ctx = canvas.getContext('2d');
-            this.drawHexGrid(ctx);
-        }
-    }
-    
-    /**
-     * Connect two hexes with a road (center to center)
-     * Roads are stored as neighbor indices: roads[neighborIndex] = true
-     */
-    async connectRoads(q1, r1, q2, r2, neighborIndex) {
-        console.log('[Road Placement] connectRoads called:', { q1, r1, q2, r2, neighborIndex });
-        const key1 = `${q1},${r1}`;
-        const key2 = `${q2},${r2}`;
-        
-        // Get or create tiles
-        let tile1 = this.tiles.get(key1);
-        if (!tile1) {
-            tile1 = {
-                q: q1,
-                r: r1,
-                terrain_type: null,
-                is_passable: true,
-                movement_cost: 1,
-                roads: {}
-            };
-            this.tiles.set(key1, tile1);
-        }
-        if (!tile1.roads) {
-            tile1.roads = {};
-        }
-        
-        let tile2 = this.tiles.get(key2);
-        if (!tile2) {
-            tile2 = {
-                q: q2,
-                r: r2,
-                terrain_type: null,
-                is_passable: true,
-                movement_cost: 1,
-                roads: {}
-            };
-            this.tiles.set(key2, tile2);
-        }
-        if (!tile2.roads) {
-            tile2.roads = {};
-        }
-        
-        // Add road from hex1 to neighbor (neighborIndex)
-        tile1.roads[neighborIndex] = true;
-        
-        // Add road from hex2 back to hex1 (opposite neighbor: (neighborIndex + 3) % 6)
-        const oppositeNeighbor = (neighborIndex + 3) % 6;
-        tile2.roads[oppositeNeighbor] = true;
-        
-        console.log('[Road Placement] Roads set:', { 
-            tile1: { q: q1, r: r1, roads: tile1.roads }, 
-            tile2: { q: q2, r: r2, roads: tile2.roads },
-            neighborIndex,
-            oppositeNeighbor
-        });
-        
-        // Save both tiles
-        try {
-            await this.apiClient.post('/api/hex-maps/tiles/create.php', {
-                map_id: this.currentMapId,
-                q: q1,
-                r: r1,
-                terrain_type: tile1.terrain_type || null,
-                borders: tile1.borders || null,
-                roads: tile1.roads || null
-            });
-            
-            await this.apiClient.post('/api/hex-maps/tiles/create.php', {
-                map_id: this.currentMapId,
-                q: q2,
-                r: r2,
-                terrain_type: tile2.terrain_type || null,
-                borders: tile2.borders || null,
-                roads: tile2.roads || null
-            });
-        } catch (error) {
-            console.error('Failed to save road connection:', error);
-        }
-    }
-    
-    /**
-     * Erase road from a hex (removes all roads from this hex)
-     */
-    async eraseRoadFromHex(q, r) {
+    async toggleRoad(q, r, edge) {
         const key = `${q},${r}`;
-        const tile = this.tiles.get(key);
+        let tile = this.tiles.get(key);
         
-        if (!tile || !tile.roads || Object.keys(tile.roads).length === 0) {
-            return; // No roads to erase
+        if (!tile) {
+            // Create new tile if it doesn't exist
+            tile = {
+                q,
+                r,
+                terrain_type: null,
+                is_passable: true,
+                movement_cost: 1,
+                roads: {}
+            };
+            this.tiles.set(key, tile);
         }
         
-        // Remove roads from this hex and from neighbors
-        const neighbors = this.getHexNeighbors(q, r);
-        const roadsToRemove = Object.keys(tile.roads).map(neighborIndexStr => parseInt(neighborIndexStr));
+        if (!tile.roads) {
+            tile.roads = {};
+        }
         
-        // Remove from this hex
-        tile.roads = {};
-        
-        // Remove from neighbors (opposite direction)
-        for (const neighborIndex of roadsToRemove) {
-            const neighbor = neighbors[neighborIndex];
+        if (this.selectedTool === 'erase_road') {
+            // Remove road
+            delete tile.roads[edge];
+            
+            // Also remove from neighbor if it exists
+            const neighbors = this.getHexNeighbors(q, r);
+            const neighbor = neighbors[edge];
             if (neighbor) {
                 const neighborKey = `${neighbor.q},${neighbor.r}`;
                 const neighborTile = this.tiles.get(neighborKey);
                 if (neighborTile && neighborTile.roads) {
-                    const oppositeNeighbor = (neighborIndex + 3) % 6;
-                    delete neighborTile.roads[oppositeNeighbor];
+                    // Opposite edge (edge + 3 mod 6)
+                    const oppositeEdge = (edge + 3) % 6;
+                    delete neighborTile.roads[oppositeEdge];
                     
-                    // Save neighbor
-                    try {
-                        await this.apiClient.post('/api/hex-maps/tiles/create.php', {
-                            map_id: this.currentMapId,
-                            q: neighbor.q,
-                            r: neighbor.r,
-                            terrain_type: neighborTile.terrain_type || null,
-                            borders: neighborTile.borders || null,
-                            roads: neighborTile.roads || null
-                        });
-                    } catch (error) {
-                        console.error('Failed to save neighbor road removal:', error);
+                    // Save neighbor if it has other data - include both borders and roads to prevent data loss
+                    if (neighborTile.terrain_type || Object.keys(neighborTile.roads || {}).length > 0 || Object.keys(neighborTile.borders || {}).length > 0) {
+                        try {
+                            await this.apiClient.post('/api/hex-maps/tiles/create.php', {
+                                map_id: this.currentMapId,
+                                q: neighbor.q,
+                                r: neighbor.r,
+                                terrain_type: neighborTile.terrain_type || null,
+                                borders: neighborTile.borders || null,  // Include borders to prevent overwriting existing borders
+                                roads: neighborTile.roads || null
+                            });
+                        } catch (error) {
+                            console.error('Failed to save neighbor road removal:', error);
+                        }
                     }
+                }
+            }
+        } else if (this.selectedTool === 'place_road') {
+            // Place road
+            tile.roads[edge] = true;
+            
+            // Automatically connect to neighbor
+            const neighbors = this.getHexNeighbors(q, r);
+            const neighbor = neighbors[edge];
+            if (neighbor) {
+                const neighborKey = `${neighbor.q},${neighbor.r}`;
+                let neighborTile = this.tiles.get(neighborKey);
+                
+                if (!neighborTile) {
+                    // Create neighbor tile if it doesn't exist
+                    neighborTile = {
+                        q: neighbor.q,
+                        r: neighbor.r,
+                        terrain_type: null,
+                        is_passable: true,
+                        movement_cost: 1,
+                        roads: {}
+                    };
+                    this.tiles.set(neighborKey, neighborTile);
+                }
+                
+                if (!neighborTile.roads) {
+                    neighborTile.roads = {};
+                }
+                
+                // Set opposite edge (edge + 3 mod 6)
+                const oppositeEdge = (edge + 3) % 6;
+                neighborTile.roads[oppositeEdge] = true;
+                
+                // Save neighbor - include both borders and roads to prevent data loss
+                try {
+                    await this.apiClient.post('/api/hex-maps/tiles/create.php', {
+                        map_id: this.currentMapId,
+                        q: neighbor.q,
+                        r: neighbor.r,
+                        terrain_type: neighborTile.terrain_type || null,
+                        borders: neighborTile.borders || null,  // Include borders to prevent overwriting existing borders
+                        roads: neighborTile.roads || null
+                    });
+                } catch (error) {
+                    console.error('Failed to save neighbor road connection:', error);
                 }
             }
         }
         
-        // Save this hex
+        // Save road immediately - include both borders and roads to prevent data loss
         try {
             await this.apiClient.post('/api/hex-maps/tiles/create.php', {
                 map_id: this.currentMapId,
                 q: q,
                 r: r,
                 terrain_type: tile.terrain_type || null,
-                borders: tile.borders || null,
+                borders: tile.borders || null,  // Include borders to prevent overwriting existing borders
                 roads: tile.roads || null
             });
         } catch (error) {
-            console.error('Failed to save road removal:', error);
+            console.error('Failed to save road:', error);
         }
         
-        // Redraw
+        // Redraw entire grid to show roads properly
         const canvas = document.getElementById('hex-canvas');
         if (canvas) {
             const ctx = canvas.getContext('2d');
@@ -1739,33 +1472,52 @@ class HexMapEditorModule {
     }
     
     /**
-     * Draw roads on a hex
-     * Roads go from center to center of neighboring hexes
-     * Roads are stored as neighbor indices: roads[neighborIndex] = true
+     * Draw roads on a hex (connecting to neighboring hexes)
      */
     drawRoads(ctx, q, r, roads) {
         if (!roads || Object.keys(roads).length === 0) return;
         
         const center = this.hexToPixel(q, r);
+        const size = this.hexSize * this.zoom;
+        
+        // Edge angles for pointy-top hexes (starting from top, going clockwise)
+        const edgeAngles = [
+            -Math.PI / 2,                    // 0: top
+            -Math.PI / 6,                    // 1: top-right
+            Math.PI / 6,                     // 2: bottom-right
+            Math.PI / 2,                     // 3: bottom
+            5 * Math.PI / 6,                 // 4: bottom-left
+            -5 * Math.PI / 6                 // 5: top-left
+        ];
+        
+        // Get neighbors
         const neighbors = this.getHexNeighbors(q, r);
         
-        // Draw each road - from this hex center to neighbor center
-        Object.keys(roads).forEach(neighborIndexStr => {
-            const neighborIndex = parseInt(neighborIndexStr);
-            if (roads[neighborIndex] && neighborIndex >= 0 && neighborIndex < 6) {
-                const neighbor = neighbors[neighborIndex];
+        // Draw each road edge - connect to neighbor center
+        Object.keys(roads).forEach(edgeStr => {
+            const edge = parseInt(edgeStr);
+            if (roads[edge] && edge >= 0 && edge < 6) {
+                const neighbor = neighbors[edge];
                 if (neighbor) {
-                    // Check if neighbor tile exists (or we'll draw to empty space)
-                    const neighborKey = `${neighbor.q},${neighbor.r}`;
-                    const neighborTile = this.tiles.get(neighborKey);
-                    
-                    // Draw road even if neighbor tile doesn't exist yet (it might be created later)
                     const neighborCenter = this.hexToPixel(neighbor.q, neighbor.r);
                     
                     // Draw road line from this hex center to neighbor center
                     ctx.beginPath();
                     ctx.moveTo(center.x, center.y);
                     ctx.lineTo(neighborCenter.x, neighborCenter.y);
+                    ctx.strokeStyle = '#8B4513'; // Saddle brown
+                    ctx.lineWidth = Math.max(4 * this.zoom, 3);
+                    ctx.lineCap = 'round';
+                    ctx.stroke();
+                } else {
+                    // No neighbor - draw from center to edge
+                    const angle = edgeAngles[edge];
+                    const endX = center.x + size * Math.cos(angle);
+                    const endY = center.y + size * Math.sin(angle);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(center.x, center.y);
+                    ctx.lineTo(endX, endY);
                     ctx.strokeStyle = '#8B4513'; // Saddle brown
                     ctx.lineWidth = Math.max(4 * this.zoom, 3);
                     ctx.lineCap = 'round';
@@ -1791,26 +1543,6 @@ class HexMapEditorModule {
         // pixelToHex will handle the offset internally
         const hex = this.pixelToHex(x, y);
         this.paintHex(hex.q, hex.r);
-    }
-    
-    /**
-     * Handle mouse move for road tool (shows visual feedback)
-     */
-    handleMouseMoveRoad(e, canvas) {
-        const rect = canvas.getBoundingClientRect();
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
-        const x = (e.clientX - rect.left) * scaleX;
-        const y = (e.clientY - rect.top) * scaleY;
-        
-        const hex = this.pixelToHex(x, y);
-        this.hoverHex = hex;
-        this.hoverPixelX = x;
-        this.hoverPixelY = y;
-        
-        // Redraw to show feedback
-        const ctx = canvas.getContext('2d');
-        this.drawHexGrid(ctx);
     }
     
     /**
@@ -1878,15 +1610,19 @@ class HexMapEditorModule {
         
         // Check if there's a marker on this hex
         const marker = this.markers.get(key);
+        let markerDeletionFailed = false;
+        
         if (marker && marker.marker_id) {
-            // Delete the marker from the database
+            // Try to delete the marker from the database
             try {
                 await this.deleteMarker(marker.marker_id);
-                // deleteMarker already removes from this.markers and redraws
-                // But we still need to handle terrain deletion below
+                // deleteMarker already removes from this.markers and redraws on success
+                // If we get here, marker was successfully deleted
             } catch (error) {
                 console.error('Failed to delete marker:', error);
-                // Continue with terrain deletion even if marker deletion fails
+                markerDeletionFailed = true;
+                // Don't throw - continue with terrain deletion even if marker deletion fails
+                // The marker will remain in this.markers and will be redrawn below
             }
         }
         
@@ -1898,6 +1634,14 @@ class HexMapEditorModule {
         if (canvas) {
             const ctx = canvas.getContext('2d');
             this.drawHex(ctx, q, r, null);
+            
+            // Redraw marker if it still exists (either deletion failed or no marker was present)
+            // Note: If marker deletion succeeded, it was already removed from this.markers
+            // by deleteMarker, so this check will be false and marker won't be redrawn
+            const remainingMarker = this.markers.get(key);
+            if (remainingMarker) {
+                this.drawMarker(ctx, remainingMarker);
+            }
         }
     }
     
