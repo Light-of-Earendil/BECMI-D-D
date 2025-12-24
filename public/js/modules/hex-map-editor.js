@@ -320,8 +320,7 @@ class HexMapEditorModule {
             { type: 'water', name: 'Water', color: '#4169E1', icon: 'fa-water' },
             { type: 'desert', name: 'Desert', color: '#F4A460', icon: 'fa-sun' },
             { type: 'swamp', name: 'Swamp', color: '#556B2F', icon: 'fa-frog' },
-            { type: 'hill', name: 'Hill', color: '#8B7355', icon: 'fa-hill-rockslide' },
-            { type: 'road', name: 'Road', color: '#D2B48C', icon: 'fa-road' }
+            { type: 'hill', name: 'Hill', color: '#8B7355', icon: 'fa-hill-rockslide' }
         ];
         
         return terrains.map(terrain => `
@@ -1097,8 +1096,7 @@ class HexMapEditorModule {
                 'water': '💧',
                 'desert': '☀️',
                 'swamp': '🐸',
-                'hill': '⛰️',
-                'road': '🛤️'
+                'hill': '⛰️'
             };
             
             const symbol = terrainIcons[tile.terrain_type];
