@@ -75,9 +75,12 @@ try {
     // Get database connection
     $db = getDB();
     
-    // Verify map exists
+    // Verify map exists and get map's session DM
     $map = $db->selectOne(
-        "SELECT map_id, session_id FROM hex_maps WHERE map_id = ?",
+        "SELECT hm.map_id, hm.session_id, gs.dm_user_id as map_dm_user_id
+         FROM hex_maps hm
+         LEFT JOIN game_sessions gs ON hm.session_id = gs.session_id
+         WHERE hm.map_id = ?",
         [$mapId]
     );
     
@@ -85,11 +88,10 @@ try {
         Security::sendErrorResponse('Hex map not found', 404);
     }
     
-    // Verify character exists and belongs to user (or user is DM)
+    // Verify character exists and belongs to user (or user is DM of map's session)
     $character = $db->selectOne(
-        "SELECT c.character_id, c.user_id, c.character_name, gs.dm_user_id
+        "SELECT c.character_id, c.user_id, c.character_name
          FROM characters c
-         LEFT JOIN game_sessions gs ON c.session_id = gs.session_id
          WHERE c.character_id = ?",
         [$characterId]
     );
@@ -98,11 +100,11 @@ try {
         Security::sendErrorResponse('Character not found', 404);
     }
     
-    // Check permissions: character owner or DM can move
+    // Check permissions: character owner or map's session DM can move
     $canMove = false;
     if ($character['user_id'] == $userId) {
         $canMove = true;
-    } elseif ($map['session_id'] && $character['dm_user_id'] == $userId) {
+    } elseif ($map['session_id'] && $map['map_dm_user_id'] == $userId) {
         $canMove = true;
     }
     

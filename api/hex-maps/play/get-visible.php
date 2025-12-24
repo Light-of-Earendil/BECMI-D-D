@@ -51,7 +51,7 @@ try {
     
     // Get map and verify access
     $map = $db->selectOne(
-        "SELECT hm.map_id, hm.map_name, hm.session_id, gs.dm_user_id as session_dm_user_id
+        "SELECT hm.map_id, hm.map_name, hm.created_by_user_id, hm.session_id, gs.dm_user_id as session_dm_user_id
          FROM hex_maps hm
          LEFT JOIN game_sessions gs ON hm.session_id = gs.session_id
          WHERE hm.map_id = ?",
@@ -62,8 +62,9 @@ try {
         Security::sendErrorResponse('Hex map not found', 404);
     }
     
-    // Check if user is DM
-    $isDM = $map['session_dm_user_id'] == $userId;
+    // Check if user is DM (map creator or session DM)
+    $isDM = ($map['created_by_user_id'] == $userId) || 
+            ($map['session_id'] && $map['session_dm_user_id'] == $userId);
     
     // If not DM, get character position
     $playerQ = null;
