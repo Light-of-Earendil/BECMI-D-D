@@ -62,6 +62,33 @@ try {
         Security::sendErrorResponse('Hex map not found', 404);
     }
     
+    // Check access permissions (same as get.php and markers/list.php)
+    $hasAccess = false;
+    
+    // Creator has access
+    if ($map['created_by_user_id'] == $userId) {
+        $hasAccess = true;
+    }
+    // DM of linked session has access
+    elseif ($map['session_id'] && $map['session_dm_user_id'] == $userId) {
+        $hasAccess = true;
+    }
+    // Player in linked session has access
+    elseif ($map['session_id']) {
+        $playerCheck = $db->selectOne(
+            "SELECT 1 FROM session_players
+             WHERE session_id = ? AND user_id = ? AND status = 'accepted'",
+            [$map['session_id'], $userId]
+        );
+        if ($playerCheck) {
+            $hasAccess = true;
+        }
+    }
+    
+    if (!$hasAccess) {
+        Security::sendErrorResponse('You do not have access to this hex map', 403);
+    }
+    
     // Check if user is DM (map creator or session DM)
     $isDM = ($map['created_by_user_id'] == $userId) || 
             ($map['session_id'] && $map['session_dm_user_id'] == $userId);
