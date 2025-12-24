@@ -20,6 +20,7 @@ class HexMapEditorModule {
         this.currentMapId = null;
         this.currentMap = null;
         this.tiles = new Map(); // Map of "q,r" -> tile data
+        this.initialTileKeys = new Set(); // Track which tiles existed when map was loaded (for detecting deletions)
         this.markers = new Map(); // Map of "q,r" -> marker data
         this.selectedTerrain = 'plains';
         this.selectedTool = 'paint'; // paint, erase, select, place_settlement, draw_border, place_road, erase_road
@@ -349,6 +350,7 @@ class HexMapEditorModule {
                 
                 // Load tiles into map
                 this.tiles.clear();
+                this.initialTileKeys.clear(); // Reset initial tile tracking
                 if (response.data.tiles) {
                     response.data.tiles.forEach(tile => {
                         const key = `${tile.q},${tile.r}`;
@@ -373,6 +375,7 @@ class HexMapEditorModule {
                             tile.roads = {};
                         }
                         this.tiles.set(key, tile);
+                        this.initialTileKeys.add(key); // Track that this tile existed when loaded
                     });
                 }
                 
@@ -1391,10 +1394,15 @@ class HexMapEditorModule {
                 if (neighborTile && neighborTile.roads) {
                     // Opposite edge (edge + 3 mod 6)
                     const oppositeEdge = (edge + 3) % 6;
+                    const hadRoad = neighborTile.roads[oppositeEdge] === true;
                     delete neighborTile.roads[oppositeEdge];
                     
-                    // Save neighbor if it has other data - include both borders and roads to prevent data loss
-                    if (neighborTile.terrain_type || Object.keys(neighborTile.roads || {}).length > 0 || Object.keys(neighborTile.borders || {}).length > 0) {
+                    // Always save neighbor when we modify its roads to keep database in sync
+                    // Check if tile has any data left after road deletion
+                    const hasOtherData = neighborTile.terrain_type || Object.keys(neighborTile.roads || {}).length > 0 || Object.keys(neighborTile.borders || {}).length > 0;
+                    
+                    if (hasOtherData) {
+                        // Save updated tile with remaining data
                         try {
                             await this.apiClient.post('/api/hex-maps/tiles/create.php', {
                                 map_id: this.currentMapId,
@@ -1407,6 +1415,23 @@ class HexMapEditorModule {
                         } catch (error) {
                             console.error('Failed to save neighbor road removal:', error);
                         }
+                    } else if (hadRoad) {
+                        // Tile had a road but now has no data - delete it from database
+                        // Check if tile was in initialTileKeys (existed in database when loaded)
+                        if (this.initialTileKeys.has(neighborKey)) {
+                            // Tile exists in database - delete it
+                            try {
+                                await this.apiClient.post('/api/hex-maps/tiles/delete.php', {
+                                    map_id: this.currentMapId,
+                                    q: neighbor.q,
+                                    r: neighbor.r
+                                });
+                            } catch (error) {
+                                console.error('Failed to delete empty neighbor tile:', error);
+                            }
+                        }
+                        // Remove from local tiles map since it's empty
+                        this.tiles.delete(neighborKey);
                     }
                 }
             }
@@ -1737,6 +1762,27 @@ class HexMapEditorModule {
                 hex_size_pixels: hexSize
             });
             
+            // Find tiles that were deleted (existed initially but don't exist now)
+            const currentTileKeys = new Set(this.tiles.keys());
+            const deletedTileKeys = Array.from(this.initialTileKeys).filter(key => !currentTileKeys.has(key));
+            
+            // Delete tiles that were removed
+            if (deletedTileKeys.length > 0) {
+                console.log(`Deleting ${deletedTileKeys.length} tiles that were removed`);
+                const deletePromises = deletedTileKeys.map(key => {
+                    const [q, r] = key.split(',').map(Number);
+                    return this.apiClient.post('/api/hex-maps/tiles/delete.php', {
+                        map_id: this.currentMapId,
+                        q: q,
+                        r: r
+                    }).catch(error => {
+                        console.error(`Failed to delete tile ${key}:`, error);
+                        // Don't throw - continue deleting other tiles
+                    });
+                });
+                await Promise.all(deletePromises);
+            }
+            
             // Save tiles in batch
             const tiles = Array.from(this.tiles.values());
             if (tiles.length > 0) {
@@ -1797,6 +1843,9 @@ class HexMapEditorModule {
                     tiles: cleanTiles
                 });
             }
+            
+            // Update initialTileKeys to reflect current state after save
+            this.initialTileKeys = new Set(this.tiles.keys());
             
             // Markers are saved individually when placed, so no batch save needed
             
