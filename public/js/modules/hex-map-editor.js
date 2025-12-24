@@ -525,7 +525,16 @@ class HexMapEditorModule {
                 $('.tool-buttons .btn').removeClass('active');
                 $('.settlement-buttons .btn').removeClass('active');
                 $(e.currentTarget).addClass('active');
+            } else if (tool === 'place_road' || tool === 'erase_road') {
+                // Handle road tools (they don't have data-border, only data-tool)
+                this.selectedTool = tool;
+                this.selectedBorderType = null;
+                $('.border-buttons .btn').removeClass('active');
+                $('.tool-buttons .btn').removeClass('active');
+                $('.settlement-buttons .btn').removeClass('active');
+                $(e.currentTarget).addClass('active');
             } else if (border && tool) {
+                // Handle border tools (they have both data-border and data-tool)
                 this.selectedBorderType = border;
                 this.selectedTool = tool;
                 $('.border-buttons .btn').removeClass('active');
