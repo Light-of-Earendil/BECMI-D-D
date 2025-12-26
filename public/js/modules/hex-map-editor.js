@@ -103,6 +103,9 @@ class HexMapEditorModule {
             'mountain-peak': 'mountain-peak.png',
             'high-mountains': 'high-mountains.png',
             'high-mountain-peak': 'high-mountain-peak.png',
+            'water': 'water.png',
+            'lake': 'lake.png',
+            'ocean': 'ocean.png',
             'swamp': 'swamp.png',
             'marsh': 'marsh.png',
             'beach-dunes': 'beach-dunes.png',
@@ -506,6 +509,8 @@ class HexMapEditorModule {
             { type: 'jungle-mountains', name: 'Jungle Mountains', color: '#0D4A1A', icon: 'fa-tree' },
             // Water and wetlands
             { type: 'water', name: 'Water', color: '#4169E1', icon: 'fa-water' },
+            { type: 'lake', name: 'Lake', color: '#1E90FF', icon: 'fa-water' },
+            { type: 'ocean', name: 'Ocean', color: '#000080', icon: 'fa-water' },
             { type: 'swamp', name: 'Swamp', color: '#556B2F', icon: 'fa-frog' },
             { type: 'marsh', name: 'Marsh', color: '#6B8E23', icon: 'fa-frog' },
             { type: 'beach-dunes', name: 'Beach/Dunes', color: '#F5DEB3', icon: 'fa-water' },
@@ -748,7 +753,11 @@ class HexMapEditorModule {
             try {
                 const parsed = JSON.parse(rivers);
                 if (parsed && typeof parsed === 'object') {
-                    return Object.keys(parsed).length > 0 ? parsed : null;
+                    const keys = Object.keys(parsed);
+                    if (keys.length > 0) {
+                        console.log(`[HEX MAP EDITOR] normalizeRiversForSave: Parsed string with ${keys.length} keys:`, keys);
+                        return parsed;
+                    }
                 }
                 return null;
             } catch (e) {
@@ -758,7 +767,13 @@ class HexMapEditorModule {
         }
         // If object/array, check if it has content
         if (typeof rivers === 'object') {
-            return Object.keys(rivers).length > 0 ? rivers : null;
+            const keys = Object.keys(rivers);
+            if (keys.length > 0) {
+                console.log(`[HEX MAP EDITOR] normalizeRiversForSave: Object with ${keys.length} keys:`, keys, 'values:', rivers);
+                return rivers;
+            } else {
+                console.log('[HEX MAP EDITOR] normalizeRiversForSave: Object is empty');
+            }
         }
         return null;
     }
@@ -2764,11 +2779,12 @@ class HexMapEditorModule {
         }
         
         if (this.selectedTool === 'erase_river') {
-            // Remove river
-            delete tile.rivers[edge];
+            // Remove river (convert edge to string for consistency with JSON)
+            delete tile.rivers[String(edge)];
         } else if (this.selectedTool === 'draw_river' && this.selectedRiverType) {
-            // Set river
-            tile.rivers[edge] = this.selectedRiverType;
+            // Set river (convert edge to string for consistency with JSON)
+            tile.rivers[String(edge)] = this.selectedRiverType;
+            console.log(`[HEX MAP EDITOR] toggleRiver: Set ${this.selectedRiverType} on edge ${edge} for tile (${q}, ${r}). Rivers object:`, tile.rivers);
         }
         
         // Track tile for batch save (will be saved when user clicks "Save Map")
@@ -4047,6 +4063,11 @@ class HexMapEditorModule {
                 const paths = this.normalizePathsForSave(tile.paths);
                 const rivers = this.normalizeRiversForSave(tile.rivers);
                 
+                // Debug: Log rivers data for tiles that have rivers
+                if (tile.rivers && Object.keys(tile.rivers).length > 0) {
+                    console.log(`[HEX MAP EDITOR] Tile (${tile.q}, ${tile.r}) has rivers:`, tile.rivers, 'normalized to:', rivers);
+                }
+                
                 // Return only fields that the API expects (no tile_id, created_at, updated_at)
                 const cleanTile = {
                     q: tile.q,
@@ -4069,6 +4090,9 @@ class HexMapEditorModule {
                 }
                 if (rivers !== null) {
                     cleanTile.rivers = rivers;
+                    console.log(`[HEX MAP EDITOR] Including rivers in cleanTile for (${tile.q}, ${tile.r}):`, rivers);
+                } else if (tile.rivers && Object.keys(tile.rivers).length > 0) {
+                    console.error(`[HEX MAP EDITOR] ERROR: Tile (${tile.q}, ${tile.r}) has rivers but normalizeRiversForSave returned null!`, tile.rivers);
                 }
                 
                 return cleanTile;
@@ -4133,7 +4157,14 @@ class HexMapEditorModule {
                 this.currentMap = saveResponse.data.map;
             }
             
-            this.app.showSuccess('Map saved successfully');
+            // Check if rivers data was lost
+            if (saveResponse.data.rivers_data_lost) {
+                this.app.showError('Map saved, but rivers/streams were not saved because the database migration has not been run. Please run migration 018_hex_map_rivers.sql');
+            } else if (!saveResponse.data.rivers_column_exists) {
+                console.warn('[HEX MAP EDITOR] Rivers column does not exist in database. Rivers data will not be saved until migration is run.');
+            } else {
+                this.app.showSuccess('Map saved successfully');
+            }
         } catch (error) {
             console.error('[HEX MAP EDITOR] Failed to save map:', error);
             console.error('[HEX MAP EDITOR] Error details:', {

@@ -42,7 +42,7 @@ class HexMapPlayModule {
             // ['hills', 3.0],
             // ['mountains', 4.0],
         ]);
-        this.terrainImageScaleDefault = 3.0; // Default scale for terrain types not in the map above
+        this.terrainImageScaleDefault = 1.0; // Default scale for terrain types not in the map above
         
         // Maximum image size limit (as percentage of hex diameter)
         // Prevents overflow beyond hex bounds. Set to null to disable limit.
@@ -53,7 +53,7 @@ class HexMapPlayModule {
             // ['plains', 1.0],
             // ['hills', 1.5],
         ]);
-        this.terrainImageMaxSizeDefault = 0.95; // Default max size for terrain types not in the map above
+        this.terrainImageMaxSizeDefault = 0.80; // Default max size for terrain types not in the map above
         
         // Travel time multipliers
         this.terrainTravelMultipliers = new Map(); // Map<terrainType, multiplier>
@@ -1040,6 +1040,8 @@ class HexMapPlayModule {
                 'jungle-mountains': '#0D4A1A',
                 // Water and wetlands
                 'water': '#4169E1',
+                'lake': '#1E90FF',
+                'ocean': '#000080',
                 'swamp': '#556B2F',
                 'marsh': '#6B8E23',
                 'beach-dunes': '#F5DEB3',

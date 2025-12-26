@@ -338,10 +338,18 @@ try {
                         if (json_last_error() === JSON_ERROR_NONE) {
                             $riversObj = $decoded;
                         } else {
+                            error_log("[HEX MAP SAVE] ERROR: Invalid rivers JSON for tile ({$q}, {$r}): " . json_last_error_msg() . " - Raw data: " . $tileData['rivers']);
                             throw new Exception("Invalid rivers JSON for tile ({$q}, {$r}): " . json_last_error_msg());
                         }
                     } elseif (is_array($tileData['rivers']) || is_object($tileData['rivers'])) {
                         $riversObj = (array) $tileData['rivers'];
+                    }
+                    
+                    // Debug: Log what we received
+                    if ($riversObj !== null) {
+                        error_log("[HEX MAP SAVE] Tile ({$q}, {$r}) received rivers object with " . count($riversObj) . " keys: " . json_encode(array_keys($riversObj)));
+                    } else {
+                        error_log("[HEX MAP SAVE] Tile ({$q}, {$r}) rivers data is null after processing. Original data type: " . gettype($tileData['rivers']));
                     }
                     
                     // Only encode if object has content (empty objects become null)
@@ -351,7 +359,12 @@ try {
                             throw new Exception("Failed to encode rivers JSON for tile ({$q}, {$r}): " . json_last_error_msg());
                         }
                         $rivers = $encoded;
+                        error_log("[HEX MAP SAVE] Tile ({$q}, {$r}) has rivers data: " . $encoded);
+                    } else {
+                        error_log("[HEX MAP SAVE] Tile ({$q}, {$r}) rivers object is empty or null - not encoding");
                     }
+                } else {
+                    error_log("[HEX MAP SAVE] Tile ({$q}, {$r}) has no rivers data in tileData");
                 }
                 
                 if ($movementCost < 1) {
@@ -404,6 +417,8 @@ try {
                     } catch (Exception $e) {
                         // If rivers column doesn't exist, try without it
                         if (strpos($e->getMessage(), 'rivers') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
+                            error_log("[HEX MAP SAVE] WARNING: rivers column does not exist for tile ({$q}, {$r}). Rivers data will not be saved. Error: " . $e->getMessage());
+                            error_log("[HEX MAP SAVE] Rivers data that was lost: " . ($rivers ?: 'null'));
                             try {
                                 // Try with paths but without rivers
                                 $db->update(
@@ -507,6 +522,8 @@ try {
                     } catch (Exception $e) {
                         // If rivers column doesn't exist, try without it
                         if (strpos($e->getMessage(), 'rivers') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
+                            error_log("[HEX MAP SAVE] WARNING: rivers column does not exist for new tile ({$q}, {$r}). Rivers data will not be saved. Error: " . $e->getMessage());
+                            error_log("[HEX MAP SAVE] Rivers data that was lost: " . ($rivers ?: 'null'));
                             try {
                                 // Try with paths but without rivers
                                 $db->insert(
@@ -573,6 +590,42 @@ try {
         // Commit transaction
         $db->commit();
         
+        // Check if rivers column exists (for warning message)
+        $riversColumnExists = false;
+        $riversDataWasLost = false;
+        try {
+            $columnCheck = $db->selectOne(
+                "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+                 WHERE TABLE_SCHEMA = DATABASE() 
+                 AND TABLE_NAME = 'hex_tiles' 
+                 AND COLUMN_NAME = 'rivers'"
+            );
+            $riversColumnExists = ($columnCheck !== null);
+            
+            // Check if any tiles had rivers data that couldn't be saved
+            if (!$riversColumnExists && isset($input['tiles']) && is_array($input['tiles'])) {
+                foreach ($input['tiles'] as $tileData) {
+                    if (isset($tileData['rivers']) && $tileData['rivers'] !== null) {
+                        $riversObj = null;
+                        if (is_string($tileData['rivers'])) {
+                            $decoded = json_decode($tileData['rivers'], true);
+                            if (json_last_error() === JSON_ERROR_NONE) {
+                                $riversObj = $decoded;
+                            }
+                        } elseif (is_array($tileData['rivers']) || is_object($tileData['rivers'])) {
+                            $riversObj = (array) $tileData['rivers'];
+                        }
+                        if ($riversObj !== null && count($riversObj) > 0) {
+                            $riversDataWasLost = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            // Ignore check errors
+        }
+        
         // Get updated map
         $updatedMap = $db->selectOne(
             "SELECT map_id, map_name, map_description, created_by_user_id, session_id,
@@ -608,8 +661,12 @@ try {
             'tiles_saved' => isset($input['tiles']) ? count($input['tiles']) : 0,
             'tiles_created' => $tilesCreated,
             'tiles_updated' => $tilesUpdated,
-            'tiles_deleted' => $tilesDeleted
-        ], 'Map saved successfully');
+            'tiles_deleted' => $tilesDeleted,
+            'rivers_column_exists' => $riversColumnExists,
+            'rivers_data_lost' => $riversDataWasLost
+        ], $riversDataWasLost 
+            ? 'Map saved successfully, but rivers data was not saved because the rivers column does not exist in the database. Please run migration 018_hex_map_rivers.sql'
+            : 'Map saved successfully');
         
     } catch (Exception $e) {
         // Rollback transaction if it was started
