@@ -1,4 +1,4 @@
-/* ==========================================================================
+﻿/* ==========================================================================
    BECMI VTT — Old Wood + Parchment Theme
    Middelalder Low Fantasy RPG UI Design
    ========================================================================== */
@@ -6019,6 +6019,7 @@ textarea:focus-visible {
     flex-direction: column;
     align-items: center;
     gap: var(--space-1);
+    max-width: 115px;
 }
 
 .terrain-item i {

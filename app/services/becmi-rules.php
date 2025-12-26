@@ -9,8 +9,49 @@
 class BECMIRulesEngine {
     
     /**
-     * Calculate THAC0 (To Hit Armor Class 0) for a character
-     * NOTE: THAC0 is ALWAYS just the base value. Strength and Dex bonuses are separate.
+     * Calculate THAC0 (To Hit Armor Class 0) for a character.
+     * 
+     * **Important:** THAC0 is ALWAYS just the base value. Strength and Dex bonuses are separate.
+     * This follows BECMI rules where THAC0 is the base attack value, and ability bonuses
+     * are applied separately during combat resolution.
+     * 
+     * @param array $character Character data array with:
+     *   - `class` (string) - Character class
+     *   - `level` (int) - Character level (1-36)
+     *   - `strength` (int) - Strength score (3-18)
+     *   - `dexterity` (int) - Dexterity score (3-18)
+     * @return array THAC0 calculation result with:
+     *   - `base` (int) - Base THAC0 value (the actual THAC0)
+     *   - `strength_bonus` (int) - Strength bonus for melee attacks (separate)
+     *   - `dexterity_bonus` (int) - Dexterity bonus for ranged attacks (separate)
+     *   - `mastery_bonus` (int) - Weapon mastery bonus (if applicable)
+     * 
+     * @example
+     * // Calculate THAC0 for a 5th level fighter with STR 16, DEX 14
+     * $character = ['class' => 'fighter', 'level' => 5, 'strength' => 16, 'dexterity' => 14];
+     * $thac0 = BECMIRulesEngine::calculateTHAC0($character);
+     * // Returns: ['base' => 17, 'strength_bonus' => 2, 'dexterity_bonus' => 1, 'mastery_bonus' => 0]
+     * 
+     * **THAC0 Calculation:**
+     * - Base THAC0: Lookup by class and level from official BECMI table
+     * - Strength bonus: Separate bonus for melee attacks (not part of THAC0)
+     * - Dexterity bonus: Separate bonus for ranged attacks (not part of THAC0)
+     * - Weapon mastery: Additional bonus from weapon mastery system
+     * 
+     * **Supported Classes:**
+     * - fighter, cleric, magic_user, thief
+     * - dwarf, elf, halfling
+     * - druid, mystic
+     * 
+     * **Level Support:**
+     * - Supports levels 1-36 as per official BECMI Rules Cyclopedia
+     * 
+     * @see getBaseTHAC0() - Gets base THAC0 from official table
+     * @see getStrengthToHitBonus() - Calculates strength bonus
+     * @see getDexterityToHitBonus() - Calculates dexterity bonus
+     * @see getWeaponMasteryBonus() - Calculates weapon mastery bonus
+     * 
+     * @since 1.0.0
      */
     public static function calculateTHAC0($character) {
         $class = $character['class'];
@@ -39,11 +80,26 @@ class BECMIRulesEngine {
     }
     
     /**
-     * Get base THAC0 by class and level
-     */
-    /**
-     * Get base THAC0 by class and level (from official BECMI Rules Cyclopedia Attack Rolls Table)
-     * Supports levels 1-36 as per the official table
+     * Get base THAC0 by class and level from official BECMI Rules Cyclopedia Attack Rolls Table.
+     * Supports levels 1-36 as per the official table.
+     * 
+     * @param string $class Character class
+     * @param int $level Character level (1-36)
+     * @return int Base THAC0 value
+     * 
+     * @example
+     * // Get base THAC0 for 5th level fighter
+     * $thac0 = BECMIRulesEngine::getBaseTHAC0('fighter', 5);
+     * // Returns: 17
+     * 
+     * **THAC0 Progressions:**
+     * - Fighter/Elf/Halfling: 19 (1-3), 17 (4-6), 15 (7-9), 13 (10-12), 11 (13-15), 9 (16-18), 7 (19-21), 5 (22-24), 3 (25-27), 2 (28-30), 1 (34-36)
+     * - Cleric/Thief/Dwarf: 19 (1-4), 17 (5-8), 15 (9-12), 13 (13-16), 11 (17-20), 9 (21-24), 7 (25-28), 5 (29-32), 3 (33-35), 2 (36)
+     * - Magic-User: 19 (1-5), 17 (6-10), 15 (11-15), 13 (16-20), 11 (21-25), 9 (26-30), 7 (31-35), 5 (36)
+     * 
+     * @see calculateTHAC0() - Calls this to get base THAC0
+     * 
+     * @since 1.0.0
      */
     private static function getBaseTHAC0($class, $level) {
         // Official BECMI Rules Cyclopedia Attack Rolls Table
@@ -172,7 +228,29 @@ class BECMIRulesEngine {
     }
     
     /**
-     * Get Strength bonus to hit
+     * Get Strength bonus to hit for melee attacks.
+     * 
+     * @param int $strength Strength score (3-18)
+     * @return int Bonus to hit (negative for penalties, positive for bonuses)
+     * 
+     * @example
+     * // Get strength bonus for STR 16
+     * $bonus = BECMIRulesEngine::getStrengthToHitBonus(16);
+     * // Returns: 2
+     * 
+     * **Bonus Table:**
+     * - 3: -3
+     * - 4-5: -2
+     * - 6-8: -1
+     * - 9-12: 0
+     * - 13-15: +1
+     * - 16: +2
+     * - 17: +2
+     * - 18: +3
+     * 
+     * @see calculateTHAC0() - Uses this for strength bonus
+     * 
+     * @since 1.0.0
      */
     private static function getStrengthToHitBonus($strength) {
         $bonusTable = [
@@ -185,7 +263,22 @@ class BECMIRulesEngine {
     }
     
     /**
-     * Get Dexterity bonus to hit (ranged attacks)
+     * Get Dexterity bonus to hit for ranged attacks.
+     * 
+     * @param int $dexterity Dexterity score (3-18)
+     * @return int Bonus to hit (negative for penalties, positive for bonuses)
+     * 
+     * @example
+     * // Get dexterity bonus for DEX 15
+     * $bonus = BECMIRulesEngine::getDexterityToHitBonus(15);
+     * // Returns: 1
+     * 
+     * **Bonus Table:**
+     * - Same as strength bonus table (3: -3, 4-5: -2, 6-8: -1, 9-12: 0, 13-15: +1, 16: +2, 17: +2, 18: +3)
+     * 
+     * @see calculateTHAC0() - Uses this for dexterity bonus
+     * 
+     * @since 1.0.0
      */
     private static function getDexterityToHitBonus($dexterity) {
         $bonusTable = [
@@ -198,7 +291,29 @@ class BECMIRulesEngine {
     }
     
     /**
-     * Get weapon mastery bonus
+     * Get weapon mastery bonus to hit.
+     * 
+     * **Note:** This is a placeholder implementation. Weapon mastery system will be
+     * implemented when weapon mastery features are added to the system.
+     * 
+     * @param array $character Character data (should include equipped weapon and mastery level)
+     * @return int Weapon mastery bonus (currently always returns 0)
+     * 
+     * @example
+     * // Get weapon mastery bonus
+     * $bonus = BECMIRulesEngine::getWeaponMasteryBonus($character);
+     * // Currently returns: 0
+     * 
+     * **Future Implementation:**
+     * This will calculate bonus based on:
+     * - Equipped weapon type
+     * - Character's weapon mastery level for that weapon
+     * - Official BECMI weapon mastery bonus table
+     * 
+     * @see calculateTHAC0() - Uses this for weapon mastery bonus
+     * 
+     * @since 1.0.0
+     * @todo Implement weapon mastery bonus calculation
      */
     private static function getWeaponMasteryBonus($character) {
         // This would need to be calculated based on equipped weapon and mastery level
@@ -207,7 +322,41 @@ class BECMIRulesEngine {
     }
     
     /**
-     * Calculate movement rates based on encumbrance (BECMI Chapter 6 rules)
+     * Calculate movement rates based on encumbrance (BECMI Chapter 6 rules).
+     * Returns movement rates for normal, encounter, and running movement, plus encumbrance status.
+     * 
+     * @param array $character Character data with:
+     *   - `strength` (int) - Strength score (for encumbrance capacity)
+     *   - Inventory data (for total weight calculation)
+     * @return array Movement rates with:
+     *   - `normal` (int) - Normal movement rate in feet per turn
+     *   - `encounter` (int) - Encounter movement rate in feet per round
+     *   - `running` (int) - Running movement rate in feet per turn
+     *   - `status` (string) - Encumbrance status: 'unencumbered', 'lightly_encumbered', 'heavily_encumbered', 'severely_encumbered', 'overloaded', 'immobile'
+     *   - `weight` (int) - Total weight in coins (cn)
+     *   - `limit` (int) - Weight limit for current status in coins (cn)
+     * 
+     * @example
+     * // Calculate movement for character with 500 cn weight
+     * $character = ['strength' => 13, ...];
+     * $movement = BECMIRulesEngine::calculateMovementRates($character);
+     * // Returns: ['normal' => 90, 'encounter' => 30, 'running' => 90, 'status' => 'lightly_encumbered', 'weight' => 500, 'limit' => 800]
+     * 
+     * **Encumbrance Levels (BECMI Chapter 6):**
+     * - Unencumbered (≤ 400 cn): 120/40/120 ft (normal/encounter/running)
+     * - Lightly encumbered (401-800 cn): 90/30/90 ft
+     * - Heavily encumbered (801-1200 cn): 60/20/60 ft
+     * - Severely encumbered (1201-1600 cn): 30/10/30 ft
+     * - Overloaded (1601-2400 cn): 15/5/15 ft
+     * - Immobile (> 2400 cn): 0/0/0 ft
+     * 
+     * **Note:**
+     * Encumbrance levels are fixed, not adjusted by strength in standard BECMI rules.
+     * Strength may affect carrying capacity in optional rules.
+     * 
+     * @see calculateTotalWeight() - Calculates total inventory weight
+     * 
+     * @since 1.0.0
      */
     public static function calculateMovementRates($character) {
         $strength = $character['strength'];
@@ -295,7 +444,45 @@ class BECMIRulesEngine {
     }
     
     /**
-     * Calculate saving throws for a character
+     * Calculate saving throws for a character.
+     * Returns all five saving throw categories with ability score adjustments applied.
+     * 
+     * @param array $character Character data array with:
+     *   - `class` (string) - Character class
+     *   - `level` (int) - Character level (1-36)
+     *   - `strength` (int) - Strength score
+     *   - `dexterity` (int) - Dexterity score
+     *   - `constitution` (int) - Constitution score
+     *   - `intelligence` (int) - Intelligence score
+     *   - `wisdom` (int) - Wisdom score
+     *   - `charisma` (int) - Charisma score
+     * @return array Saving throws with keys:
+     *   - `death_ray` (int) - Death ray or poison save
+     *   - `magic_wand` (int) - Magic wand save
+     *   - `paralysis` (int) - Paralysis or turn to stone save
+     *   - `dragon_breath` (int) - Dragon breath save
+     *   - `spells` (int) - Spells save
+     * 
+     * @example
+     * // Calculate saving throws for 5th level fighter
+     * $character = ['class' => 'fighter', 'level' => 5, 'strength' => 16, ...];
+     * $saves = BECMIRulesEngine::calculateSavingThrows($character);
+     * // Returns: ['death_ray' => 10, 'magic_wand' => 11, 'paralysis' => 12, 'dragon_breath' => 13, 'spells' => 14]
+     * 
+     * **Calculation Process:**
+     * 1. Gets base saving throws from official BECMI table (by class and level)
+     * 2. Applies ability score adjustments (Wisdom for spells, Constitution for breath, etc.)
+     * 3. Returns adjusted saving throws
+     * 
+     * **Ability Score Adjustments:**
+     * - Spells: Wisdom bonus/penalty
+     * - Dragon Breath: Constitution bonus/penalty
+     * - Other saves: No ability adjustments (base values only)
+     * 
+     * @see getBaseSavingThrows() - Gets base saves from official table
+     * @see applyAbilityScoreAdjustments() - Applies ability score modifiers
+     * 
+     * @since 1.0.0
      */
     public static function calculateSavingThrows($character) {
         $class = $character['class'];
@@ -620,7 +807,34 @@ class BECMIRulesEngine {
     }
     
     /**
-     * Get spell slots for any class
+     * Get spell slots for a character class and level.
+     * Returns associative array with spell level as key and slot count as value.
+     * 
+     * @param string $class Character class
+     * @param int $level Character level (1-36)
+     * @return array Associative array with spell level (1-9) as key and slot count as value.
+     *   Example: [1 => 2, 2 => 1] means 2 first-level slots and 1 second-level slot.
+     *   Returns empty array for non-spellcasters.
+     * 
+     * @example
+     * // Get spell slots for 5th level cleric
+     * $slots = BECMIRulesEngine::getSpellSlots('cleric', 5);
+     * // Returns: [1 => 2, 2 => 1] (2 first-level, 1 second-level)
+     * 
+     * **Supported Classes:**
+     * - `cleric`, `druid` - Cleric spell progression
+     * - `magic_user`, `elf` - Magic-user spell progression
+     * - Others - Returns empty array (no spell slots)
+     * 
+     * **Spell Slot Progression:**
+     * - Clerics: Gain slots starting at level 2
+     * - Magic-Users: Gain slots starting at level 1
+     * - Supports levels 1-36 with full progression
+     * 
+     * @see getClericSpellSlots() - Gets cleric/druid spell slots
+     * @see getMagicUserSpellSlots() - Gets magic-user/elf spell slots
+     * 
+     * @since 1.0.0
      */
     public static function getSpellSlots($class, $level) {
         $slots = [];
@@ -649,12 +863,47 @@ class BECMIRulesEngine {
     }
     
     /**
-     * Calculate armor class according to BECMI rules
-     * BECMI uses descending AC where lower is better
+     * Calculate armor class according to BECMI rules.
+     * BECMI uses descending AC where lower is better (AC 9 = no armor, AC 2 = plate mail).
      * 
-     * @param array $character Character data
-     * @param array $inventory Character inventory (optional)
-     * @return int Armor class (lower is better)
+     * @param array $character Character data with:
+     *   - `dexterity` (int) - Dexterity score (3-18)
+     * @param array|null $inventory Character inventory array (optional). If provided, checks for equipped armor.
+     *   Each item should have:
+     *   - `is_equipped` (bool) - Whether item is equipped
+     *   - `item_type` (string) - Item type ('armor' for armor)
+     *   - `item_name` (string) - Item name (e.g., 'leather armor', 'chain mail')
+     * @return int Armor class (lower is better, range typically 2-9)
+     * 
+     * @example
+     * // Calculate AC for character with DEX 14 and leather armor
+     * $character = ['dexterity' => 14];
+     * $inventory = [['is_equipped' => true, 'item_type' => 'armor', 'item_name' => 'leather armor']];
+     * $ac = BECMIRulesEngine::calculateArmorClass($character, $inventory);
+     * // Returns: 6 (leather armor AC 7, DEX 14 gives -1, so 7-1=6)
+     * 
+     * **AC Calculation:**
+     * 1. Base AC: 9 (no armor) or armor AC (if equipped armor)
+     * 2. Dexterity adjustment: Subtract DEX bonus from AC (lower is better)
+     * 3. Shield: Additional -1 if shield equipped
+     * 
+     * **Armor AC Values (BECMI):**
+     * - No armor: 9
+     * - Leather armor: 7
+     * - Chain mail: 5
+     * - Plate mail: 2
+     * - Shield: -1 (additional)
+     * 
+     * **Dexterity Adjustments:**
+     * - DEX 3-8: +1 to AC (worse)
+     * - DEX 9-12: 0
+     * - DEX 13-15: -1 to AC (better)
+     * - DEX 16-17: -2 to AC
+     * - DEX 18: -3 to AC
+     * 
+     * @see getDexterityBonus() - Gets dexterity AC adjustment
+     * 
+     * @since 1.0.0
      */
     public static function calculateArmorClass($character, $inventory = null) {
         // Dexterity bonus/penalty (subtract from AC, lower is better)

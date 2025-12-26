@@ -128,7 +128,7 @@
 # DIRECTORY INDEX
 # ============================================
 
-DirectoryIndex index.html index.php
+DirectoryIndex index.php index.html
 
 # Disable directory browsing
 Options -Indexes

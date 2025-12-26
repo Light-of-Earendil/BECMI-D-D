@@ -85,8 +85,10 @@ class APIClient {
                 const requestOptions = {
                     method: method,
                     headers: this.getHeaders(),
+                    credentials: 'include', // Include cookies (session) in request
                     timeout: this.timeout
                 };
+                
                 
                 // Add body for POST/PUT/DELETE requests
                 if (data && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
@@ -222,15 +224,33 @@ class APIClient {
                     throw new Error(`Invalid JSON response: ${errorMsg}. Response starts with: ${responseText.substring(0, 200)}`);
                 }
                 
+                // Extract and update CSRF token from response if present
+                if (result.csrf_token) {
+                    if (window.becmiApp && window.becmiApp.state) {
+                        window.becmiApp.state.csrfToken = result.csrf_token;
+                        console.log('[API Client] Updated CSRF token from response');
+                    }
+                } else if (result.data && result.data.csrf_token) {
+                    if (window.becmiApp && window.becmiApp.state) {
+                        window.becmiApp.state.csrfToken = result.data.csrf_token;
+                        console.log('[API Client] Updated CSRF token from response data');
+                    }
+                }
+                
                 // Check if the response indicates an authentication error
                 if (result.status === 'error' && result.code === 'UNAUTHORIZED') {
                     // Handle authentication error - might need to redirect to login
                     console.warn('[API Client] Authentication required - session may have expired');
+                    console.warn('[API Client] Response structure:', JSON.stringify(result, null, 2));
                     // Don't throw here, let the calling code handle it
                 }
                 
-                // Log successful response
+                // Log successful response with details
                 console.log(`[API] ${method} ${url} - success`);
+                if (result.status === 'error') {
+                    console.error('[API Client] WARNING: Response marked as success but status is "error"!');
+                    console.error('[API Client] Full response:', JSON.stringify(result, null, 2));
+                }
                 
                 return result;
                 
@@ -287,9 +307,17 @@ class APIClient {
         const csrfToken = this.getCSRFToken();
         if (csrfToken) {
             headers['X-CSRF-Token'] = csrfToken;
+            console.log('[API Client] Sending CSRF token in request header:', csrfToken.substring(0, 16) + '...');
+        } else {
+            console.warn('[API Client] No CSRF token available - request may fail authentication');
+            console.warn('[API Client] window.becmiApp exists:', !!window.becmiApp);
+            console.warn('[API Client] window.becmiApp.state exists:', !!(window.becmiApp && window.becmiApp.state));
+            if (window.becmiApp && window.becmiApp.state) {
+                console.warn('[API Client] window.becmiApp.state.csrfToken:', window.becmiApp.state.csrfToken);
+            }
         }
         
-        // Add auth token if available
+        // Add auth token if available (for compatibility, though session-based auth is primary)
         const authToken = localStorage.getItem('auth_token');
         if (authToken) {
             headers['Authorization'] = `Bearer ${authToken}`;

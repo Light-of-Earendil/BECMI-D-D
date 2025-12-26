@@ -91,7 +91,7 @@ function sendInvitationEmail($playerUser, $session, $dmUserId) {
             <p>To accept this invitation and join the session:</p>
             
             <div style='text-align: center;'>
-                <a href='https://becmi.snilld-api.dk/public/index.html' class='cta-button'>
+                <a href='https://becmi.snilld-api.dk/public/index.php' class='cta-button'>
                     🚀 Go to BECMI VTT
                 </a>
             </div>

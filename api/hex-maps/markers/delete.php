@@ -3,11 +3,39 @@
  * BECMI D&D Character Manager - Delete Hex Map Marker Endpoint
  * 
  * Deletes a marker from a hex map.
+ * Verifies user has permission (map creator or session DM) before deletion.
  * 
- * Request: POST
- * Body: {
- *   "marker_id": int (required)
+ * **Request:** POST
+ * 
+ * **Body Parameters:**
+ * - `marker_id` (int, required) - Marker ID to delete
+ * 
+ * **Response:**
+ * ```json
+ * {
+ *   "status": "success",
+ *   "message": "Marker deleted successfully",
+ *   "data": {
+ *     "marker_id": int
+ *   }
  * }
+ * ```
+ * 
+ * **Permissions:**
+ * - Map creator: Can delete markers
+ * - Session DM: Can delete markers
+ * - Others: 403 Forbidden
+ * 
+ * **Called From:**
+ * - `HexMapEditorModule.deleteMarker()` - When deleting marker via right-click or erase tool
+ * 
+ * **Side Effects:**
+ * - Deletes row from `hex_map_markers` table
+ * - Logs security event `hex_map_marker_deleted`
+ * 
+ * @package api/hex-maps/markers
+ * @api POST /api/hex-maps/markers/delete.php
+ * @since 1.0.0
  */
 
 require_once '../../../app/core/database.php';

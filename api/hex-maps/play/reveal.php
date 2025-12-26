@@ -3,17 +3,52 @@
  * BECMI D&D Character Manager - Reveal Hex Endpoint
  * 
  * Allows DM to reveal hexes to players (set visibility to full).
- * Can reveal single hex or multiple hexes.
+ * Can reveal single hex or multiple hexes to all players or specific user.
  * 
- * Request: POST
- * Body: {
- *   "map_id": int (required),
- *   "hexes": [
- *     {"q": int, "r": int},
- *     ...
- *   ],
- *   "user_id": int (optional) - If provided, reveal only to this user. Otherwise reveals to all players in session.
+ * **Request:** POST
+ * 
+ * **Body Parameters:**
+ * - `map_id` (int, required) - Map ID
+ * - `hexes` (array, required) - Array of hex coordinate objects `[{"q": int, "r": int}, ...]`
+ *   - Maximum 100 hexes per request
+ * - `user_id` (int, optional) - If provided, reveal only to this user. Otherwise reveals to all players in session.
+ * 
+ * **Response:**
+ * ```json
+ * {
+ *   "status": "success",
+ *   "message": "Hexes revealed successfully",
+ *   "data": {
+ *     "revealed_count": int,
+ *     "hexes": [{"q": int, "r": int}, ...]
+ *   }
  * }
+ * ```
+ * 
+ * **Permissions:**
+ * - Map creator: Can reveal hexes
+ * - Session DM: Can reveal hexes
+ * - Others: 403 Forbidden
+ * 
+ * **Visibility Updates:**
+ * - Sets specified hexes to full visibility (level 2) for target user(s)
+ * - If `user_id` provided: Reveals only to that user
+ * - If `user_id` omitted: Reveals to all players in session
+ * 
+ * **Real-time Events:**
+ * - Broadcasts `hex_map_hexes_revealed` event to all session participants
+ * 
+ * **Called From:**
+ * - `HexMapPlayModule.revealHexes()` - When DM reveals hexes
+ * 
+ * **Side Effects:**
+ * - Updates `hex_map_visibility` table
+ * - Broadcasts real-time event
+ * - Logs security event `hex_map_hexes_revealed`
+ * 
+ * @package api/hex-maps/play
+ * @api POST /api/hex-maps/play/reveal.php
+ * @since 1.0.0
  */
 
 require_once '../../../app/core/database.php';

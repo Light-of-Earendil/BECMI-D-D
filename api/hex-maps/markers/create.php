@@ -3,19 +3,63 @@
  * BECMI D&D Character Manager - Create Hex Map Marker Endpoint
  * 
  * Creates a marker (settlement, POI, etc.) on a hex map.
+ * Validates marker type and ensures only one marker per hex.
  * 
- * Request: POST
- * Body: {
- *   "map_id": int (required),
- *   "q": int (required),
- *   "r": int (required),
- *   "marker_type": string (required) - "village", "town", "city", "poi", "note", etc.
- *   "marker_name": string (optional),
- *   "marker_description": string (optional),
- *   "marker_icon": string (optional),
- *   "marker_color": string (optional),
- *   "is_visible_to_players": boolean (optional, default: false)
+ * **Request:** POST
+ * 
+ * **Body Parameters:**
+ * - `map_id` (int, required) - Map ID
+ * - `q` (int, required) - Hex column coordinate
+ * - `r` (int, required) - Hex row coordinate
+ * - `marker_type` (string, required) - Marker type: "village", "town", "city", "castle", "fort", "ruins", "poi", "note", "encounter", "treasure", "area_label"
+ * - `marker_name` (string, optional) - Marker name/label
+ * - `marker_description` (string, optional) - Marker description
+ * - `marker_icon` (string, optional) - Font Awesome icon class (e.g., "fa-home")
+ * - `marker_color` (string, optional) - Marker color (hex code, e.g., "#8B7355")
+ * - `is_visible_to_players` (boolean, optional, default: false) - Whether players can see this marker
+ * 
+ * **Response:**
+ * ```json
+ * {
+ *   "status": "success",
+ *   "message": "Marker created successfully",
+ *   "data": {
+ *     "marker_id": int,
+ *     "map_id": int,
+ *     "q": int,
+ *     "r": int,
+ *     "marker_type": string,
+ *     "marker_name": string,
+ *     ...
+ *   }
  * }
+ * ```
+ * 
+ * **Permissions:**
+ * - Map creator: Can create markers
+ * - Session DM: Can create markers
+ * - Others: 403 Forbidden
+ * 
+ * **Validation:**
+ * - Only one marker per hex (replaces existing marker if present)
+ * - Valid marker_type required
+ * 
+ * **Marker Types:**
+ * - Settlements: village, town, city, castle, fort, ruins
+ * - Points of Interest: poi, encounter, treasure, note
+ * - Area Labels: area_label (text-only labels for region/area names)
+ * 
+ * **Called From:**
+ * - `HexMapEditorModule.placeSettlement()` - When placing settlement markers
+ * 
+ * **Side Effects:**
+ * - Creates row in `hex_map_markers` table
+ * - Replaces existing marker if one exists at (q, r)
+ * - Logs security event `hex_map_marker_created`
+ * 
+ * @package api/hex-maps/markers
+ * @api POST /api/hex-maps/markers/create.php
+ * @since 1.0.0
  */
 
 require_once '../../../app/core/database.php';

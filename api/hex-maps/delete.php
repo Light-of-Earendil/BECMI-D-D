@@ -5,10 +5,47 @@
  * Allows the map creator or session DM to delete a hex map.
  * This will cascade delete all associated tiles, visibility data, and positions.
  * 
- * Request: POST
- * Body: {
- *   "map_id": int (required)
+ * **Request:** POST
+ * 
+ * **Body Parameters:**
+ * - `map_id` (int, required) - Map ID to delete
+ * 
+ * **Response:**
+ * ```json
+ * {
+ *   "status": "success",
+ *   "message": "Hex map deleted successfully",
+ *   "data": {
+ *     "map_id": int
+ *   }
  * }
+ * ```
+ * 
+ * **Permissions:**
+ * - Map creator: Can delete map
+ * - Session DM: Can delete map
+ * - Others: 403 Forbidden
+ * 
+ * **Cascade Deletes:**
+ * - All tiles in `hex_tiles` table
+ * - All markers in `hex_map_markers` table
+ * - All visibility data in `hex_map_visibility` table
+ * - All character positions in `hex_map_positions` table
+ * 
+ * **Warning:**
+ * This is a destructive operation that cannot be undone.
+ * All map data is permanently deleted.
+ * 
+ * **Called From:**
+ * - Map deletion UI (when implemented)
+ * 
+ * **Side Effects:**
+ * - Deletes row from `hex_maps` table (cascade deletes related data)
+ * - Logs security event `hex_map_deleted`
+ * 
+ * @package api/hex-maps
+ * @api POST /api/hex-maps/delete.php
+ * @since 1.0.0
  */
 
 require_once '../../app/core/database.php';

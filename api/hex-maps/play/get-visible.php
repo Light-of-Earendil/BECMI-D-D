@@ -6,15 +6,59 @@
  * and visibility rules. DMs see everything, players see only their current hex
  * and have limited info about neighboring hexes.
  * 
- * Visibility levels:
- * - 0: Hidden (fog of war)
- * - 1: Partial (neighbor info - can see terrain type but not details)
- * - 2: Full (current hex or revealed by DM)
+ * **Request:** GET
  * 
- * Request: GET
- * Query params:
- *   - map_id (required): Map ID
- *   - character_id (optional): Character ID (defaults to user's character in session)
+ * **Query Parameters:**
+ * - `map_id` (int, required) - Map ID
+ * - `character_id` (int, optional) - Character ID (defaults to user's character in session)
+ * 
+ * **Response:**
+ * ```json
+ * {
+ *   "status": "success",
+ *   "data": {
+ *     "is_dm": bool,
+ *     "character_id": int|null,
+ *     "player_position": {"q": int, "r": int}|null,
+ *     "hexes": [
+ *       {
+ *         "q": int,
+ *         "r": int,
+ *         "terrain_type": string,
+ *         "visibility_level": int,
+ *         "characters": [{"character_id": int, "character_name": string}, ...] (DM only)
+ *       },
+ *       ...
+ *     ]
+ *   }
+ * }
+ * ```
+ * 
+ * **Visibility Levels:**
+ * - 0: Hidden (fog of war) - Very dim, barely visible
+ * - 1: Partial (neighbor visibility) - Can see terrain type but not details
+ * - 2: Full (current hex or DM-revealed) - Full visibility with all details
+ * 
+ * **DM vs Player:**
+ * - DM: Sees all hexes with full visibility (level 2)
+ * - Player: Sees current hex fully (level 2), neighbors partially (level 1), others hidden (level 0)
+ * 
+ * **Access Control:**
+ * - Map creator: Full access (treated as DM)
+ * - Session DM: Full access (treated as DM)
+ * - Accepted player: Limited access (fog of war)
+ * - Others: 403 Forbidden
+ * 
+ * **Called From:**
+ * - `HexMapPlayModule.loadVisibleHexes()` - Loads visible hexes for play mode
+ * - Auto-refresh interval (every 5 seconds)
+ * 
+ * **Side Effects:**
+ * - None (read-only operation)
+ * 
+ * @package api/hex-maps/play
+ * @api GET /api/hex-maps/play/get-visible.php?map_id={mapId}&character_id={characterId}
+ * @since 1.0.0
  */
 
 require_once '../../../app/core/database.php';

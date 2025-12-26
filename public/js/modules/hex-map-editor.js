@@ -23,7 +23,7 @@ class HexMapEditorModule {
         this.initialTileKeys = new Set(); // Track which tiles existed when map was loaded (for detecting deletions)
         this.markers = new Map(); // Map of "q,r" -> marker data
         this.selectedTerrain = 'plains';
-        this.selectedTool = 'paint'; // paint, erase, select, place_settlement, draw_border, place_road, erase_road
+        this.selectedTool = 'paint'; // paint, erase, select, place_settlement, draw_border, place_road, erase_road, place_path, erase_path, place_area_label
         this.selectedSettlementType = 'village'; // village, town, city
         this.selectedBorderType = null; // null, 'local', 'regional', 'national'
         this.isDrawing = false;
@@ -35,6 +35,7 @@ class HexMapEditorModule {
         this.hoverHex = null; // For border hover feedback
         this.hoverPixelX = null;
         this.hoverPixelY = null;
+        this.roadStartHex = null; // For road placement: {q, r} of the starting hex
         this.hexSize = 50;
         this.offsetX = 0;
         this.offsetY = 0;
@@ -43,14 +44,110 @@ class HexMapEditorModule {
         this.maxZoom = 5.0;
         this.showCoordinates = false; // Debug mode for coordinates
         
+        // Terrain image zoom/scale settings per terrain type
+        // Controls how large terrain icons are rendered relative to hex size
+        // 1.0 = 100% (same as hex radius), 3.0 = 300% (default), etc.
+        // Set to a high value (e.g., 10.0) to zoom in on terrain details
+        // Each terrain type can have its own scale, or use the default
+        this.terrainImageScales = new Map([
+            // Add specific scales for terrain types here, e.g.:
+            // ['plains', 2.5],
+            // ['hills', 3.0],
+            // ['mountains', 4.0],
+        ]);
+        this.terrainImageScaleDefault = 2.75; // Default scale for terrain types not in the map above
+        
+        // Maximum image size limit (as percentage of hex diameter)
+        // Prevents overflow beyond hex bounds. Set to null to disable limit.
+        // 0.95 = 95% of diameter (default), 1.0 = 100% (full diameter), null = no limit
+        // Can also be set per terrain type in terrainImageMaxSizes map
+        this.terrainImageMaxSizes = new Map([
+            // Add specific max sizes for terrain types here, e.g.:
+            // ['plains', 1.0],
+            // ['hills', 1.5],
+        ]);
+        this.terrainImageMaxSizeDefault = 1.5; // Default max size for terrain types not in the map above
+        
+        // Terrain type to image mapping
+        this.terrainImages = new Map();
+        this.loadTerrainImages();
+        
         console.log('Hex Map Editor Module initialized');
     }
     
     /**
-     * Render the hex map editor view
+     * Load terrain images into cache for efficient rendering.
+     * Preloads all terrain type images and stores them in this.terrainImages Map.
+     * Images are loaded from /images/terrain-icons/ directory.
      * 
-     * @param {number} mapId - Optional map ID to load
-     * @returns {Promise<string>} HTML for editor
+     * @returns {void}
+     * 
+     * @example
+     * // Called automatically in constructor
+     * this.loadTerrainImages();
+     */
+    loadTerrainImages() {
+        const terrainImageMap = {
+            'jungle-rainforest': 'jungle-rainforest.png',
+            'jungle-hills': 'jungle-hills.png',
+            'jungle-mountains': 'jungle-mountains.png',
+            'grasslands-plains': 'grasslands-plains.png',
+            'plains': 'grasslands-plains.png', // Alias
+            'farmland': 'farmland.png',
+            'grassy-hills': 'grassy-hills.png',
+            'hills': 'hills.png',
+            'hill': 'hills.png', // Alias
+            'mountains': 'mountains.png',
+            'mountain': 'mountains.png', // Alias
+            'mountain-peak': 'mountain-peak.png',
+            'high-mountains': 'high-mountains.png',
+            'high-mountain-peak': 'high-mountain-peak.png',
+            'swamp': 'swamp.png',
+            'marsh': 'marsh.png',
+            'beach-dunes': 'beach-dunes.png',
+            'desert': 'desert.png',
+            'rocky-desert': 'rocky-desert.png',
+            'desert-hills': 'desert-hills.png',
+            'desert-mountains': 'desert-mountains.png',
+            'light-forest-deciduous': 'light-forest-deciduous.png',
+            'heavy-forest-deciduous': 'heavy-forest-deciduous.png',
+            'forest': 'heavy-forest-deciduous.png', // Alias
+            'forested-hills-deciduous': 'forested-hills-deciduous.png',
+            'forested-mountains-deciduous': 'forested-mountains-deciduous.png',
+            'light-forest-coniferous': 'light-forest-coniferous.png',
+            'heavy-forest-coniferous': 'heavy-forest-coniferous.png',
+            'forested-hills-coniferous': 'forested-hills-coniferous.png',
+            'forested-mountains-coniferous': 'forested-mountains-coniferous.png'
+        };
+        
+        // Preload images
+        Object.entries(terrainImageMap).forEach(([terrainType, filename]) => {
+            const img = new Image();
+            img.src = `/images/terrain-icons/${filename}`;
+            this.terrainImages.set(terrainType, img);
+        });
+    }
+    
+    /**
+     * Render the hex map editor view.
+     * Loads available maps and optionally loads a specific map for editing.
+     * Returns HTML for either the map list (if no map selected) or the editor canvas.
+     * 
+     * @param {number|null} [mapId=null] - Optional map ID to load immediately
+     * @returns {Promise<string>} HTML string for the editor view
+     * 
+     * @throws {Error} If map loading fails
+     * 
+     * @example
+     * // Render editor without loading a map
+     * const html = await hexMapEditor.renderEditor();
+     * 
+     * // Render editor and load map ID 5
+     * const html = await hexMapEditor.renderEditor(5);
+     * 
+     * @see loadMap() - For loading map data
+     * @see renderMapList() - For rendering map list view
+     * @see renderEditorCanvas() - For rendering editor interface
      */
     async renderEditor(mapId = null) {
         try {
@@ -108,7 +205,20 @@ class HexMapEditorModule {
     }
     
     /**
-     * Render map list view
+     * Render the map list view showing all available hex maps.
+     * Displays maps in a grid layout with edit and play buttons.
+     * Shows empty state if no maps exist.
+     * 
+     * @param {Array<Object>} maps - Array of map objects with metadata
+     * @returns {string} HTML string for the map list view
+     * 
+     * @example
+     * const maps = [
+     *   { map_id: 1, map_name: "Wilderness", width_hexes: 20, height_hexes: 20, ... }
+     * ];
+     * const html = this.renderMapList(maps);
+     * 
+     * @see renderEditor() - Calls this when no map is selected
      */
     renderMapList(maps) {
         if (maps.length === 0) {
@@ -154,7 +264,17 @@ class HexMapEditorModule {
     }
     
     /**
-     * Render editor canvas
+     * Render the editor canvas interface with sidebar and canvas container.
+     * Includes map properties, terrain palette, tools, settlements, borders, and roads sections.
+     * 
+     * @returns {string} HTML string for the editor canvas interface
+     * 
+     * @example
+     * const html = this.renderEditorCanvas();
+     * // Returns complete editor UI with sidebar and canvas container
+     * 
+     * @see renderEditor() - Calls this when a map is loaded
+     * @see renderTerrainPalette() - For terrain selection UI
      */
     renderEditorCanvas() {
         return `
@@ -282,7 +402,33 @@ class HexMapEditorModule {
                                 <i class="fas fa-eraser"></i> Erase Road
                             </button>
                         </div>
-                        <small class="form-text text-muted">Click on a hex edge to place a road. Roads automatically connect to neighboring roads.</small>
+                        <small class="form-text text-muted">Click a hex to start a road, then click a neighboring hex to connect them. Click the same hex again to cancel.</small>
+                    </div>
+                    
+                    <div class="sidebar-section">
+                        <h3>Paths</h3>
+                        <div class="border-buttons">
+                            <button class="btn btn-sm btn-secondary ${this.selectedTool === 'place_path' ? 'active' : ''}" 
+                                    id="place-path-btn" data-tool="place_path">
+                                <i class="fas fa-walking"></i> Place Path
+                            </button>
+                            <button class="btn btn-sm btn-secondary ${this.selectedTool === 'erase_path' ? 'active' : ''}" 
+                                    id="erase-path-btn" data-tool="erase_path">
+                                <i class="fas fa-eraser"></i> Erase Path
+                            </button>
+                        </div>
+                        <small class="form-text text-muted">Click a hex to start a path, then click a neighboring hex to connect them. Paths are drawn as dashed lines.</small>
+                    </div>
+                    
+                    <div class="sidebar-section">
+                        <h3>Area Labels</h3>
+                        <div class="tool-buttons">
+                            <button class="btn btn-sm btn-secondary ${this.selectedTool === 'place_area_label' ? 'active' : ''}" 
+                                    id="place-area-label-btn" data-tool="place_area_label">
+                                <i class="fas fa-sign"></i> Place Area Name
+                            </button>
+                        </div>
+                        <small class="form-text text-muted">Click on a hex to place an area/region name label.</small>
                     </div>
                 </div>
                 
@@ -314,13 +460,38 @@ class HexMapEditorModule {
      */
     renderTerrainPalette() {
         const terrains = [
+            // Basic terrains
             { type: 'plains', name: 'Plains', color: '#90EE90', icon: 'fa-seedling' },
-            { type: 'forest', name: 'Forest', color: '#228B22', icon: 'fa-tree' },
-            { type: 'mountain', name: 'Mountain', color: '#808080', icon: 'fa-mountain' },
+            { type: 'farmland', name: 'Farmland', color: '#9ACD32', icon: 'fa-wheat-awn' },
+            { type: 'hills', name: 'Hills', color: '#8B7355', icon: 'fa-hill-rockslide' },
+            { type: 'grassy-hills', name: 'Grassy Hills', color: '#7CB342', icon: 'fa-hill-rockslide' },
+            { type: 'mountains', name: 'Mountains', color: '#808080', icon: 'fa-mountain' },
+            { type: 'mountain-peak', name: 'Mountain Peak', color: '#9E9E9E', icon: 'fa-mountain' },
+            { type: 'high-mountains', name: 'High Mountains', color: '#616161', icon: 'fa-mountain' },
+            { type: 'high-mountain-peak', name: 'High Mountain Peak', color: '#424242', icon: 'fa-mountain' },
+            // Forests
+            { type: 'light-forest-deciduous', name: 'Light Forest (Deciduous)', color: '#66BB6A', icon: 'fa-tree' },
+            { type: 'heavy-forest-deciduous', name: 'Heavy Forest (Deciduous)', color: '#228B22', icon: 'fa-tree' },
+            { type: 'forested-hills-deciduous', name: 'Forested Hills (Deciduous)', color: '#558B2F', icon: 'fa-tree' },
+            { type: 'forested-mountains-deciduous', name: 'Forested Mountains (Deciduous)', color: '#33691E', icon: 'fa-tree' },
+            { type: 'light-forest-coniferous', name: 'Light Forest (Coniferous)', color: '#4CAF50', icon: 'fa-tree' },
+            { type: 'heavy-forest-coniferous', name: 'Heavy Forest (Coniferous)', color: '#1B5E20', icon: 'fa-tree' },
+            { type: 'forested-hills-coniferous', name: 'Forested Hills (Coniferous)', color: '#558B2F', icon: 'fa-tree' },
+            { type: 'forested-mountains-coniferous', name: 'Forested Mountains (Coniferous)', color: '#2E7D32', icon: 'fa-tree' },
+            // Jungles
+            { type: 'jungle-rainforest', name: 'Jungle/Rainforest', color: '#2E7D32', icon: 'fa-tree' },
+            { type: 'jungle-hills', name: 'Jungle Hills', color: '#1B5E20', icon: 'fa-tree' },
+            { type: 'jungle-mountains', name: 'Jungle Mountains', color: '#0D4A1A', icon: 'fa-tree' },
+            // Water and wetlands
             { type: 'water', name: 'Water', color: '#4169E1', icon: 'fa-water' },
-            { type: 'desert', name: 'Desert', color: '#F4A460', icon: 'fa-sun' },
             { type: 'swamp', name: 'Swamp', color: '#556B2F', icon: 'fa-frog' },
-            { type: 'hill', name: 'Hill', color: '#8B7355', icon: 'fa-hill-rockslide' }
+            { type: 'marsh', name: 'Marsh', color: '#6B8E23', icon: 'fa-frog' },
+            { type: 'beach-dunes', name: 'Beach/Dunes', color: '#F5DEB3', icon: 'fa-water' },
+            // Deserts
+            { type: 'desert', name: 'Desert', color: '#F4A460', icon: 'fa-sun' },
+            { type: 'rocky-desert', name: 'Rocky Desert', color: '#CD853F', icon: 'fa-sun' },
+            { type: 'desert-hills', name: 'Desert Hills', color: '#DEB887', icon: 'fa-sun' },
+            { type: 'desert-mountains', name: 'Desert Mountains', color: '#BC8F8F', icon: 'fa-sun' }
         ];
         
         return terrains.map(terrain => `
@@ -334,7 +505,226 @@ class HexMapEditorModule {
     }
     
     /**
-     * Load a map
+     * Normalize borders data for loading from API.
+     * Converts JSON string to object, or returns empty object for null/empty.
+     * 
+     * @param {string|object|null} borders - Borders data from API (JSON string, object, or null)
+     * @returns {object} Normalized borders object (empty object if null/empty)
+     * 
+     * @private
+     */
+    normalizeBordersForLoad(borders) {
+        if (borders === null || borders === undefined) {
+            return {};
+        }
+        if (typeof borders === 'string') {
+            if (borders.trim() === '') {
+                return {};
+            }
+            try {
+                const parsed = JSON.parse(borders);
+                return (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) ? parsed : {};
+            } catch (e) {
+                console.warn('[HEX MAP EDITOR] Failed to parse borders JSON:', e);
+                return {};
+            }
+        }
+        if (typeof borders === 'object') {
+            return Object.keys(borders).length > 0 ? borders : {};
+        }
+        return {};
+    }
+    
+    /**
+     * Normalize roads data for loading from API.
+     * Converts JSON string to object, or returns empty object for null/empty.
+     * 
+     * @param {string|object|null} roads - Roads data from API (JSON string, object, or null)
+     * @returns {object} Normalized roads object (empty object if null/empty)
+     * 
+     * @private
+     */
+    normalizeRoadsForLoad(roads) {
+        if (roads === null || roads === undefined) {
+            return {};
+        }
+        if (typeof roads === 'string') {
+            if (roads.trim() === '') {
+                return {};
+            }
+            try {
+                const parsed = JSON.parse(roads);
+                return (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) ? parsed : {};
+            } catch (e) {
+                console.warn('[HEX MAP EDITOR] Failed to parse roads JSON:', e);
+                return {};
+            }
+        }
+        if (typeof roads === 'object') {
+            return Object.keys(roads).length > 0 ? roads : {};
+        }
+        return {};
+    }
+    
+    /**
+     * Normalize borders data for saving to API.
+     * Converts object to object (for JSON encoding), or null if empty.
+     * 
+     * @param {object|string|null} borders - Borders data (object, JSON string, or null)
+     * @returns {object|null} Normalized borders (object if has content, null if empty)
+     * 
+     * @private
+     */
+    normalizeBordersForSave(borders) {
+        if (borders === null || borders === undefined) {
+            return null;
+        }
+        // If string, try to parse it
+        if (typeof borders === 'string') {
+            if (borders.trim() === '') {
+                return null;
+            }
+            try {
+                const parsed = JSON.parse(borders);
+                if (parsed && typeof parsed === 'object') {
+                    return Object.keys(parsed).length > 0 ? parsed : null;
+                }
+                return null;
+            } catch (e) {
+                console.warn('[HEX MAP EDITOR] Failed to parse borders JSON for save:', e);
+                return null;
+            }
+        }
+        // If object/array, check if it has content
+        if (typeof borders === 'object') {
+            return Object.keys(borders).length > 0 ? borders : null;
+        }
+        return null;
+    }
+    
+    /**
+     * Normalize roads data for saving to API.
+     * Converts object to object (for JSON encoding), or null if empty.
+     * 
+     * @param {object|string|null} roads - Roads data (object, JSON string, or null)
+     * @returns {object|null} Normalized roads (object if has content, null if empty)
+     * 
+     * @private
+     */
+    normalizeRoadsForSave(roads) {
+        if (roads === null || roads === undefined) {
+            return null;
+        }
+        // If string, try to parse it
+        if (typeof roads === 'string') {
+            if (roads.trim() === '') {
+                return null;
+            }
+            try {
+                const parsed = JSON.parse(roads);
+                if (parsed && typeof parsed === 'object') {
+                    return Object.keys(parsed).length > 0 ? parsed : null;
+                }
+                return null;
+            } catch (e) {
+                console.warn('[HEX MAP EDITOR] Failed to parse roads JSON for save:', e);
+                return null;
+            }
+        }
+        // If object/array, check if it has content
+        if (typeof roads === 'object') {
+            return Object.keys(roads).length > 0 ? roads : null;
+        }
+        return null;
+    }
+    
+    /**
+     * Normalize paths data for saving to API.
+     * Converts object to object (for JSON encoding), or null if empty.
+     * 
+     * @param {object|string|null} paths - Paths data (object, JSON string, or null)
+     * @returns {object|null} Normalized paths (object if has content, null if empty)
+     * 
+     * @private
+     */
+    normalizePathsForSave(paths) {
+        if (paths === null || paths === undefined) {
+            return null;
+        }
+        // If string, try to parse it
+        if (typeof paths === 'string') {
+            if (paths.trim() === '') {
+                return null;
+            }
+            try {
+                const parsed = JSON.parse(paths);
+                if (parsed && typeof parsed === 'object') {
+                    return Object.keys(parsed).length > 0 ? parsed : null;
+                }
+                return null;
+            } catch (e) {
+                console.warn('[HEX MAP EDITOR] Failed to parse paths JSON for save:', e);
+                return null;
+            }
+        }
+        // If object/array, check if it has content
+        if (typeof paths === 'object') {
+            return Object.keys(paths).length > 0 ? paths : null;
+        }
+        return null;
+    }
+    
+    /**
+     * Normalize paths data for loading from API.
+     * Converts JSON string to object, or returns empty object if null/undefined.
+     * 
+     * @param {object|string|null} paths - Paths data (object, JSON string, or null)
+     * @returns {object} Normalized paths (always an object, empty if no data)
+     * 
+     * @private
+     */
+    normalizePathsForLoad(paths) {
+        if (paths === null || paths === undefined) {
+            return {};
+        }
+        if (typeof paths === 'string') {
+            if (paths.trim() === '') {
+                return {};
+            }
+            try {
+                const parsed = JSON.parse(paths);
+                return (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) ? parsed : {};
+            } catch (e) {
+                console.warn('[HEX MAP EDITOR] Failed to parse paths JSON for load:', e);
+                return {};
+            }
+        }
+        if (typeof paths === 'object') {
+            return Object.keys(paths).length > 0 ? paths : {};
+        }
+        return {};
+    }
+    
+    /**
+     * Load a hex map and all its tiles and markers from the API.
+     * Parses JSON data for borders and roads, and tracks initial tile state for deletion detection.
+     * 
+     * @param {number} mapId - The ID of the map to load
+     * @returns {Promise<Object>} The loaded map object
+     * 
+     * @throws {Error} If map ID is invalid or API request fails
+     * 
+     * @example
+     * // Load map ID 5
+     * const map = await this.loadMap(5);
+     * console.log(`Loaded map: ${map.map_name}`);
+     * 
+     * @see loadMarkers() - Called after map is loaded
+     * @see initialTileKeys - Tracks tiles that existed when map was loaded
+     * @see normalizeBordersForLoad() - Normalizes borders data
+     * @see normalizeRoadsForLoad() - Normalizes roads data
+     * 
+     * @api GET /api/hex-maps/get.php?map_id={mapId}&include_tiles=true
      */
     async loadMap(mapId) {
         try {
@@ -353,29 +743,14 @@ class HexMapEditorModule {
                 if (response.data.tiles) {
                     response.data.tiles.forEach(tile => {
                         const key = `${tile.q},${tile.r}`;
-                        // Parse borders JSON if it exists
-                        if (tile.borders && typeof tile.borders === 'string') {
-                            try {
-                                tile.borders = JSON.parse(tile.borders);
-                            } catch (e) {
-                                tile.borders = {};
-                            }
-                        } else if (!tile.borders) {
-                            tile.borders = {};
-                        }
-                        // Parse roads JSON if it exists
-                        if (tile.roads && typeof tile.roads === 'string') {
-                            try {
-                                tile.roads = JSON.parse(tile.roads);
-                            } catch (e) {
-                                tile.roads = {};
-                            }
-                        } else if (!tile.roads) {
-                            tile.roads = {};
-                        }
+                        // Normalize borders, roads, and paths using utility functions
+                        tile.borders = this.normalizeBordersForLoad(tile.borders);
+                        tile.roads = this.normalizeRoadsForLoad(tile.roads);
+                        tile.paths = this.normalizePathsForLoad(tile.paths);
                         this.tiles.set(key, tile);
                         this.initialTileKeys.add(key); // Track that this tile existed when loaded
                     });
+                    console.log(`[HEX MAP EDITOR] Loaded ${this.tiles.size} tiles into memory`);
                 }
                 
                 // Load markers
@@ -393,7 +768,20 @@ class HexMapEditorModule {
     }
     
     /**
-     * Load markers for current map
+     * Load all markers (settlements, POIs) for the current map.
+     * Stores markers in this.markers Map with key format "q,r".
+     * 
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * // Load markers for current map
+     * await this.loadMarkers();
+     * console.log(`Loaded ${this.markers.size} markers`);
+     * 
+     * @see loadMap() - Called after map is loaded
+     * @see markers - Map storing marker data
+     * 
+     * @api GET /api/hex-maps/markers/list.php?map_id={mapId}
      */
     async loadMarkers() {
         if (!this.currentMapId) return;
@@ -417,7 +805,18 @@ class HexMapEditorModule {
     }
     
     /**
-     * Setup event listeners
+     * Setup all event listeners for the editor interface.
+     * Handles map selection, tool selection, terrain selection, settlement placement,
+     * border tools, road tools, save operations, and canvas interactions.
+     * 
+     * @returns {void}
+     * 
+     * @example
+     * // Called after rendering editor canvas
+     * this.setupEventListeners();
+     * 
+     * @see initCanvas() - Called after a delay to initialize canvas
+     * @see renderEditor() - Calls this after rendering
      */
     setupEventListeners() {
         // Map selector
@@ -495,9 +894,24 @@ class HexMapEditorModule {
         $(document).on('click', '.tool-buttons .btn', (e) => {
             const tool = $(e.currentTarget).data('tool');
             if (tool) {
+                // Reset road start hex when switching away from road tool
+                if (this.selectedTool === 'place_road' && tool !== 'place_road') {
+                    this.roadStartHex = null;
+                }
+                // Reset path start hex when switching away from path tool
+                if (this.selectedTool === 'place_path' && tool !== 'place_path') {
+                    this.pathStartHex = null;
+                }
                 this.selectedTool = tool;
                 $('.tool-buttons .btn').removeClass('active');
                 $(e.currentTarget).addClass('active');
+                
+                // Redraw to clear any road placement feedback
+                const canvas = document.getElementById('hex-canvas');
+                if (canvas) {
+                    const ctx = canvas.getContext('2d');
+                    this.drawHexGrid(ctx);
+                }
             }
         });
         
@@ -529,12 +943,32 @@ class HexMapEditorModule {
                 $(e.currentTarget).addClass('active');
             } else if (tool === 'place_road' || tool === 'erase_road') {
                 // Handle road tools (they don't have data-border, only data-tool)
+                // Reset road start hex when switching tools
+                if (this.selectedTool === 'place_road' && tool !== 'place_road') {
+                    this.roadStartHex = null;
+                }
+                this.selectedTool = tool;
+            } else if (tool === 'place_path' || tool === 'erase_path') {
+                // Handle path tools (they don't have data-border, only data-tool)
+                // Reset path start hex when switching tools
+                if (this.selectedTool === 'place_path' && tool !== 'place_path') {
+                    this.pathStartHex = null;
+                }
                 this.selectedTool = tool;
                 this.selectedBorderType = null;
+                this.roadStartHex = null; // Reset road start when switching tools
+                this.pathStartHex = null; // Reset path start when switching tools
                 $('.border-buttons .btn').removeClass('active');
                 $('.tool-buttons .btn').removeClass('active');
                 $('.settlement-buttons .btn').removeClass('active');
                 $(e.currentTarget).addClass('active');
+                
+                // Redraw to clear any road placement feedback
+                const canvas = document.getElementById('hex-canvas');
+                if (canvas) {
+                    const ctx = canvas.getContext('2d');
+                    this.drawHexGrid(ctx);
+                }
             } else if (border && tool) {
                 // Handle border tools (they have both data-border and data-tool)
                 this.selectedBorderType = border;
@@ -553,7 +987,24 @@ class HexMapEditorModule {
     }
     
     /**
-     * Initialize hex canvas
+     * Initialize the hex canvas element and set up all mouse/wheel event handlers.
+     * Configures canvas size, centers map, sets up pan/zoom, and handles all mouse interactions.
+     * 
+     * @returns {void}
+     * 
+     * @example
+     * // Called after canvas is created in DOM
+     * this.initCanvas();
+     * 
+     * @see setupEventListeners() - Calls this after a delay
+     * @see drawHexGrid() - Called to render the initial grid
+     * 
+     * **Mouse Events Configured:**
+     * - Middle button or Shift+left: Pan
+     * - Left click: Paint/place/erase based on selected tool
+     * - Right click: Delete marker (context menu)
+     * - Mouse wheel: Zoom towards cursor
+     * - Mouse move: Tool-specific hover feedback
      */
     initCanvas() {
         const canvas = document.getElementById('hex-canvas');
@@ -598,10 +1049,12 @@ class HexMapEditorModule {
                 this.handlePan(e, canvas);
             } else {
                 this.handleMouseMove(e, canvas);
-                // Show border/road edge feedback when hovering
-                if (this.selectedTool === 'draw_border' || this.selectedTool === 'erase_border' ||
-                    this.selectedTool === 'place_road' || this.selectedTool === 'erase_road') {
+                // Show border edge feedback when hovering
+                if (this.selectedTool === 'draw_border' || this.selectedTool === 'erase_border') {
                     this.handleMouseMoveBorder(e, canvas);
+                } else if (this.selectedTool === 'place_road') {
+                    // Show visual feedback for road placement
+                    this.handleMouseMoveRoad(e, canvas);
                 }
             }
         });
@@ -672,7 +1125,19 @@ class HexMapEditorModule {
     }
     
     /**
-     * Zoom in
+     * Zoom in on the canvas by 20% (multiply zoom by 1.2).
+     * Respects maxZoom limit and updates canvas info display.
+     * 
+     * @param {HTMLCanvasElement} canvas - Canvas element to zoom
+     * @returns {void}
+     * 
+     * @example
+     * // Zoom in on canvas
+     * this.zoomIn(canvas);
+     * 
+     * @see zoomOut() - For zooming out
+     * @see handleWheelZoom() - For mouse wheel zoom
+     * @see updateCanvasInfo() - Updates zoom display
      */
     zoomIn(canvas) {
         const oldZoom = this.zoom;
@@ -683,7 +1148,19 @@ class HexMapEditorModule {
     }
     
     /**
-     * Zoom out
+     * Zoom out on the canvas by 20% (divide zoom by 1.2).
+     * Respects minZoom limit and updates canvas info display.
+     * 
+     * @param {HTMLCanvasElement} canvas - Canvas element to zoom
+     * @returns {void}
+     * 
+     * @example
+     * // Zoom out on canvas
+     * this.zoomOut(canvas);
+     * 
+     * @see zoomIn() - For zooming in
+     * @see handleWheelZoom() - For mouse wheel zoom
+     * @see updateCanvasInfo() - Updates zoom display
      */
     zoomOut(canvas) {
         const oldZoom = this.zoom;
@@ -694,7 +1171,19 @@ class HexMapEditorModule {
     }
     
     /**
-     * Reset view to center and default zoom
+     * Reset view to center and default zoom level (1.0).
+     * Centers the map in the canvas viewport.
+     * 
+     * @param {HTMLCanvasElement} canvas - Canvas element to reset
+     * @returns {void}
+     * 
+     * @example
+     * // Reset view to default
+     * this.resetView(canvas);
+     * 
+     * @see zoomIn() - For zooming in
+     * @see zoomOut() - For zooming out
+     * @see updateCanvasInfo() - Updates zoom display
      */
     resetView(canvas) {
         this.zoom = 1.0;
@@ -706,7 +1195,26 @@ class HexMapEditorModule {
     }
     
     /**
-     * Handle mouse wheel zoom
+     * Handle mouse wheel zoom with zoom-towards-mouse-position behavior.
+     * Adjusts offset to keep the point under the cursor in the same position after zoom.
+     * 
+     * @param {WheelEvent} e - Mouse wheel event
+     * @param {HTMLCanvasElement} canvas - Canvas element
+     * @returns {void}
+     * 
+     * @example
+     * // Called automatically by canvas wheel event listener
+     * canvas.addEventListener('wheel', (e) => this.handleWheelZoom(e, canvas));
+     * 
+     * **Zoom Behavior:**
+     * - Scroll up: Zoom in (1.1x multiplier)
+     * - Scroll down: Zoom out (0.9x multiplier)
+     * - Adjusts offset to zoom towards mouse cursor position
+     * - Respects minZoom and maxZoom limits
+     * 
+     * @see zoomIn() - For button-based zoom in
+     * @see zoomOut() - For button-based zoom out
+     * @see updateCanvasInfo() - Updates zoom display
      */
     handleWheelZoom(e, canvas) {
         const rect = canvas.getBoundingClientRect();
@@ -740,7 +1248,23 @@ class HexMapEditorModule {
     }
     
     /**
-     * Start panning
+     * Start panning operation (drag to move map).
+     * Stores initial mouse position and current offset for pan calculation.
+     * 
+     * @param {MouseEvent} e - Mouse event (mousedown)
+     * @param {HTMLCanvasElement} canvas - Canvas element
+     * @returns {void}
+     * 
+     * @example
+     * // Called on middle mouse button or Shift+left click
+     * canvas.addEventListener('mousedown', (e) => {
+     *   if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
+     *     this.startPan(e, canvas);
+     *   }
+     * });
+     * 
+     * @see handlePan() - Called during mouse move while panning
+     * @see stopPan() - Called on mouse up to stop panning
      */
     startPan(e, canvas) {
         this.isPanning = true;
@@ -756,7 +1280,23 @@ class HexMapEditorModule {
     }
     
     /**
-     * Handle panning
+     * Handle panning operation (update offset based on mouse movement).
+     * Calculates delta from pan start position and updates canvas offset.
+     * 
+     * @param {MouseEvent} e - Mouse event (mousemove)
+     * @param {HTMLCanvasElement} canvas - Canvas element
+     * @returns {void}
+     * 
+     * @example
+     * // Called during mouse move while isPanning is true
+     * canvas.addEventListener('mousemove', (e) => {
+     *   if (this.isPanning) {
+     *     this.handlePan(e, canvas);
+     *   }
+     * });
+     * 
+     * @see startPan() - Called to start panning
+     * @see stopPan() - Called to stop panning
      */
     handlePan(e, canvas) {
         if (!this.isPanning) return;
@@ -778,7 +1318,18 @@ class HexMapEditorModule {
     }
     
     /**
-     * Stop panning
+     * Stop panning operation and reset cursor style.
+     * Called when mouse button is released or mouse leaves canvas.
+     * 
+     * @returns {void}
+     * 
+     * @example
+     * // Called on mouse up or mouse leave
+     * canvas.addEventListener('mouseup', () => this.stopPan());
+     * canvas.addEventListener('mouseleave', () => this.stopPan());
+     * 
+     * @see startPan() - Called to start panning
+     * @see handlePan() - Called during panning
      */
     stopPan() {
         this.isPanning = false;
@@ -790,7 +1341,20 @@ class HexMapEditorModule {
     }
     
     /**
-     * Update canvas info display
+     * Update the canvas info display with current zoom level.
+     * Displays zoom percentage and control hints.
+     * 
+     * @returns {void}
+     * 
+     * @example
+     * // Called after zoom operations
+     * this.zoomIn(canvas);
+     * this.updateCanvasInfo(); // Updates "Zoom: 120%" display
+     * 
+     * @see zoomIn() - Calls this after zooming
+     * @see zoomOut() - Calls this after zooming
+     * @see handleWheelZoom() - Calls this after zooming
+     * @see resetView() - Calls this after resetting
      */
     updateCanvasInfo() {
         const infoEl = document.getElementById('canvas-info');
@@ -818,7 +1382,25 @@ class HexMapEditorModule {
     }
     
     /**
-     * Round fractional hex coordinates to nearest hex
+     * Round fractional hex coordinates to nearest valid hex using axial coordinate rounding algorithm.
+     * Ensures pixel clicks always map to valid hex coordinates by maintaining constraint q + r + s = 0.
+     * 
+     * @param {number} q - Fractional hex column coordinate
+     * @param {number} r - Fractional hex row coordinate
+     * @returns {Object} Rounded hex coordinates `{q: number, r: number}`
+     * 
+     * @example
+     * // Round fractional coordinates from pixelToHex
+     * const fractional = this.pixelToHex(x, y);
+     * const rounded = this.hexRound(fractional.q, fractional.r);
+     * 
+     * **Algorithm:**
+     * 1. Calculates third coordinate `s = -q - r`
+     * 2. Rounds all three coordinates
+     * 3. Checks which coordinate has largest rounding error
+     * 4. Recalculates that coordinate from the other two to maintain constraint
+     * 
+     * @see pixelToHex() - Called after coordinate conversion
      */
     hexRound(q, r) {
         const s = -q - r;
@@ -840,8 +1422,24 @@ class HexMapEditorModule {
     }
     
     /**
-     * Convert hex coordinates to pixel coordinates (pointy-top hexes)
-     * Accounts for zoom level
+     * Convert hex coordinates to pixel coordinates using pointy-top hex layout.
+     * Accounts for zoom level and canvas offset.
+     * 
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @returns {Object} Pixel coordinates `{x: number, y: number}`
+     * 
+     * @example
+     * // Get pixel position of hex center
+     * const pixel = this.hexToPixel(5, 3);
+     * ctx.arc(pixel.x, pixel.y, 10, 0, Math.PI * 2);
+     * 
+     * **Formula (Pointy-top hexes):**
+     * - x = size * (√3 * q + √3/2 * r) + offsetX
+     * - y = size * (3/2 * r) + offsetY
+     * 
+     * @see pixelToHex() - Inverse operation (pixel to hex)
+     * @see drawHex() - Uses this to position hex rendering
      */
     hexToPixel(q, r) {
         // Pointy-top hex layout - scale by zoom
@@ -926,23 +1524,171 @@ class HexMapEditorModule {
             }
         });
         
-        // Draw markers on top of hexes and roads
+        // Draw paths on top of roads (but below markers)
+        // Paths connect hex centers, drawn as dotted lines
+        this.tiles.forEach((tile, key) => {
+            if (tile.paths && Object.keys(tile.paths).length > 0) {
+                this.drawPaths(ctx, tile.q, tile.r, tile.paths);
+            }
+        });
+        
+        // Draw markers on top of hexes, roads, and paths
         this.markers.forEach((marker, key) => {
             this.drawMarker(ctx, marker);
         });
         
-        // Draw border/road hover feedback if applicable
-        if (this.hoverHex && (this.selectedTool === 'draw_border' || this.selectedTool === 'erase_border' ||
-            this.selectedTool === 'place_road' || this.selectedTool === 'erase_road')) {
+        // Draw borders (local/regional/national) on top of everything
+        // This ensures borders are always visible, even over markers
+        this.tiles.forEach((tile, key) => {
+            if (tile.borders && Object.keys(tile.borders).length > 0) {
+                this.drawBorders(ctx, tile.q, tile.r, tile.borders);
+            }
+        });
+        
+        // Draw border hover feedback if applicable
+        if (this.hoverHex && (this.selectedTool === 'draw_border' || this.selectedTool === 'erase_border')) {
             const edge = this.getEdgeAtPoint(this.hoverHex.q, this.hoverHex.r, this.hoverPixelX, this.hoverPixelY);
             if (edge !== null) {
                 this.drawEdgeHoverFeedback(ctx, this.hoverHex.q, this.hoverHex.r, edge);
             }
         }
+        
+        // Draw road placement feedback
+        if (this.selectedTool === 'place_road' && this.roadStartHex && this.hoverHex) {
+            const startCenter = this.hexToPixel(this.roadStartHex.q, this.roadStartHex.r);
+            const hoverCenter = this.hexToPixel(this.hoverHex.q, this.hoverHex.r);
+            
+            // Check if hover hex is a neighbor
+            const neighbors = this.getHexNeighbors(this.roadStartHex.q, this.roadStartHex.r);
+            let isNeighbor = false;
+            for (let i = 0; i < 6; i++) {
+                if (neighbors[i].q === this.hoverHex.q && neighbors[i].r === this.hoverHex.r) {
+                    isNeighbor = true;
+                    break;
+                }
+            }
+            
+            if (isNeighbor) {
+                // Draw preview line from start to hover
+                ctx.beginPath();
+                ctx.moveTo(startCenter.x, startCenter.y);
+                ctx.lineTo(hoverCenter.x, hoverCenter.y);
+                ctx.strokeStyle = 'rgba(139, 69, 19, 0.6)'; // Semi-transparent brown
+                ctx.lineWidth = Math.max(4 * this.zoom, 3);
+                ctx.lineCap = 'round';
+                ctx.setLineDash([5, 5]); // Dashed line for preview
+                ctx.stroke();
+                ctx.setLineDash([]); // Reset
+            }
+            
+            // Highlight start hex
+            const size = this.hexSize * this.zoom;
+            ctx.strokeStyle = 'rgba(139, 69, 19, 0.8)'; // Brown
+            ctx.lineWidth = 4 * this.zoom;
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = (Math.PI / 3 * i) - (Math.PI / 2);
+                const x = startCenter.x + size * Math.cos(angle);
+                const y = startCenter.y + size * Math.sin(angle);
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.closePath();
+            ctx.stroke();
+        }
+        
+        // Draw path placement feedback
+        if (this.selectedTool === 'place_path' && this.pathStartHex && this.hoverHex) {
+            const startCenter = this.hexToPixel(this.pathStartHex.q, this.pathStartHex.r);
+            const hoverCenter = this.hexToPixel(this.hoverHex.q, this.hoverHex.r);
+            
+            // Check if hover hex is a neighbor
+            const neighbors = this.getHexNeighbors(this.pathStartHex.q, this.pathStartHex.r);
+            let isNeighbor = false;
+            for (let i = 0; i < 6; i++) {
+                if (neighbors[i].q === this.hoverHex.q && neighbors[i].r === this.hoverHex.r) {
+                    isNeighbor = true;
+                    break;
+                }
+            }
+            
+            if (isNeighbor) {
+                // Draw preview line from start to hover as dotted line
+                const dx = hoverCenter.x - startCenter.x;
+                const dy = hoverCenter.y - startCenter.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const dotRadius = Math.max(2 * this.zoom, 1.5);
+                const dotSpacing = Math.max(6 * this.zoom, 5); // Space between dot centers
+                
+                ctx.fillStyle = 'rgba(160, 82, 45, 0.6)'; // Semi-transparent sienna
+                
+                // Draw dots along the path
+                const numDots = Math.floor(distance / dotSpacing);
+                for (let i = 0; i <= numDots; i++) {
+                    const t = i / Math.max(numDots, 1);
+                    const dotX = startCenter.x + dx * t;
+                    const dotY = startCenter.y + dy * t;
+                    
+                    ctx.beginPath();
+                    ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            
+            // Highlight start hex
+            const size = this.hexSize * this.zoom;
+            ctx.strokeStyle = 'rgba(160, 82, 45, 0.8)'; // Sienna
+            ctx.lineWidth = 3 * this.zoom;
+            ctx.setLineDash([3, 3]); // Dashed outline
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = (Math.PI / 3 * i) - (Math.PI / 2);
+                const x = startCenter.x + size * Math.cos(angle);
+                const y = startCenter.y + size * Math.sin(angle);
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.closePath();
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset
+        }
     }
     
     /**
-     * Draw visual feedback for edge hover
+     * Draw visual feedback highlighting a hex edge when hovering with border/road tools.
+     * Shows which edge will be affected when clicking.
+     * 
+     * @param {CanvasRenderingContext2D} ctx - Canvas 2D rendering context
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @param {number} edge - Edge index (0-5) to highlight
+     * @returns {void}
+     * 
+     * @example
+     * // Highlight top edge of hex (5, 3) when hovering
+     * this.drawEdgeHoverFeedback(ctx, 5, 3, 0);
+     * 
+     * **Visual Feedback Colors:**
+     * - Erase tools: Red highlight
+     * - Place road: Brown highlight
+     * - Draw border: Yellow highlight (or color based on selected border type)
+     * 
+     * **Edge Indices:**
+     * - 0: Top
+     * - 1: Top-right
+     * - 2: Bottom-right
+     * - 3: Bottom
+     * - 4: Bottom-left
+     * - 5: Top-left
+     * 
+     * @see drawHexGrid() - Calls this when hover hex and edge are detected
+     * @see getEdgeAtPoint() - Used to detect which edge is being hovered
      */
     drawEdgeHoverFeedback(ctx, q, r, edge) {
         const center = this.hexToPixel(q, r);
@@ -984,7 +1730,33 @@ class HexMapEditorModule {
     }
     
     /**
-     * Draw a single hex (pointy-top orientation)
+     * Draw a single hex with terrain, borders, and roads.
+     * Renders hex shape, terrain image/color, borders on edges, and roads to neighbors.
+     * Uses per-terrain-type image scaling for optimal visual appearance.
+     * 
+     * @param {CanvasRenderingContext2D} ctx - Canvas 2D rendering context
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @param {Object|null} tile - Tile data object or null for empty hex
+     * @returns {void}
+     * 
+     * @example
+     * // Draw a hex with terrain
+     * const tile = { q: 5, r: 3, terrain_type: 'forest', borders: {0: 'local'}, roads: {1: true} };
+     * this.drawHex(ctx, 5, 3, tile);
+     * 
+     * **Rendering Features:**
+     * - Terrain images with per-type scaling (from terrainImageScales Map)
+     * - Maximum size limits (from terrainImageMaxSizes Map) to prevent overflow
+     * - Color fallback if image not loaded
+     * - Border lines on edges (local/regional/national)
+     * - Roads drawn to neighbor centers
+     * - Coordinate display (if showCoordinates enabled and zoom > 1.5)
+     * 
+     * @see drawHexGrid() - Calls this for each hex
+     * @see drawRoads() - Called to draw roads for this hex
+     * @see terrainImageScales - Per-terrain-type image scaling
+     * @see terrainImageMaxSizes - Per-terrain-type maximum size limits
      */
     drawHex(ctx, q, r, tile) {
         const center = this.hexToPixel(q, r);
@@ -1006,25 +1778,101 @@ class HexMapEditorModule {
         }
         ctx.closePath();
         
-        // Fill color based on terrain - vibrant, game-like colors
+        // Fill with terrain image or color fallback
         if (tile && tile.terrain_type) {
-            const terrainColors = {
-                'plains': '#90EE90',      // Light green - bright grasslands
-                'forest': '#228B22',      // Forest green - dense woodland
-                'mountain': '#696969',    // Dim gray - rocky peaks
-                'water': '#1E90FF',       // Dodger blue - clear water
-                'desert': '#DEB887',      // Burlywood - sandy desert
-                'swamp': '#556B2F',       // Dark olive - murky swamp
-                'hill': '#8B7355',        // Dark khaki - rolling hills
-                'road': '#F5DEB3'         // Wheat - light path/road
-            };
-            const color = terrainColors[tile.terrain_type] || '#90EE90';
-            ctx.fillStyle = color;
+            // Try to use terrain image
+            const terrainImg = this.terrainImages.get(tile.terrain_type);
+            if (terrainImg && terrainImg.complete && terrainImg.naturalWidth > 0) {
+                // Save context state
+                ctx.save();
+                
+                // Clip to hex shape (path is already defined above)
+                ctx.clip();
+                
+                // Calculate image size using configurable scale (per terrain type)
+                // Hex size is the distance from center to corner, so diameter is 2 * size
+                // Get terrain-specific scale or use default
+                const terrainScale = this.terrainImageScales.get(tile.terrain_type) || this.terrainImageScaleDefault;
+                const hexDiameter = size * 2; // Distance across hex (corner to corner)
+                // Scale according to terrain-specific or default scale
+                const imgSizeScaled = size * terrainScale;
+                // Get terrain-specific max size or use default
+                const terrainMaxSize = this.terrainImageMaxSizes.get(tile.terrain_type) ?? this.terrainImageMaxSizeDefault;
+                // Apply max size limit if configured (to prevent overflow beyond hex bounds)
+                const imgSize = terrainMaxSize !== null 
+                    ? Math.min(imgSizeScaled, hexDiameter * terrainMaxSize)
+                    : imgSizeScaled;
+                const imgX = center.x - imgSize / 2;
+                const imgY = center.y - imgSize / 2;
+                
+                // Draw terrain image
+                ctx.drawImage(terrainImg, imgX, imgY, imgSize, imgSize);
+                
+                // Restore context
+                ctx.restore();
+                
+                // Redraw hex path for border (clip was consumed)
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle = (Math.PI / 3 * i) - (Math.PI / 2);
+                    const x = center.x + size * Math.cos(angle);
+                    const y = center.y + size * Math.sin(angle);
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.closePath();
+            } else {
+                // Fallback to color if image not loaded
+                const terrainColors = {
+                    // Basic terrains
+                    'plains': '#90EE90',      // Light green - bright grasslands
+                    'grasslands-plains': '#90EE90',
+                    'farmland': '#9ACD32',    // Yellow green - cultivated fields
+                    'hill': '#8B7355',        // Dark khaki - rolling hills
+                    'hills': '#8B7355',
+                    'grassy-hills': '#7CB342', // Medium green - grassy hills
+                    'mountain': '#696969',    // Dim gray - rocky peaks
+                    'mountains': '#696969',
+                    'mountain-peak': '#9E9E9E', // Light gray - peak
+                    'high-mountains': '#616161', // Dark gray - high mountains
+                    'high-mountain-peak': '#424242', // Very dark gray - high peak
+                    // Forests
+                    'light-forest-deciduous': '#66BB6A', // Light green - light forest
+                    'heavy-forest-deciduous': '#228B22', // Forest green - dense woodland
+                    'forest': '#228B22',
+                    'forested-hills-deciduous': '#558B2F', // Olive green - forested hills
+                    'forested-mountains-deciduous': '#33691E', // Dark green - forested mountains
+                    'light-forest-coniferous': '#4CAF50', // Medium green - light coniferous
+                    'heavy-forest-coniferous': '#1B5E20', // Very dark green - heavy coniferous
+                    'forested-mountains-coniferous': '#2E7D32', // Dark green - coniferous mountains
+                    // Jungles
+                    'jungle-rainforest': '#2E7D32', // Dark green - jungle
+                    'jungle-hills': '#1B5E20', // Very dark green - jungle hills
+                    'jungle-mountains': '#0D4A1A', // Almost black green - jungle mountains
+                    // Water and wetlands
+                    'water': '#1E90FF',       // Dodger blue - clear water
+                    'swamp': '#556B2F',       // Dark olive - murky swamp
+                    'marsh': '#6B8E23',       // Olive drab - marsh
+                    'beach-dunes': '#F5DEB3', // Wheat - beach/dunes
+                    // Deserts
+                    'desert': '#DEB887',      // Burlywood - sandy desert
+                    'rocky-desert': '#CD853F', // Peru - rocky desert
+                    'desert-hills': '#DEB887', // Burlywood - desert hills
+                    'desert-mountains': '#BC8F8F', // Rosy brown - desert mountains
+                    'road': '#F5DEB3'         // Wheat - light path/road
+                };
+                const color = terrainColors[tile.terrain_type] || '#90EE90';
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
         } else {
             // Empty hex - very dark gray, barely visible grid
             ctx.fillStyle = '#1a1a1a';
+            ctx.fill();
         }
-        ctx.fill();
         
         // Draw border - distinct borders for painted vs empty hexes
         if (tile && tile.terrain_type) {
@@ -1041,8 +1889,8 @@ class HexMapEditorModule {
         // Draw borders (local/regional/national) on edges
         if (tile && tile.borders && Object.keys(tile.borders).length > 0) {
             const borderColors = {
-                'local': '#8B7355',      // Brown
-                'regional': '#9C7C38',   // Darker brown
+                'local': '#FFD700',      // Bright yellow (high contrast)
+                'regional': '#4169E1',   // Royal blue
                 'national': '#B33A2B'     // Red
             };
             
@@ -1087,27 +1935,8 @@ class HexMapEditorModule {
             });
         }
         
-        // Draw terrain icon if zoomed in enough
-        if (tile && tile.terrain_type && this.zoom > 0.4) {
-            const terrainIcons = {
-                'plains': '🌱',
-                'forest': '🌲',
-                'mountain': '⛰️',
-                'water': '💧',
-                'desert': '☀️',
-                'swamp': '🐸',
-                'hill': '⛰️'
-            };
-            
-            const symbol = terrainIcons[tile.terrain_type];
-            if (symbol && this.zoom > 0.6) {
-                ctx.fillStyle = '#fff';
-                ctx.font = `${size * 0.4}px Arial`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(symbol, center.x, center.y - size * 0.15);
-            }
-        }
+        // Terrain images are now drawn as backgrounds, so no need for emoji icons
+        // Removed emoji icon drawing - images serve as both background and icon
         
         // Coordinates are hidden by default for a clean, professional look
         // To enable coordinate display for debugging, set this.showCoordinates = true
@@ -1121,7 +1950,120 @@ class HexMapEditorModule {
     }
     
     /**
-     * Draw a marker (settlement, POI, etc.) on a hex
+     * Draw borders (local/regional/national) on hex edges.
+     * Called after markers to ensure borders are always visible on top.
+     * 
+     * @param {CanvasRenderingContext2D} ctx - Canvas 2D rendering context
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @param {Object} borders - Borders object with edge numbers as keys and border types as values
+     * @returns {void}
+     * 
+     * @example
+     * // Draw borders on a hex
+     * const borders = { 0: 'local', 1: 'regional' };
+     * this.drawBorders(ctx, 5, 3, borders);
+     * 
+     * **Border Types:**
+     * - local: Bright yellow (#FFD700), width 2
+     * - regional: Royal blue (#4169E1), width 3
+     * - national: Red (#B33A2B), width 4
+     * 
+     * **Edge Numbers:**
+     * - 0: top
+     * - 1: top-right
+     * - 2: bottom-right
+     * - 3: bottom
+     * - 4: bottom-left
+     * - 5: top-left
+     * 
+     * @see drawHexGrid() - Calls this after markers to ensure borders are on top
+     */
+    drawBorders(ctx, q, r, borders) {
+        const center = this.hexToPixel(q, r);
+        const size = this.hexSize * this.zoom;
+        
+        const borderColors = {
+            'local': '#FFD700',      // Bright yellow (high contrast)
+            'regional': '#4169E1',   // Royal blue
+            'national': '#B33A2B'     // Red
+        };
+        
+        const borderWidths = {
+            'local': 2,
+            'regional': 3,
+            'national': 4
+        };
+        
+        // Edge angles for pointy-top hexes
+        const edgeAngles = [
+            -Math.PI / 2,      // 0: top
+            -Math.PI / 6,      // 1: top-right
+            Math.PI / 6,       // 2: bottom-right
+            Math.PI / 2,       // 3: bottom
+            5 * Math.PI / 6,   // 4: bottom-left
+            7 * Math.PI / 6    // 5: top-left
+        ];
+        
+        // Draw each border edge
+        Object.keys(borders).forEach(edgeStr => {
+            const edge = parseInt(edgeStr);
+            const borderType = borders[edge];
+            
+            if (borderColors[borderType]) {
+                const angle1 = edgeAngles[edge];
+                const angle2 = edgeAngles[(edge + 1) % 6];
+                
+                const x1 = center.x + size * Math.cos(angle1);
+                const y1 = center.y + size * Math.sin(angle1);
+                const x2 = center.x + size * Math.cos(angle2);
+                const y2 = center.y + size * Math.sin(angle2);
+                
+                // Draw border line
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.strokeStyle = borderColors[borderType];
+                ctx.lineWidth = borderWidths[borderType] * this.zoom;
+                ctx.stroke();
+            }
+        });
+    }
+    
+    /**
+     * Draw a marker (settlement, POI, etc.) on a hex.
+     * Renders marker icon, background circle, and name (if zoomed in enough).
+     * 
+     * @param {CanvasRenderingContext2D} ctx - Canvas 2D rendering context
+     * @param {Object} marker - Marker data object with q, r, marker_type, marker_name, marker_color, etc.
+     * @returns {void}
+     * 
+     * @example
+     * // Draw a village marker
+     * const marker = { q: 5, r: 3, marker_type: 'village', marker_name: 'Riverside', marker_color: '#8B7355' };
+     * this.drawMarker(ctx, marker);
+     * 
+     * **Marker Rendering:**
+     * - Icon: Font Awesome emoji based on marker_type
+     * - Background: Colored circle (marker_color or default red)
+     * - Border: White stroke
+     * - Name: Displayed if zoom > 0.5 and marker_name exists
+     * - Position: Above hex center
+     * 
+     * **Marker Types:**
+     * - village: 🏘️
+     * - town: 🏙️
+     * - city: 🏛️
+     * - castle: 🏰
+     * - fort: 🏯
+     * - ruins: 🏚️
+     * - poi: 📍
+     * - encounter: ⚔️
+     * - treasure: 💰
+     * - note: 📝
+     * 
+     * @see drawHexGrid() - Calls this for each marker
+     * @see placeSettlement() - Creates markers
      */
     drawMarker(ctx, marker) {
         const center = this.hexToPixel(marker.q, marker.r);
@@ -1132,10 +2074,10 @@ class HexMapEditorModule {
         const iconY = center.y - size * 0.2; // Position above center
         
         // Draw marker background circle
-        ctx.fillStyle = marker.marker_color || '#FF0000';
-        ctx.beginPath();
-        ctx.arc(center.x, iconY, iconSize * 0.6, 0, Math.PI * 2);
-        ctx.fill();
+        //ctx.fillStyle = marker.marker_color || '#FF0000';
+        //ctx.beginPath();
+        //ctx.arc(center.x, iconY, iconSize * 0.6, 0, Math.PI * 2);
+        //ctx.fill();
         
         // Draw border
         ctx.strokeStyle = '#fff';
@@ -1143,6 +2085,43 @@ class HexMapEditorModule {
         ctx.stroke();
         
         // Draw icon symbol (using emoji for now, can be enhanced with Font Awesome)
+        // Special handling for area labels - render as text only, no icon
+        if (marker.marker_type === 'area_label') {
+            // Draw area label as large text with background
+            if (marker.marker_name) {
+                const fontSize = Math.max(size * 0.4, 14); // Larger font for area labels
+                ctx.font = `bold ${fontSize}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Measure text for background
+                const metrics = ctx.measureText(marker.marker_name);
+                const textWidth = metrics.width;
+                const textHeight = fontSize;
+                const padding = fontSize * 0.3;
+                
+                // Draw background rectangle with rounded corners effect
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; // Semi-transparent black background
+                ctx.fillRect(
+                    center.x - textWidth / 2 - padding,
+                    center.y - textHeight / 2 - padding,
+                    textWidth + padding * 2,
+                    textHeight + padding * 2
+                );
+                
+                // Draw text with outline for readability
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = Math.max(fontSize * 0.15, 2);
+                ctx.lineJoin = 'round';
+                ctx.miterLimit = 2;
+                ctx.fillStyle = '#FFD700'; // Gold color for area labels
+                
+                ctx.strokeText(marker.marker_name, center.x, center.y);
+                ctx.fillText(marker.marker_name, center.x, center.y);
+            }
+            return; // Don't draw icon for area labels
+        }
+        
         const settlementSymbols = {
             'village': '🏘️',
             'town': '🏙️',
@@ -1158,7 +2137,7 @@ class HexMapEditorModule {
         
         const symbol = settlementSymbols[marker.marker_type] || '📍';
         ctx.fillStyle = '#fff';
-        ctx.font = `${iconSize * 0.8}px Arial`;
+        ctx.font = `${iconSize * 2}px Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(symbol, center.x, iconY);
@@ -1184,7 +2163,36 @@ class HexMapEditorModule {
     }
     
     /**
-     * Handle mouse down
+     * Handle mouse down events on canvas, routing to appropriate tool handler.
+     * Converts mouse pixel coordinates to hex coordinates and calls the appropriate action.
+     * 
+     * @param {MouseEvent} e - Mouse event (mousedown)
+     * @param {HTMLCanvasElement} canvas - Canvas element
+     * @returns {void}
+     * 
+     * @example
+     * // Called automatically by canvas mousedown event listener
+     * canvas.addEventListener('mousedown', (e) => {
+     *   if (e.button === 0) {
+     *     this.handleMouseDown(e, canvas);
+     *   }
+     * });
+     * 
+     * **Tool Routing:**
+     * - `place_settlement` → `placeSettlement()`
+     * - `erase` → `eraseHex()`
+     * - `draw_border` / `erase_border` → `toggleBorder()` (after edge detection)
+     * - `place_road` → `handleRoadPlacement()`
+     * - `erase_road` → `eraseRoadFromHex()`
+     * - `paint` → `paintHex()` (sets `isDrawing = true` for drag painting)
+     * 
+     * **Coordinate Conversion:**
+     * - Converts mouse pixel coordinates to canvas coordinates
+     * - Accounts for canvas scaling
+     * - Converts to hex coordinates via `pixelToHex()`
+     * 
+     * @see pixelToHex() - Converts pixel to hex coordinates
+     * @see getEdgeAtPoint() - Used for border tool edge detection
      */
     handleMouseDown(e, canvas) {
         const rect = canvas.getBoundingClientRect();
@@ -1209,12 +2217,24 @@ class HexMapEditorModule {
             if (edge !== null) {
                 this.toggleBorder(hex.q, hex.r, edge);
             }
-        } else if (this.selectedTool === 'place_road' || this.selectedTool === 'erase_road') {
-            // Find which edge was clicked
-            const edge = this.getEdgeAtPoint(hex.q, hex.r, x, y);
-            if (edge !== null) {
-                this.toggleRoad(hex.q, hex.r, edge);
-            }
+        } else if (this.selectedTool === 'place_road') {
+            // Road placement: click hex to start, click neighbor to connect
+            this.handleRoadPlacement(hex.q, hex.r).catch(error => {
+                console.error('[Road Placement] Error in handleRoadPlacement:', error);
+            });
+        } else if (this.selectedTool === 'erase_road') {
+            // Erase road: click a hex to remove all roads from it
+            this.eraseRoadFromHex(hex.q, hex.r);
+        } else if (this.selectedTool === 'place_path') {
+            // Path placement: click hex to start, click neighbor to connect
+            this.handlePathPlacement(hex.q, hex.r).catch(error => {
+                console.error('[Path Placement] Error in handlePathPlacement:', error);
+            });
+        } else if (this.selectedTool === 'erase_path') {
+            // Erase path: click a hex to remove all paths from it
+            this.erasePathFromHex(hex.q, hex.r);
+        } else if (this.selectedTool === 'place_area_label') {
+            this.placeAreaLabel(hex.q, hex.r);
         } else if (this.selectedTool === 'paint') {
             this.paintHex(hex.q, hex.r);
             this.isDrawing = true;
@@ -1222,9 +2242,40 @@ class HexMapEditorModule {
     }
     
     /**
-     * Get which edge of a hex was clicked (0-5, or null if center)
-     * Edge indices: 0=top, 1=top-right, 2=bottom-right, 3=bottom, 4=bottom-left, 5=top-left
-     * Improved: More forgiving edge detection with larger hit area
+     * Get which edge of a hex was clicked (0-5, or null if center).
+     * Uses angle calculation to determine which edge is closest to the click point.
+     * More forgiving edge detection with larger hit area (accepts clicks within 90° of an edge).
+     * 
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @param {number} pixelX - Pixel X coordinate of click
+     * @param {number} pixelY - Pixel Y coordinate of click
+     * @returns {number|null} Edge index (0-5) or null if click is too close to center
+     * 
+     * @example
+     * // Detect which edge was clicked
+     * const edge = this.getEdgeAtPoint(5, 3, mouseX, mouseY);
+     * if (edge !== null) {
+     *   console.log(`Clicked edge ${edge} of hex (5, 3)`);
+     * }
+     * 
+     * **Edge Indices (Pointy-top hexes):**
+     * - 0: Top (-90° or -π/2)
+     * - 1: Top-right (-30° or -π/6)
+     * - 2: Bottom-right (30° or π/6)
+     * - 3: Bottom (90° or π/2)
+     * - 4: Bottom-left (150° or 5π/6)
+     * - 5: Top-left (210° or 7π/6)
+     * 
+     * **Algorithm:**
+     * 1. Calculates distance from hex center
+     * 2. If too close to center (< 40% of hex radius), returns null
+     * 3. Calculates angle from center to click point
+     * 4. Finds closest edge angle (within 90° tolerance)
+     * 5. Returns edge index or null
+     * 
+     * @see handleMouseDown() - Calls this for border tool edge detection
+     * @see toggleBorder() - Uses edge index to toggle border
      */
     getEdgeAtPoint(q, r, pixelX, pixelY) {
         const center = this.hexToPixel(q, r);
@@ -1318,18 +2369,10 @@ class HexMapEditorModule {
             tile.borders[edge] = this.selectedBorderType;
         }
         
-        // Save border immediately - include both borders and roads to prevent data loss
-        try {
-            await this.apiClient.post('/api/hex-maps/tiles/create.php', {
-                map_id: this.currentMapId,
-                q: q,
-                r: r,
-                terrain_type: tile.terrain_type || null,
-                borders: tile.borders,
-                roads: tile.roads || null  // Include roads to prevent overwriting existing roads
-            });
-        } catch (error) {
-            console.error('Failed to save border:', error);
+        // Track tile for batch save (will be saved when user clicks "Save Map")
+        // Add to initialTileKeys if it wasn't there (tile now exists in memory)
+        if (!this.initialTileKeys.has(key)) {
+            this.initialTileKeys.add(key);
         }
         
         // Redraw entire grid to show border properly
@@ -1341,7 +2384,36 @@ class HexMapEditorModule {
     }
     
     /**
-     * Get neighboring hexes
+     * Get all six neighboring hexes for a given hex coordinate.
+     * Returns neighbors in order: top, top-right, bottom-right, bottom, bottom-left, top-left.
+     * 
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @returns {Array<Object>} Array of 6 neighbor objects, each with `{q: number, r: number}`
+     * 
+     * @example
+     * // Get neighbors of hex (5, 3)
+     * const neighbors = this.getHexNeighbors(5, 3);
+     * // Returns: [
+     * //   {q: 5, r: 2},   // Top
+     * //   {q: 6, r: 2},   // Top-right
+     * //   {q: 6, r: 3},   // Bottom-right
+     * //   {q: 5, r: 4},   // Bottom
+     * //   {q: 4, r: 4},   // Bottom-left
+     * //   {q: 4, r: 3}    // Top-left
+     * // ]
+     * 
+     * **Neighbor Order (Pointy-top hexes):**
+     * - Index 0: Top (q, r-1)
+     * - Index 1: Top-right (q+1, r-1)
+     * - Index 2: Bottom-right (q+1, r)
+     * - Index 3: Bottom (q, r+1)
+     * - Index 4: Bottom-left (q-1, r+1)
+     * - Index 5: Top-left (q-1, r)
+     * 
+     * @see connectRoads() - Uses neighbor indices for road connections
+     * @see eraseRoadFromHex() - Uses to find neighbors when erasing roads
+     * @see handleRoadPlacement() - Uses to check if clicked hex is neighbor
      */
     getHexNeighbors(q, r) {
         // For pointy-top hexes, neighbors are:
@@ -1356,7 +2428,496 @@ class HexMapEditorModule {
     }
     
     /**
-     * Toggle road on a hex edge (with automatic connection to neighbors)
+     * Handle road placement using two-click system (center to center).
+     * First click sets the start hex, second click on a neighbor connects them with a road.
+     * 
+     * @param {number} q - Hex column coordinate of clicked hex
+     * @param {number} r - Hex row coordinate of clicked hex
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * // First click: sets start hex
+     * await this.handleRoadPlacement(5, 3);
+     * // Second click on neighbor: connects roads
+     * await this.handleRoadPlacement(6, 2);
+     * 
+     * **Behavior:**
+     * - First click: Sets `this.roadStartHex` and highlights hex
+     * - Click same hex: Cancels road placement
+     * - Click non-neighbor: Sets new start hex
+     * - Click neighbor: Calls `connectRoads()` and resets start hex
+     * 
+     * @see connectRoads() - Called to create road connection
+     * @see roadStartHex - Stores starting hex for road placement
+     * @see getHexNeighbors() - Used to check if clicked hex is neighbor
+     */
+    async handleRoadPlacement(q, r) {
+        // If no start hex, set this as the start
+        if (!this.roadStartHex) {
+            this.roadStartHex = { q, r };
+            // Visual feedback: highlight the start hex
+            const canvas = document.getElementById('hex-canvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                this.drawHexGrid(ctx);
+            }
+            return;
+        }
+        
+        // If clicking the same hex, cancel
+        if (this.roadStartHex.q === q && this.roadStartHex.r === r) {
+            this.roadStartHex = null;
+            const canvas = document.getElementById('hex-canvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                this.drawHexGrid(ctx);
+            }
+            return;
+        }
+        
+        // Check if clicked hex is a neighbor of start hex
+        const neighbors = this.getHexNeighbors(this.roadStartHex.q, this.roadStartHex.r);
+        let neighborIndex = -1;
+        for (let i = 0; i < 6; i++) {
+            if (neighbors[i].q === q && neighbors[i].r === r) {
+                neighborIndex = i;
+                break;
+            }
+        }
+        
+        if (neighborIndex === -1) {
+            // Not a neighbor - set new start hex
+            this.roadStartHex = { q, r };
+            const canvas = document.getElementById('hex-canvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                this.drawHexGrid(ctx);
+            }
+            return;
+        }
+        
+        // Connect the two hexes with a road
+        await this.connectRoads(this.roadStartHex.q, this.roadStartHex.r, q, r, neighborIndex);
+        
+        // Reset start hex
+        this.roadStartHex = null;
+        
+        // Redraw
+        const canvas = document.getElementById('hex-canvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            this.drawHexGrid(ctx);
+        }
+    }
+    
+    /**
+     * Connect two hexes with a bidirectional road (center to center).
+     * Creates road connection on both tiles using neighbor indices.
+     * Creates tiles if they don't exist and saves to database.
+     * 
+     * @param {number} q1 - First hex column coordinate
+     * @param {number} r1 - First hex row coordinate
+     * @param {number} q2 - Second hex column coordinate
+     * @param {number} r2 - Second hex row coordinate
+     * @param {number} neighborIndex - Neighbor index from hex1 to hex2 (0-5)
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * // Connect hex (5,3) to neighbor 1 (which is hex 6,2)
+     * await this.connectRoads(5, 3, 6, 2, 1);
+     * 
+     * **Road Storage:**
+     * - Hex1: `roads[neighborIndex] = true` (road to neighbor at index)
+     * - Hex2: `roads[(neighborIndex + 3) % 6] = true` (road back to hex1)
+     * - Both tiles saved to database via API
+     * 
+     * @see handleRoadPlacement() - Calls this when neighbor is clicked
+     * @see getHexNeighbors() - Used to find neighbor index
+     * 
+     * @api POST /api/hex-maps/tiles/create.php - Saves both tiles
+     */
+    async connectRoads(q1, r1, q2, r2, neighborIndex) {
+        const key1 = `${q1},${r1}`;
+        const key2 = `${q2},${r2}`;
+        
+        // Get or create tiles
+        let tile1 = this.tiles.get(key1);
+        if (!tile1) {
+            tile1 = {
+                q: q1,
+                r: r1,
+                terrain_type: null,
+                is_passable: true,
+                movement_cost: 1,
+                roads: {}
+            };
+            this.tiles.set(key1, tile1);
+        }
+        if (!tile1.roads) {
+            tile1.roads = {};
+        }
+        
+        let tile2 = this.tiles.get(key2);
+        if (!tile2) {
+            tile2 = {
+                q: q2,
+                r: r2,
+                terrain_type: null,
+                is_passable: true,
+                movement_cost: 1,
+                roads: {}
+            };
+            this.tiles.set(key2, tile2);
+        }
+        if (!tile2.roads) {
+            tile2.roads = {};
+        }
+        
+        // Add road from hex1 to neighbor (neighborIndex)
+        tile1.roads[neighborIndex] = true;
+        
+        // Add road from hex2 back to hex1 (opposite neighbor: (neighborIndex + 3) % 6)
+        const oppositeNeighbor = (neighborIndex + 3) % 6;
+        tile2.roads[oppositeNeighbor] = true;
+        
+        // Track tiles for batch save (will be saved when user clicks "Save Map")
+        // Add to initialTileKeys if they weren't there (tiles now exist in memory)
+        if (!this.initialTileKeys.has(key1)) {
+            this.initialTileKeys.add(key1);
+        }
+        if (!this.initialTileKeys.has(key2)) {
+            this.initialTileKeys.add(key2);
+        }
+    }
+    
+    /**
+     * Erase all roads from a hex and remove corresponding roads from neighbors.
+     * Removes bidirectional road connections and saves/deletes tiles as needed.
+     * Deletes tiles from database if they become completely empty after road removal.
+     * 
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * // Erase all roads from hex (5, 3)
+     * await this.eraseRoadFromHex(5, 3);
+     * 
+     * **Process:**
+     * 1. Gets tile and checks if it has roads
+     * 2. Removes all roads from current hex
+     * 3. For each road connection:
+     *    - Finds neighbor hex
+     *    - Removes opposite road connection from neighbor
+     *    - Saves neighbor if it has other data, or deletes if empty
+     * 4. Deletes current tile from database if it becomes empty
+     * 5. Removes from `this.tiles` and `this.initialTileKeys` if deleted
+     * 6. Redraws canvas
+     * 
+     * **Empty Tile Detection:**
+     * - Tile is empty if it has no terrain_type, no roads, and no borders
+     * - Empty tiles are deleted from database if they existed when map was loaded
+     * 
+     * @see getHexNeighbors() - Used to find neighbors when removing roads
+     * @see initialTileKeys - Tracks tiles that existed when map was loaded
+     * 
+     * @api POST /api/hex-maps/tiles/create.php - Updates neighbors with remaining data
+     * @api POST /api/hex-maps/tiles/delete.php - Deletes empty tiles
+     */
+    async eraseRoadFromHex(q, r) {
+        const key = `${q},${r}`;
+        const tile = this.tiles.get(key);
+        
+        if (!tile || !tile.roads || Object.keys(tile.roads).length === 0) {
+            return; // No roads to erase
+        }
+        
+        // Remove roads from this hex and from neighbors
+        const neighbors = this.getHexNeighbors(q, r);
+        const roadsToRemove = Object.keys(tile.roads).map(neighborIndexStr => parseInt(neighborIndexStr));
+        
+        // Remove from this hex
+        tile.roads = {};
+        
+        // Remove from neighbors (opposite direction)
+        for (const neighborIndex of roadsToRemove) {
+            const neighbor = neighbors[neighborIndex];
+            if (neighbor) {
+                const neighborKey = `${neighbor.q},${neighbor.r}`;
+                const neighborTile = this.tiles.get(neighborKey);
+                if (neighborTile && neighborTile.roads) {
+                    const oppositeNeighbor = (neighborIndex + 3) % 6;
+                    delete neighborTile.roads[oppositeNeighbor];
+                    // Neighbor tile will be saved when user clicks "Save Map"
+                }
+            }
+        }
+        
+        // Check if current tile becomes empty after road removal
+        const currentTileHasData = tile.terrain_type || Object.keys(tile.roads || {}).length > 0 || Object.keys(tile.borders || {}).length > 0 || Object.keys(tile.paths || {}).length > 0;
+        
+        if (!currentTileHasData) {
+            // Current tile is empty - remove from local tiles map
+            // It will be deleted from database when user clicks "Save Map"
+            this.tiles.delete(key);
+            // Keep in initialTileKeys if it existed - saveMap() will handle deletion
+        }
+        // If tile has data, it will be saved when user clicks "Save Map"
+        
+        // Redraw
+        const canvas = document.getElementById('hex-canvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            this.drawHexGrid(ctx);
+        }
+    }
+    
+    /**
+     * Handle path placement: click hex to start, click neighbor to connect.
+     * Similar to road placement but creates paths (dotted lines) instead.
+     * 
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * // Start path placement
+     * await this.handlePathPlacement(5, 3);
+     * // Click neighbor to connect
+     * await this.handlePathPlacement(6, 2);
+     * 
+     * **Path Placement Process:**
+     * 1. First click: Sets start hex (pathStartHex)
+     * 2. Second click on neighbor: Connects with path
+     * 3. Clicking same hex: Cancels placement
+     * 4. Clicking non-neighbor: Sets new start hex
+     * 
+     * @see handleRoadPlacement() - Similar function for roads
+     * @see connectPaths() - Called to create path connection
+     */
+    async handlePathPlacement(q, r) {
+        // If no start hex, set this as the start
+        if (!this.pathStartHex) {
+            this.pathStartHex = { q, r };
+            // Visual feedback: highlight the start hex
+            const canvas = document.getElementById('hex-canvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                this.drawHexGrid(ctx);
+            }
+            return;
+        }
+        
+        // If clicking the same hex, cancel
+        if (this.pathStartHex.q === q && this.pathStartHex.r === r) {
+            this.pathStartHex = null;
+            const canvas = document.getElementById('hex-canvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                this.drawHexGrid(ctx);
+            }
+            return;
+        }
+        
+        // Check if clicked hex is a neighbor of start hex
+        const neighbors = this.getHexNeighbors(this.pathStartHex.q, this.pathStartHex.r);
+        let neighborIndex = -1;
+        for (let i = 0; i < 6; i++) {
+            if (neighbors[i].q === q && neighbors[i].r === r) {
+                neighborIndex = i;
+                break;
+            }
+        }
+        
+        if (neighborIndex === -1) {
+            // Not a neighbor - set new start hex
+            this.pathStartHex = { q, r };
+            const canvas = document.getElementById('hex-canvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                this.drawHexGrid(ctx);
+            }
+            return;
+        }
+        
+        // Connect the two hexes with a path
+        await this.connectPaths(this.pathStartHex.q, this.pathStartHex.r, q, r, neighborIndex);
+        
+        // Reset start hex
+        this.pathStartHex = null;
+        
+        // Redraw
+        const canvas = document.getElementById('hex-canvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            this.drawHexGrid(ctx);
+        }
+    }
+    
+    /**
+     * Connect two hexes with a bidirectional path (center to center).
+     * Creates path connection on both tiles using neighbor indices.
+     * Creates tiles if they don't exist and saves to database.
+     * 
+     * @param {number} q1 - First hex column coordinate
+     * @param {number} r1 - First hex row coordinate
+     * @param {number} q2 - Second hex column coordinate
+     * @param {number} r2 - Second hex row coordinate
+     * @param {number} neighborIndex - Neighbor index from hex1 to hex2 (0-5)
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * // Connect hex (5,3) to neighbor 1 (which is hex 6,2)
+     * await this.connectPaths(5, 3, 6, 2, 1);
+     * 
+     * **Path Storage:**
+     * - Hex1: `paths[neighborIndex] = true` (path to neighbor at index)
+     * - Hex2: `paths[(neighborIndex + 3) % 6] = true` (path back to hex1)
+     * - Both tiles saved to database via API
+     * 
+     * @see handlePathPlacement() - Calls this when neighbor is clicked
+     * @see getHexNeighbors() - Used to find neighbor index
+     * 
+     * @api POST /api/hex-maps/tiles/create.php - Saves both tiles
+     */
+    async connectPaths(q1, r1, q2, r2, neighborIndex) {
+        const key1 = `${q1},${r1}`;
+        const key2 = `${q2},${r2}`;
+        
+        // Get or create tiles
+        let tile1 = this.tiles.get(key1);
+        if (!tile1) {
+            tile1 = {
+                q: q1,
+                r: r1,
+                terrain_type: null,
+                is_passable: true,
+                movement_cost: 1,
+                paths: {}
+            };
+            this.tiles.set(key1, tile1);
+        }
+        if (!tile1.paths) {
+            tile1.paths = {};
+        }
+        
+        let tile2 = this.tiles.get(key2);
+        if (!tile2) {
+            tile2 = {
+                q: q2,
+                r: r2,
+                terrain_type: null,
+                is_passable: true,
+                movement_cost: 1,
+                paths: {}
+            };
+            this.tiles.set(key2, tile2);
+        }
+        if (!tile2.paths) {
+            tile2.paths = {};
+        }
+        
+        // Add path from hex1 to neighbor (neighborIndex)
+        tile1.paths[neighborIndex] = true;
+        
+        // Add path from hex2 back to hex1 (opposite neighbor: (neighborIndex + 3) % 6)
+        const oppositeNeighbor = (neighborIndex + 3) % 6;
+        tile2.paths[oppositeNeighbor] = true;
+        
+        // Track tiles for batch save (will be saved when user clicks "Save Map")
+        // Add to initialTileKeys if they weren't there (tiles now exist in memory)
+        if (!this.initialTileKeys.has(key1)) {
+            this.initialTileKeys.add(key1);
+        }
+        if (!this.initialTileKeys.has(key2)) {
+            this.initialTileKeys.add(key2);
+        }
+    }
+    
+    /**
+     * Erase all paths from a hex and remove corresponding paths from neighbors.
+     * Removes bidirectional path connections and saves/deletes tiles as needed.
+     * Deletes tiles from database if they become completely empty after path removal.
+     * 
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * // Erase all paths from hex (5, 3)
+     * await this.erasePathFromHex(5, 3);
+     * 
+     * **Process:**
+     * 1. Gets tile and checks if it has paths
+     * 2. Removes all paths from current hex
+     * 3. For each path connection:
+     *    - Finds neighbor hex
+     *    - Removes opposite path connection from neighbor
+     *    - Saves neighbor if it has other data, or deletes if empty
+     * 4. Deletes current tile from database if it becomes empty
+     * 5. Removes from `this.tiles` and `this.initialTileKeys` if deleted
+     * 6. Redraws canvas
+     * 
+     * **Empty Tile Detection:**
+     * - Tile is empty if it has no terrain_type, no roads, no paths, and no borders
+     * - Empty tiles are deleted from database if they existed when map was loaded
+     * 
+     * @see getHexNeighbors() - Used to find neighbors when removing paths
+     * @see initialTileKeys - Tracks tiles that existed when map was loaded
+     * 
+     * @api POST /api/hex-maps/tiles/create.php - Updates neighbors with remaining data
+     * @api POST /api/hex-maps/tiles/delete.php - Deletes empty tiles
+     */
+    async erasePathFromHex(q, r) {
+        const key = `${q},${r}`;
+        const tile = this.tiles.get(key);
+        
+        if (!tile || !tile.paths || Object.keys(tile.paths).length === 0) {
+            return; // No paths to erase
+        }
+        
+        // Remove paths from this hex and from neighbors
+        const neighbors = this.getHexNeighbors(q, r);
+        const pathsToRemove = Object.keys(tile.paths).map(neighborIndexStr => parseInt(neighborIndexStr));
+        
+        // Remove from this hex
+        tile.paths = {};
+        
+        // Remove from neighbors (opposite direction)
+        for (const neighborIndex of pathsToRemove) {
+            const neighbor = neighbors[neighborIndex];
+            if (neighbor) {
+                const neighborKey = `${neighbor.q},${neighbor.r}`;
+                const neighborTile = this.tiles.get(neighborKey);
+                if (neighborTile && neighborTile.paths) {
+                    const oppositeNeighbor = (neighborIndex + 3) % 6;
+                    delete neighborTile.paths[oppositeNeighbor];
+                    // Neighbor tile will be saved when user clicks "Save Map"
+                }
+            }
+        }
+        
+        // Check if current tile becomes empty after path removal
+        const currentTileHasData = tile.terrain_type || Object.keys(tile.roads || {}).length > 0 || Object.keys(tile.borders || {}).length > 0 || Object.keys(tile.paths || {}).length > 0;
+        
+        if (!currentTileHasData) {
+            // Current tile is empty - remove from local tiles map
+            // It will be deleted from database when user clicks "Save Map"
+            this.tiles.delete(key);
+            // Keep in initialTileKeys if it existed - saveMap() will handle deletion
+        }
+        // If tile has data, it will be saved when user clicks "Save Map"
+        
+        // Redraw
+        const canvas = document.getElementById('hex-canvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            this.drawHexGrid(ctx);
+        }
+    }
+    
+    /**
+     * Toggle road on a hex edge (with automatic connection to neighbors) - DEPRECATED, kept for compatibility
      */
     async toggleRoad(q, r, edge) {
         const key = `${q},${r}`;
@@ -1399,87 +2960,27 @@ class HexMapEditorModule {
                     const neighborHadRoad = neighborTile.roads[oppositeEdge] === true;
                     delete neighborTile.roads[oppositeEdge];
                     
-                    // Always save neighbor when we modify its roads to keep database in sync
                     // Check if tile has any data left after road deletion
                     const neighborHasOtherData = neighborTile.terrain_type || Object.keys(neighborTile.roads || {}).length > 0 || Object.keys(neighborTile.borders || {}).length > 0;
                     
-                    if (neighborHasOtherData) {
-                        // Save updated tile with remaining data
-                        try {
-                            await this.apiClient.post('/api/hex-maps/tiles/create.php', {
-                                map_id: this.currentMapId,
-                                q: neighbor.q,
-                                r: neighbor.r,
-                                terrain_type: neighborTile.terrain_type || null,
-                                borders: neighborTile.borders || null,  // Include borders to prevent overwriting existing borders
-                                roads: neighborTile.roads || null
-                            });
-                            // Add to initialTileKeys if it wasn't there (tile now exists in database)
-                            if (!this.initialTileKeys.has(neighborKey)) {
-                                this.initialTileKeys.add(neighborKey);
-                            }
-                        } catch (error) {
-                            console.error('Failed to save neighbor road removal:', error);
-                        }
-                    } else if (neighborHadRoad) {
-                        // Tile had a road but now has no data - delete it from database
-                        // Check if tile exists in database (either in initialTileKeys or was saved during this session)
-                        if (this.initialTileKeys.has(neighborKey)) {
-                            // Tile exists in database - delete it
-                            try {
-                                await this.apiClient.post('/api/hex-maps/tiles/delete.php', {
-                                    map_id: this.currentMapId,
-                                    q: neighbor.q,
-                                    r: neighbor.r
-                                });
-                            } catch (error) {
-                                console.error('Failed to delete empty neighbor tile:', error);
-                            }
-                        }
-                        // Remove from local tiles map and initialTileKeys since it's empty
+                    if (!neighborHasOtherData && neighborHadRoad) {
+                        // Tile had a road but now has no data - remove from local tiles map
+                        // It will be deleted from database when user clicks "Save Map"
                         this.tiles.delete(neighborKey);
-                        this.initialTileKeys.delete(neighborKey);
+                        // Keep in initialTileKeys if it existed - saveMap() will handle deletion
                     }
+                    // If neighbor has data, it will be saved when user clicks "Save Map"
                 }
             }
             
-            // Handle current tile - check if it's empty and delete if so
+            // Handle current tile - check if it's empty and remove if so
             if (!currentTileHasData && hadRoad) {
-                // Current tile is empty - delete it from database if it exists there
-                if (this.initialTileKeys.has(key)) {
-                    // Tile exists in database - delete it
-                    try {
-                        await this.apiClient.post('/api/hex-maps/tiles/delete.php', {
-                            map_id: this.currentMapId,
-                            q: q,
-                            r: r
-                        });
-                    } catch (error) {
-                        console.error('Failed to delete empty current tile:', error);
-                    }
-                }
-                // Remove from local tiles map and initialTileKeys since it's empty
+                // Current tile is empty - remove from local tiles map
+                // It will be deleted from database when user clicks "Save Map"
                 this.tiles.delete(key);
-                this.initialTileKeys.delete(key);
-            } else if (currentTileHasData) {
-                // Current tile has data - save it
-                try {
-                    await this.apiClient.post('/api/hex-maps/tiles/create.php', {
-                        map_id: this.currentMapId,
-                        q: q,
-                        r: r,
-                        terrain_type: tile.terrain_type || null,
-                        borders: tile.borders || null,  // Include borders to prevent overwriting existing borders
-                        roads: tile.roads || null
-                    });
-                    // Add to initialTileKeys if it wasn't there (tile now exists in database)
-                    if (!this.initialTileKeys.has(key)) {
-                        this.initialTileKeys.add(key);
-                    }
-                } catch (error) {
-                    console.error('Failed to save current tile after road removal:', error);
-                }
+                // Keep in initialTileKeys if it existed - saveMap() will handle deletion
             }
+            // If current tile has data, it will be saved when user clicks "Save Map"
         } else if (this.selectedTool === 'place_road') {
             // Place road
             tile.roads[edge] = true;
@@ -1512,41 +3013,17 @@ class HexMapEditorModule {
                 const oppositeEdge = (edge + 3) % 6;
                 neighborTile.roads[oppositeEdge] = true;
                 
-                // Save neighbor - include both borders and roads to prevent data loss
-                try {
-                    await this.apiClient.post('/api/hex-maps/tiles/create.php', {
-                        map_id: this.currentMapId,
-                        q: neighbor.q,
-                        r: neighbor.r,
-                        terrain_type: neighborTile.terrain_type || null,
-                        borders: neighborTile.borders || null,  // Include borders to prevent overwriting existing borders
-                        roads: neighborTile.roads || null
-                    });
-                    // Add to initialTileKeys if it wasn't there (tile now exists in database)
-                    if (!this.initialTileKeys.has(neighborKey)) {
-                        this.initialTileKeys.add(neighborKey);
-                    }
-                } catch (error) {
-                    console.error('Failed to save neighbor road connection:', error);
+                // Track neighbor tile for batch save (will be saved when user clicks "Save Map")
+                // Add to initialTileKeys if it wasn't there (tile now exists in memory)
+                if (!this.initialTileKeys.has(neighborKey)) {
+                    this.initialTileKeys.add(neighborKey);
                 }
             }
             
-            // Save current tile immediately - include both borders and roads to prevent data loss
-            try {
-                await this.apiClient.post('/api/hex-maps/tiles/create.php', {
-                    map_id: this.currentMapId,
-                    q: q,
-                    r: r,
-                    terrain_type: tile.terrain_type || null,
-                    borders: tile.borders || null,  // Include borders to prevent overwriting existing borders
-                    roads: tile.roads || null
-                });
-                // Add to initialTileKeys if it wasn't there (tile now exists in database)
-                if (!this.initialTileKeys.has(key)) {
-                    this.initialTileKeys.add(key);
-                }
-            } catch (error) {
-                console.error('Failed to save road:', error);
+            // Track current tile for batch save (will be saved when user clicks "Save Map")
+            // Add to initialTileKeys if it wasn't there (tile now exists in memory)
+            if (!this.initialTileKeys.has(key)) {
+                this.initialTileKeys.add(key);
             }
         }
         
@@ -1615,7 +3092,129 @@ class HexMapEditorModule {
     }
     
     /**
-     * Handle mouse move
+     * Draw paths (dotted lines) connecting hex centers.
+     * Similar to roads but drawn as dotted lines to distinguish them.
+     * 
+     * @param {CanvasRenderingContext2D} ctx - Canvas 2D rendering context
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @param {Object} paths - Paths object with neighbor indices as keys and true as values
+     * @returns {void}
+     * 
+     * @example
+     * // Draw paths on a hex
+     * const paths = { 1: true, 3: true };
+     * this.drawPaths(ctx, 5, 3, paths);
+     * 
+     * **Path Rendering:**
+     * - Dotted lines (unlike solid roads)
+     * - Sienna color (#A0522D)
+     * - Thinner than roads (3px vs 4px)
+     * - Connects hex centers (same as roads)
+     * 
+     * @see drawRoads() - Similar function for solid roads
+     * @see drawHexGrid() - Calls this for each tile with paths
+     */
+    drawPaths(ctx, q, r, paths) {
+        if (!paths || Object.keys(paths).length === 0) return;
+        
+        const center = this.hexToPixel(q, r);
+        const size = this.hexSize * this.zoom;
+        
+        // Edge angles for pointy-top hexes (starting from top, going clockwise)
+        const edgeAngles = [
+            -Math.PI / 2,                    // 0: top
+            -Math.PI / 6,                    // 1: top-right
+            Math.PI / 6,                     // 2: bottom-right
+            Math.PI / 2,                     // 3: bottom
+            5 * Math.PI / 6,                 // 4: bottom-left
+            -5 * Math.PI / 6                 // 5: top-left
+        ];
+        
+        // Get neighbors
+        const neighbors = this.getHexNeighbors(q, r);
+        
+        // Draw each path edge - connect to neighbor center (as dotted line)
+        Object.keys(paths).forEach(edgeStr => {
+            const edge = parseInt(edgeStr);
+            if (paths[edge] && edge >= 0 && edge < 6) {
+                const neighbor = neighbors[edge];
+                if (neighbor) {
+                    const neighborCenter = this.hexToPixel(neighbor.q, neighbor.r);
+                    
+                    // Draw path as dotted line from this hex center to neighbor center
+                    // Calculate distance and draw dots along the path
+                    const dx = neighborCenter.x - center.x;
+                    const dy = neighborCenter.y - center.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const dotRadius = Math.max(2 * this.zoom, 1.5);
+                    const dotSpacing = Math.max(6 * this.zoom, 5); // Space between dot centers
+                    
+                    ctx.fillStyle = '#A0522D'; // Sienna (darker than roads)
+                    
+                    // Draw dots along the path
+                    const numDots = Math.floor(distance / dotSpacing);
+                    for (let i = 0; i <= numDots; i++) {
+                        const t = i / Math.max(numDots, 1);
+                        const dotX = center.x + dx * t;
+                        const dotY = center.y + dy * t;
+                        
+                        ctx.beginPath();
+                        ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                } else {
+                    // No neighbor - draw from center to edge as dotted line
+                    const angle = edgeAngles[edge];
+                    const endX = center.x + size * Math.cos(angle);
+                    const endY = center.y + size * Math.sin(angle);
+                    
+                    // Calculate distance and draw dots along the path
+                    const dx = endX - center.x;
+                    const dy = endY - center.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const dotRadius = Math.max(2 * this.zoom, 1.5);
+                    const dotSpacing = Math.max(6 * this.zoom, 5); // Space between dot centers
+                    
+                    ctx.fillStyle = '#A0522D'; // Sienna
+                    
+                    // Draw dots along the path
+                    const numDots = Math.floor(distance / dotSpacing);
+                    for (let i = 0; i <= numDots; i++) {
+                        const t = i / Math.max(numDots, 1);
+                        const dotX = center.x + dx * t;
+                        const dotY = center.y + dy * t;
+                        
+                        ctx.beginPath();
+                        ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+        });
+    }
+    
+    /**
+     * Handle mouse move for drag painting (when isDrawing is true).
+     * Continuously paints hexes as mouse moves while paint tool is active.
+     * 
+     * @param {MouseEvent} e - Mouse event (mousemove)
+     * @param {HTMLCanvasElement} canvas - Canvas element
+     * @returns {void}
+     * 
+     * @example
+     * // Called automatically by canvas mousemove event listener
+     * canvas.addEventListener('mousemove', (e) => {
+     *   this.handleMouseMove(e, canvas);
+     * });
+     * 
+     * **Behavior:**
+     * - Only paints if `this.isDrawing === true` (set on mousedown with paint tool)
+     * - Converts mouse position to hex coordinates
+     * - Calls `paintHex()` for instant feedback
+     * 
+     * @see handleMouseDown() - Sets `isDrawing = true` for paint tool
+     * @see paintHex() - Called to paint each hex during drag
      */
     handleMouseMove(e, canvas) {
         if (!this.isDrawing) return;
@@ -1633,7 +3232,66 @@ class HexMapEditorModule {
     }
     
     /**
-     * Handle mouse move for border tool (shows visual feedback)
+     * Handle mouse move for road tool (shows visual feedback).
+     * Updates hover hex and redraws canvas to show road placement preview.
+     * 
+     * @param {MouseEvent} e - Mouse event (mousemove)
+     * @param {HTMLCanvasElement} canvas - Canvas element
+     * @returns {void}
+     * 
+     * @example
+     * // Called automatically when place_road tool is active
+     * if (this.selectedTool === 'place_road') {
+     *   this.handleMouseMoveRoad(e, canvas);
+     * }
+     * 
+     * **Visual Feedback:**
+     * - Highlights `roadStartHex` (if set)
+     * - Draws dashed preview line to hover hex (if neighbor)
+     * - Updates `this.hoverHex` for `drawHexGrid()` to use
+     * 
+     * @see drawHexGrid() - Uses hoverHex to draw road placement preview
+     * @see handleRoadPlacement() - Uses roadStartHex for two-click system
+     */
+    handleMouseMoveRoad(e, canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+        
+        const hex = this.pixelToHex(x, y);
+        this.hoverHex = hex;
+        this.hoverPixelX = x;
+        this.hoverPixelY = y;
+        
+        // Redraw to show feedback
+        const ctx = canvas.getContext('2d');
+        this.drawHexGrid(ctx);
+    }
+    
+    /**
+     * Handle mouse move for border tool (shows visual feedback).
+     * Updates hover hex and edge, then redraws canvas to show edge highlight.
+     * 
+     * @param {MouseEvent} e - Mouse event (mousemove)
+     * @param {HTMLCanvasElement} canvas - Canvas element
+     * @returns {void}
+     * 
+     * @example
+     * // Called automatically when draw_border or erase_border tool is active
+     * if (this.selectedTool === 'draw_border' || this.selectedTool === 'erase_border') {
+     *   this.handleMouseMoveBorder(e, canvas);
+     * }
+     * 
+     * **Visual Feedback:**
+     * - Updates `this.hoverHex` and `this.hoverPixelX/Y`
+     * - `drawHexGrid()` uses these to call `getEdgeAtPoint()` and `drawEdgeHoverFeedback()`
+     * - Shows which edge will be affected when clicking
+     * 
+     * @see drawHexGrid() - Uses hoverHex and hoverPixelX/Y to draw edge feedback
+     * @see getEdgeAtPoint() - Detects which edge is being hovered
+     * @see drawEdgeHoverFeedback() - Draws edge highlight
      */
     handleMouseMoveBorder(e, canvas) {
         const rect = canvas.getBoundingClientRect();
@@ -1655,7 +3313,28 @@ class HexMapEditorModule {
     }
     
     /**
-     * Paint a hex
+     * Paint a hex with the selected terrain type.
+     * Updates existing tile or creates new tile in this.tiles Map.
+     * Immediately redraws the hex for instant visual feedback.
+     * 
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @returns {void}
+     * 
+     * @example
+     * // Paint hex (5, 3) with forest terrain
+     * this.selectedTerrain = 'forest';
+     * this.paintHex(5, 3);
+     * 
+     * **Behavior:**
+     * - If tile exists: Updates `terrain_type` property
+     * - If tile doesn't exist: Creates new tile object with default values
+     * - Immediately redraws hex and marker (if present) for instant feedback
+     * - Tiles are saved to database when `saveMap()` is called
+     * 
+     * @see selectedTerrain - Terrain type to paint
+     * @see drawHex() - Called to redraw the hex
+     * @see saveMap() - Saves all painted tiles to database
      */
     paintHex(q, r) {
         const key = `${q},${r}`;
@@ -1690,7 +3369,32 @@ class HexMapEditorModule {
     }
     
     /**
-     * Erase a hex (remove terrain and/or markers)
+     * Erase a hex by removing terrain and/or markers.
+     * Attempts to delete marker from database if present, then removes terrain from local state.
+     * Continues with terrain deletion even if marker deletion fails.
+     * 
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * // Erase hex (5, 3)
+     * await this.eraseHex(5, 3);
+     * 
+     * **Behavior:**
+     * 1. Checks for marker on hex
+     * 2. If marker exists: Attempts to delete via `deleteMarker()`
+     * 3. Removes terrain from `this.tiles` Map
+     * 4. Redraws hex (and marker if deletion failed)
+     * 5. Tile deletion from database happens during `saveMap()`
+     * 
+     * **Error Handling:**
+     * - Marker deletion failures are logged but don't prevent terrain deletion
+     * - Failed marker deletions leave marker in `this.markers` and redraw it
+     * 
+     * @see deleteMarker() - Called to delete marker from database
+     * @see saveMap() - Deletes tiles from database that were removed
+     * @see initialTileKeys - Tracks tiles that existed when map was loaded
      */
     async eraseHex(q, r) {
         const key = `${q},${r}`;
@@ -1733,7 +3437,37 @@ class HexMapEditorModule {
     }
     
     /**
-     * Place a settlement marker
+     * Place a settlement marker (village, town, city, castle, fort, ruins) on a hex.
+     * Prompts user for settlement name, then creates marker via API.
+     * 
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * // Place a village on hex (5, 3)
+     * this.selectedSettlementType = 'village';
+     * await this.placeSettlement(5, 3);
+     * 
+     * **Settlement Types:**
+     * - village: 🏘️ (brown #8B7355)
+     * - town: 🏙️ (gold #9C7C38)
+     * - city: 🏛️ (darker gold #B08F43)
+     * - castle: 🏰 (dark brown #6B4423)
+     * - fort: 🏯 (saddle brown #8B4513)
+     * - ruins: 🏚️ (gray #696969)
+     * 
+     * **Process:**
+     * 1. Prompts for settlement name
+     * 2. Creates marker via API with appropriate icon and color
+     * 3. Adds marker to `this.markers` Map
+     * 4. Redraws hex and marker
+     * 5. Shows success message
+     * 
+     * @see selectedSettlementType - Settlement type to place
+     * @see drawMarker() - Called to render the marker
+     * 
+     * @api POST /api/hex-maps/markers/create.php - Creates marker in database
      */
     async placeSettlement(q, r) {
         const key = `${q},${r}`;
@@ -1793,124 +3527,238 @@ class HexMapEditorModule {
     }
     
     /**
-     * Save map
+     * Place an area/region name label on a hex.
+     * Creates a text-only marker (no icon) for naming regions or areas on the map.
+     * 
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * // Place an area label
+     * await this.placeAreaLabel(5, 3);
+     * // Prompts for area name, then creates marker with type "area_label"
+     * 
+     * **Area Label Features:**
+     * - Text-only marker (no icon)
+     * - Large, readable text with background
+     * - Gold color (#FFD700) for high visibility
+     * - Semi-transparent black background
+     * - Always visible (not affected by zoom threshold)
+     * 
+     * @see drawMarker() - Renders area labels as text with background
+     * @see placeSettlement() - Similar function for settlement markers
+     */
+    async placeAreaLabel(q, r) {
+        const key = `${q},${r}`;
+        const areaName = prompt('Enter area/region name:');
+        if (!areaName || areaName.trim() === '') return;
+        
+        try {
+            const response = await this.apiClient.post('/api/hex-maps/markers/create.php', {
+                map_id: this.currentMapId,
+                q: q,
+                r: r,
+                marker_type: 'area_label',
+                marker_name: areaName.trim(),
+                marker_icon: 'fa-sign',
+                marker_color: '#FFD700', // Gold color for area labels
+                is_visible_to_players: true // Area names are visible to players
+            });
+            
+            if (response.status === 'success') {
+                // Add to markers map
+                const marker = response.data;
+                this.markers.set(key, marker);
+                
+                // Redraw
+                const canvas = document.getElementById('hex-canvas');
+                if (canvas) {
+                    const ctx = canvas.getContext('2d');
+                    const tile = this.tiles.get(key);
+                    this.drawHex(ctx, q, r, tile);
+                    this.drawMarker(ctx, marker);
+                }
+                
+                this.app.showSuccess(`Area label "${areaName}" placed`);
+            }
+        } catch (error) {
+            console.error('Failed to place area label:', error);
+            this.app.showError('Failed to place area label: ' + error.message);
+        }
+    }
+    
+    /**
+     * Save map to database with all changes (metadata, tiles, deletions) in a single request.
+     * Uses a unified endpoint that handles everything atomically to avoid session issues.
+     * 
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * // Save all changes to the map
+     * await this.saveMap();
+     * // Shows success message: "Map saved successfully"
+     * 
+     * **Save Process:**
+     * 1. Collects map metadata from form inputs
+     * 2. Finds deleted tiles (existed in `initialTileKeys` but not in `this.tiles`)
+     * 3. Cleans tile data (removes DB-only fields, handles empty borders/roads)
+     * 4. Sends everything in ONE request to `/api/hex-maps/save.php`
+     * 5. Updates `initialTileKeys` to reflect current state
+     * 6. Shows success message
+     * 
+     * **Data Cleaning:**
+     * - Removes `tile_id`, `created_at`, `updated_at` (DB-only fields)
+     * - Converts empty borders/roads objects/arrays to `null`
+     * - Ensures only serializable data is sent
+     * 
+     * @see initialTileKeys - Tracks tiles that existed when map was loaded
+     * @see tiles - Map of all current tiles
+     * 
+     * @api POST /api/hex-maps/save.php - Unified save endpoint (metadata + tiles + deletions)
      */
     async saveMap() {
         if (!this.currentMapId) return;
         
         try {
-            // Update map metadata
+            // Collect map metadata from form inputs
             const mapName = document.getElementById('map-name-input')?.value;
             const mapDescription = document.getElementById('map-description-input')?.value;
             const mapWidth = parseInt(document.getElementById('map-width-input')?.value);
             const mapHeight = parseInt(document.getElementById('map-height-input')?.value);
             const hexSize = parseInt(document.getElementById('hex-size-input')?.value) || this.currentMap.hex_size_pixels;
             
-            await this.apiClient.post('/api/hex-maps/update.php', {
+            // Find tiles that were deleted (existed initially but don't exist now)
+            const currentTileKeys = new Set(this.tiles.keys());
+            const deletedTileKeys = Array.from(this.initialTileKeys).filter(key => !currentTileKeys.has(key));
+            const deletedTiles = deletedTileKeys.map(key => {
+                const [q, r] = key.split(',').map(Number);
+                return { q, r };
+            });
+            
+            // Clean tiles data - ensure only serializable data is sent
+            const tiles = Array.from(this.tiles.values());
+            const cleanTiles = tiles.map(tile => {
+                // Normalize borders, roads, and paths using utility functions
+                const borders = this.normalizeBordersForSave(tile.borders);
+                const roads = this.normalizeRoadsForSave(tile.roads);
+                const paths = this.normalizePathsForSave(tile.paths);
+                
+                // Return only fields that the API expects (no tile_id, created_at, updated_at)
+                const cleanTile = {
+                    q: tile.q,
+                    r: tile.r,
+                    terrain_type: tile.terrain_type || null,
+                    terrain_name: tile.terrain_name || null,
+                    description: tile.description || null,
+                    notes: tile.notes || null,
+                    image_url: tile.image_url || null,
+                    elevation: tile.elevation || 0,
+                    is_passable: tile.is_passable !== undefined ? tile.is_passable : true,
+                    movement_cost: tile.movement_cost || 1,
+                    borders: borders,
+                    roads: roads
+                };
+                
+                // Only include paths if it's not null (for backward compatibility)
+                if (paths !== null) {
+                    cleanTile.paths = paths;
+                }
+                
+                return cleanTile;
+            });
+            
+            // Build save payload
+            // Include user_id as workaround for session issues
+            const userId = this.app?.state?.user?.user_id || null;
+            const savePayload = {
                 map_id: this.currentMapId,
+                user_id: userId, // Workaround: send user_id if session fails
                 map_name: mapName,
                 map_description: mapDescription,
                 width_hexes: mapWidth,
                 height_hexes: mapHeight,
-                hex_size_pixels: hexSize
-            });
+                hex_size_pixels: hexSize,
+                tiles: cleanTiles,
+                deleted_tiles: deletedTiles
+            };
             
-            // Find tiles that were deleted (existed initially but don't exist now)
-            const currentTileKeys = new Set(this.tiles.keys());
-            const deletedTileKeys = Array.from(this.initialTileKeys).filter(key => !currentTileKeys.has(key));
+            console.log(`[HEX MAP EDITOR] Saving map: ${cleanTiles.length} tiles, ${deletedTiles.length} deletions`);
             
-            // Delete tiles that were removed
-            if (deletedTileKeys.length > 0) {
-                console.log(`Deleting ${deletedTileKeys.length} tiles that were removed`);
-                const deletePromises = deletedTileKeys.map(key => {
-                    const [q, r] = key.split(',').map(Number);
-                    return this.apiClient.post('/api/hex-maps/tiles/delete.php', {
-                        map_id: this.currentMapId,
-                        q: q,
-                        r: r
-                    }).catch(error => {
-                        console.error(`Failed to delete tile ${key}:`, error);
-                        // Don't throw - continue deleting other tiles
-                    });
-                });
-                await Promise.all(deletePromises);
+            // Send everything in ONE request
+            const saveResponse = await this.apiClient.post('/api/hex-maps/save.php', savePayload);
+
+            console.log('saveResponse', saveResponse);
+            
+            // Validate response
+            if (!saveResponse) {
+                throw new Error('No response from server');
             }
             
-            // Save tiles in batch
-            const tiles = Array.from(this.tiles.values());
-            if (tiles.length > 0) {
-                // Clean tiles data - ensure only serializable data is sent
-                // Remove database-only fields (tile_id, created_at, updated_at) and clean up data
-                const cleanTiles = tiles.map(tile => {
-                    // Handle borders - convert empty arrays/objects to null
-                    let borders = null;
-                    if (tile.borders !== null && tile.borders !== undefined) {
-                        if (Array.isArray(tile.borders)) {
-                            // Empty array becomes null
-                            borders = tile.borders.length > 0 ? tile.borders : null;
-                        } else if (typeof tile.borders === 'object' && tile.borders !== null) {
-                            // Empty object becomes null
-                            const keys = Object.keys(tile.borders);
-                            borders = keys.length > 0 ? tile.borders : null;
-                        } else if (typeof tile.borders === 'string' && tile.borders.trim() !== '') {
-                            // JSON string - keep as is if not empty
-                            borders = tile.borders;
-                        }
-                    }
-                    
-                    // Handle roads - convert empty arrays/objects to null
-                    let roads = null;
-                    if (tile.roads !== null && tile.roads !== undefined) {
-                        if (Array.isArray(tile.roads)) {
-                            // Empty array becomes null
-                            roads = tile.roads.length > 0 ? tile.roads : null;
-                        } else if (typeof tile.roads === 'object' && tile.roads !== null) {
-                            // Empty object becomes null
-                            const keys = Object.keys(tile.roads);
-                            roads = keys.length > 0 ? tile.roads : null;
-                        } else if (typeof tile.roads === 'string' && tile.roads.trim() !== '') {
-                            // JSON string - keep as is if not empty
-                            roads = tile.roads;
-                        }
-                    }
-                    
-                    // Return only fields that the API expects (no tile_id, created_at, updated_at)
-                    return {
-                        q: tile.q,
-                        r: tile.r,
-                        terrain_type: tile.terrain_type || null,
-                        terrain_name: tile.terrain_name || null,
-                        description: tile.description || null,
-                        notes: tile.notes || null,
-                        image_url: tile.image_url || null,
-                        elevation: tile.elevation || 0,
-                        is_passable: tile.is_passable !== undefined ? tile.is_passable : true,
-                        movement_cost: tile.movement_cost || 1,
-                        borders: borders,
-                        roads: roads
-                    };
-                });
-                
-                await this.apiClient.post('/api/hex-maps/tiles/batch.php', {
-                    map_id: this.currentMapId,
-                    tiles: cleanTiles
-                });
+            if (saveResponse.status === 'error') {
+                const errorMsg = saveResponse.message || 'Save failed';
+                console.error('[HEX MAP EDITOR] Save failed with error:', errorMsg);
+                throw new Error(errorMsg);
             }
+            
+            if (saveResponse.status !== 'success') {
+                console.error('[HEX MAP EDITOR] Unexpected response status:', saveResponse.status);
+                throw new Error(saveResponse.message || 'Save failed - unexpected response status');
+            }
+            
+            if (!saveResponse.data) {
+                console.error('[HEX MAP EDITOR] Response missing data field');
+                throw new Error('Invalid response from server: missing data');
+            }
+            
+            // Log save results
+            const tilesSaved = saveResponse.data.tiles_saved || 0;
+            const tilesCreated = saveResponse.data.tiles_created || 0;
+            const tilesUpdated = saveResponse.data.tiles_updated || 0;
+            const tilesDeleted = saveResponse.data.tiles_deleted || 0;
+            
+            console.log(`[HEX MAP EDITOR] Save completed: ${tilesSaved} tiles saved (${tilesCreated} created, ${tilesUpdated} updated, ${tilesDeleted} deleted)`);
             
             // Update initialTileKeys to reflect current state after save
             this.initialTileKeys = new Set(this.tiles.keys());
             
-            // Markers are saved individually when placed, so no batch save needed
+            // Update current map with response data
+            if (saveResponse.data.map) {
+                this.currentMap = saveResponse.data.map;
+            }
             
             this.app.showSuccess('Map saved successfully');
         } catch (error) {
-            console.error('Failed to save map:', error);
+            console.error('[HEX MAP EDITOR] Failed to save map:', error);
+            console.error('[HEX MAP EDITOR] Error details:', {
+                message: error.message,
+                stack: error.stack
+            });
             this.app.showError('Failed to save map: ' + error.message);
         }
     }
     
     /**
-     * Show new map dialog
+     * Show dialog to create a new hex map (simple prompt implementation).
+     * Prompts for map name and creates map with default dimensions (20x20 hexes).
+     * 
+     * @returns {void}
+     * 
+     * @example
+     * // Show dialog to create new map
+     * this.showNewMapDialog();
+     * // User enters "Wilderness Map"
+     * // Creates map with name "Wilderness Map", 20x20 hexes
+     * 
+     * **Default Values:**
+     * - Width: 20 hexes
+     * - Height: 20 hexes
+     * - Description: Empty string
+     * 
+     * **Future Enhancement:**
+     * Replace prompt with proper modal dialog with all map properties.
+     * 
+     * @see createMap() - Called with entered map name
      */
     showNewMapDialog() {
         // Simple prompt for now - can be enhanced with a modal
@@ -1926,7 +3774,37 @@ class HexMapEditorModule {
     }
     
     /**
-     * Create new map
+     * Create a new hex map via API and load it for editing.
+     * Creates map, loads it, loads markers, and navigates to editor view.
+     * 
+     * @param {Object} mapData - Map data object with:
+     *   - `map_name` (string, required) - Map name
+     *   - `map_description` (string, optional) - Map description
+     *   - `width_hexes` (number, optional) - Map width in hexes (default: 20)
+     *   - `height_hexes` (number, optional) - Map height in hexes (default: 20)
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * // Create a new map
+     * await this.createMap({
+     *   map_name: "Wilderness Map",
+     *   map_description: "A map of the wilderness",
+     *   width_hexes: 30,
+     *   height_hexes: 30
+     * });
+     * 
+     * **Process:**
+     * 1. Creates map via API
+     * 2. Loads map data
+     * 3. Loads markers
+     * 4. Navigates to editor view for the new map
+     * 5. Shows error message if creation fails
+     * 
+     * @see showNewMapDialog() - Calls this with user input
+     * @see loadMap() - Called after map is created
+     * @see loadMarkers() - Called after map is loaded
+     * 
+     * @api POST /api/hex-maps/create.php - Creates map in database
      */
     async createMap(mapData) {
         try {
@@ -1946,7 +3824,30 @@ class HexMapEditorModule {
     }
     
     /**
-     * Delete a marker
+     * Delete a marker from the map and database.
+     * Removes marker from `this.markers` Map and redraws canvas.
+     * 
+     * @param {number} markerId - Marker ID to delete
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * // Delete marker with ID 42
+     * await this.deleteMarker(42);
+     * 
+     * **Process:**
+     * 1. Deletes marker via API
+     * 2. Removes marker from `this.markers` Map
+     * 3. Redraws canvas
+     * 4. Shows success message
+     * 
+     * **Note:**
+     * This function is called by `eraseHex()` when erasing a hex with a marker.
+     * It's also called directly when right-clicking a marker.
+     * 
+     * @see eraseHex() - Calls this when erasing a hex with a marker
+     * @see drawHexGrid() - Called to redraw canvas after deletion
+     * 
+     * @api POST /api/hex-maps/markers/delete.php - Deletes marker from database
      */
     async deleteMarker(markerId) {
         if (!this.currentMapId || !markerId) return;

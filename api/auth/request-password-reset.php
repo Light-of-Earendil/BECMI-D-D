@@ -80,7 +80,7 @@ try {
         );
 
         $baseUrl = Security::getBaseUrl();
-        $resetLink = $baseUrl . '/public/index.html?password-reset=1&selector=' . $selector . '&token=' . $token;
+        $resetLink = $baseUrl . '/public/index.php?password-reset=1&selector=' . $selector . '&token=' . $token;
         
         // Log the reset link for debugging
         error_log("PASSWORD RESET LINK LENGTH: " . strlen($resetLink));

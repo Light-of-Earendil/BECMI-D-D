@@ -3,21 +3,67 @@
  * BECMI D&D Character Manager - Create/Update Hex Tile Endpoint
  * 
  * Creates or updates a hex tile. If a tile already exists at (q, r), it will be updated.
+ * Uses INSERT ... ON DUPLICATE KEY UPDATE to handle both create and update in one operation.
  * 
- * Request: POST
- * Body: {
- *   "map_id": int (required),
- *   "q": int (required),
- *   "r": int (required),
- *   "terrain_type": string (optional, default: "plains"),
- *   "terrain_name": string (optional),
- *   "description": string (optional),
- *   "notes": string (optional),
- *   "image_url": string (optional),
- *   "elevation": int (optional, default: 0),
- *   "is_passable": boolean (optional, default: true),
- *   "movement_cost": int (optional, default: 1)
+ * **Request:** POST
+ * 
+ * **Body Parameters:**
+ * - `map_id` (int, required) - Map ID
+ * - `q` (int, required) - Hex column coordinate
+ * - `r` (int, required) - Hex row coordinate
+ * - `terrain_type` (string, optional, default: "plains") - Terrain type
+ * - `terrain_name` (string, optional) - Terrain name
+ * - `description` (string, optional) - Tile description
+ * - `notes` (string, optional) - DM notes
+ * - `image_url` (string, optional) - Custom image URL
+ * - `elevation` (int, optional, default: 0) - Elevation level
+ * - `is_passable` (boolean, optional, default: true) - Whether hex is passable
+ * - `movement_cost` (int, optional, default: 1) - Movement cost
+ * - `borders` (object, optional) - Borders JSON object `{edgeIndex: borderType}`
+ * - `roads` (object, optional) - Roads JSON object `{neighborIndex: true}`
+ * 
+ * **Response:**
+ * ```json
+ * {
+ *   "status": "success",
+ *   "message": "Tile saved successfully",
+ *   "data": {
+ *     "tile_id": int,
+ *     "map_id": int,
+ *     "q": int,
+ *     "r": int,
+ *     "terrain_type": string,
+ *     ...
+ *   }
  * }
+ * ```
+ * 
+ * **Permissions:**
+ * - Map creator: Can create/update tiles
+ * - Session DM: Can create/update tiles
+ * - Others: 403 Forbidden
+ * 
+ * **Data Handling:**
+ * - Borders and roads: Stored as JSON objects in database
+ * - Empty borders/roads: Converted to NULL
+ * - Default terrain_type: "plains" if not specified
+ * 
+ * **Important:**
+ * - Always include both `borders` and `roads` in requests to prevent data loss
+ * - If only updating borders, include existing roads (and vice versa)
+ * 
+ * **Called From:**
+ * - `HexMapEditorModule.toggleBorder()` - When placing/erasing borders
+ * - `HexMapEditorModule.connectRoads()` - When placing roads
+ * - `HexMapEditorModule.eraseRoadFromHex()` - When erasing roads
+ * 
+ * **Side Effects:**
+ * - Creates or updates row in `hex_tiles` table
+ * - Logs security event `hex_tile_created` or `hex_tile_updated`
+ * 
+ * @package api/hex-maps/tiles
+ * @api POST /api/hex-maps/tiles/create.php
+ * @since 1.0.0
  */
 
 require_once '../../../app/core/database.php';

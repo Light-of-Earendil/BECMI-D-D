@@ -15,16 +15,136 @@ class Security {
     public static function init() {
         // Set secure session options BEFORE starting session
         if (session_status() === PHP_SESSION_NONE) {
-            ini_set('session.cookie_httponly', 1);
-            ini_set('session.cookie_secure', isset($_SERVER['HTTPS']));
-            ini_set('session.use_strict_mode', 1);
+            // CRITICAL: Check if headers are already sent - if so, we CANNOT start a session
+            if (headers_sent($file, $line)) {
+                // Headers already sent - log error and return without starting session
+                error_log("SECURITY ERROR: Cannot start session - headers already sent. File: {$file}, Line: {$line}");
+                return;
+            }
             
             // Start output buffering before session start to prevent output issues
             if (!ob_get_level()) {
                 ob_start();
             }
             
-            session_start();
+            // Check if there's already a session cookie - if so, try to use it WITHOUT changing cookie params
+            $hasExistingSession = isset($_COOKIE[session_name()]) && !empty($_COOKIE[session_name()]);
+            
+            if ($hasExistingSession) {
+                // There's an existing session cookie - try to restore it WITHOUT changing cookie params
+                // This is critical: if we change cookie params, session_start() will fail to restore the session
+                $sessionId = $_COOKIE[session_name()];
+                
+                // #region agent log
+                $logData = [
+                    'location' => 'security.php:26',
+                    'message' => 'Attempting to restore existing session',
+                    'data' => [
+                        'session_id_from_cookie' => $sessionId,
+                        'has_output' => ob_get_level() > 0 ? ob_get_length() : 0,
+                        'headers_sent' => headers_sent($file, $line) ? ['file' => $file, 'line' => $line] : false
+                    ],
+                    'timestamp' => round(microtime(true) * 1000),
+                    'sessionId' => 'debug-session',
+                    'runId' => 'run1',
+                    'hypothesisId' => 'E'
+                ];
+                $logPath = dirname(dirname(__DIR__)) . DIRECTORY_SEPARATOR . '.cursor' . DIRECTORY_SEPARATOR . 'debug.log';
+                $logDir = dirname($logPath);
+                if (!is_dir($logDir)) { @mkdir($logDir, 0755, true); }
+                @file_put_contents($logPath, json_encode($logData) . "\n", FILE_APPEND);
+                // #endregion
+                
+                session_id($sessionId);
+                
+                // Try to start session with existing cookie params (don't change them)
+                $sessionStarted = @session_start();
+                
+                // #region agent log
+                $logData = [
+                    'location' => 'security.php:47',
+                    'message' => 'After session_start() attempt',
+                    'data' => [
+                        'session_start_returned' => $sessionStarted,
+                        'session_status' => session_status(),
+                        'session_id' => session_id() ?: 'NO SESSION',
+                        'has_user_id' => isset($_SESSION['user_id']),
+                        'user_id' => isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'NOT SET'
+                    ],
+                    'timestamp' => round(microtime(true) * 1000),
+                    'sessionId' => 'debug-session',
+                    'runId' => 'run1',
+                    'hypothesisId' => 'E'
+                ];
+                @file_put_contents($logPath, json_encode($logData) . "\n", FILE_APPEND);
+                // #endregion
+                
+                // If session started successfully and has user_id, we're done
+                if (session_status() === PHP_SESSION_ACTIVE && isset($_SESSION['user_id'])) {
+                    // Session restored successfully - update CSRF token if needed
+                    if (!isset($_SESSION['csrf_token'])) {
+                        $_SESSION['csrf_token'] = self::generateCSRFToken();
+                    }
+                    self::$csrfToken = $_SESSION['csrf_token'];
+                    return;
+                }
+                
+                // Session didn't start or doesn't have user_id - close it and start fresh
+                if (session_status() === PHP_SESSION_ACTIVE) {
+                    session_write_close();
+                }
+            }
+            
+            // No existing session or restore failed - set up new session with proper cookie params
+            // Set session cookie parameters to ensure cookies are sent with cross-origin requests
+            // SameSite=None requires Secure flag (HTTPS)
+            $isSecure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+            $sameSite = $isSecure ? 'None' : 'Lax'; // None requires Secure, Lax is safer for non-HTTPS
+            
+            // Get current cookie parameters
+            $cookieParams = session_get_cookie_params();
+            
+            // Set cookie parameters BEFORE session_start (must be called before)
+            session_set_cookie_params([
+                'lifetime' => $cookieParams['lifetime'] ?: 0, // 0 = until browser closes
+                'path' => $cookieParams['path'] ?: '/',
+                'domain' => $cookieParams['domain'] ?: '',
+                'secure' => $isSecure,
+                'httponly' => true,
+                'samesite' => $sameSite
+            ]);
+            
+            // Also set via ini_set for compatibility
+            ini_set('session.cookie_httponly', 1);
+            ini_set('session.cookie_secure', $isSecure ? 1 : 0);
+            ini_set('session.use_strict_mode', 1);
+            ini_set('session.cookie_samesite', $sameSite);
+            
+            // Start session
+            @session_start();
+            
+            // #region agent log
+            $logData = [
+                'location' => 'security.php:27',
+                'message' => 'After session_start()',
+                'data' => [
+                    'session_id' => session_id() ?: 'NO SESSION',
+                    'session_status' => session_status(),
+                    'cookie_params' => session_get_cookie_params(),
+                    'user_id_in_session' => isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'NOT SET',
+                    'session_keys' => isset($_SESSION) ? array_keys($_SESSION) : [],
+                    'cookie_header' => isset($_SERVER['HTTP_COOKIE']) ? substr($_SERVER['HTTP_COOKIE'], 0, 200) : 'NOT SET'
+                ],
+                'timestamp' => round(microtime(true) * 1000),
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'C'
+            ];
+            $logPath = dirname(dirname(__DIR__)) . DIRECTORY_SEPARATOR . '.cursor' . DIRECTORY_SEPARATOR . 'debug.log';
+            $logDir = dirname($logPath);
+            if (!is_dir($logDir)) { @mkdir($logDir, 0755, true); }
+            @file_put_contents($logPath, json_encode($logData) . "\n", FILE_APPEND);
+            // #endregion
         }
         
         // Generate CSRF token if not exists
@@ -232,7 +352,29 @@ class Security {
      * Check if user is authenticated
      */
     public static function isAuthenticated() {
-        return isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
+        $result = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
+        
+        // #region agent log
+        $logData = [
+            'location' => 'security.php:254',
+            'message' => 'isAuthenticated() check',
+            'data' => [
+                'result' => $result,
+                'has_user_id_key' => isset($_SESSION['user_id']),
+                'user_id_value' => isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'NOT SET',
+                'user_id_empty' => isset($_SESSION['user_id']) ? empty($_SESSION['user_id']) : 'N/A',
+                'session_id' => session_id() ?: 'NO SESSION',
+                'session_keys' => isset($_SESSION) ? array_keys($_SESSION) : []
+            ],
+            'timestamp' => round(microtime(true) * 1000),
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'D'
+        ];
+        file_put_contents('M:\\rpg\\BECMI VTT\\.cursor\\debug.log', json_encode($logData) . "\n", FILE_APPEND);
+        // #endregion
+        
+        return $result;
     }
     
     /**

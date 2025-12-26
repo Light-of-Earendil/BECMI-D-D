@@ -2,16 +2,66 @@
 /**
  * BECMI D&D Character Manager - Portrait Manager Service
  * 
- * Handles downloading and managing AI-generated character portraits
+ * Handles downloading and managing AI-generated character portraits.
+ * Downloads images from URLs (e.g., from Together AI image generation) and saves to local server.
+ * 
+ * @package app/services
+ * @since 1.0.0
  */
-
 class PortraitManager {
+    /**
+     * @var string Directory path for storing portraits
+     */
     private static $portraitDir = '../../public/images/portraits/';
+    
+    /**
+     * @var array Allowed image file extensions
+     */
     private static $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp'];
+    
+    /**
+     * @var int Maximum file size in bytes (5MB)
+     */
     private static $maxFileSize = 5 * 1024 * 1024; // 5MB
     
     /**
-     * Download image from URL and save to local server
+     * Download image from URL and save to local server.
+     * Validates URL, fetches image data, validates format, and saves to portraits directory.
+     * 
+     * @param string $imageUrl Image URL to download (must be valid URL)
+     * @param int $characterId Character ID (used for filename generation)
+     * @param string $characterName Character name (optional, used for filename generation)
+     * @return string|false Relative URL path on success (e.g., 'images/portraits/character_5_abc123.jpg'), false on failure
+     * 
+     * @example
+     * // Download portrait from Together AI
+     * $url = 'https://api.together.xyz/...';
+     * $portraitUrl = PortraitManager::downloadPortrait($url, 5, 'Aragorn');
+     * // Returns: 'images/portraits/character_5_abc123.jpg' or false on error
+     * 
+     * **Process:**
+     * 1. Validates URL format
+     * 2. Fetches image data (with fallback to cURL if file_get_contents fails)
+     * 3. Validates image format and size
+     * 4. Generates unique filename based on character ID and name
+     * 5. Creates portraits directory if it doesn't exist
+     * 6. Saves image to disk
+     * 7. Sets file permissions (0644)
+     * 8. Returns relative URL path
+     * 
+     * **Error Handling:**
+     * - Invalid URL: Returns false
+     * - Download failure: Returns false
+     * - Invalid format: Returns false
+     * - File size exceeded: Returns false
+     * - Save failure: Returns false
+     * - All errors are logged to error_log
+     * 
+     * @see fetchImageData() - Fetches image from URL
+     * @see validateImage() - Validates image format and size
+     * @see generateFilename() - Generates unique filename
+     * 
+     * @since 1.0.0
      */
     public static function downloadPortrait($imageUrl, $characterId, $characterName = '') {
         try {

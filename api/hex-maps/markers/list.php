@@ -3,10 +3,60 @@
  * BECMI D&D Character Manager - List Hex Map Markers Endpoint
  * 
  * Returns all markers for a specific map.
+ * Filters markers by visibility for non-DM users (only shows markers with is_visible_to_players=true).
  * 
- * Request: GET
- * Query params:
- *   - map_id (required): Map ID
+ * **Request:** GET
+ * 
+ * **Query Parameters:**
+ * - `map_id` (int, required) - Map ID
+ * 
+ * **Response:**
+ * ```json
+ * {
+ *   "status": "success",
+ *   "data": {
+ *     "markers": [
+ *       {
+ *         "marker_id": int,
+ *         "map_id": int,
+ *         "q": int,
+ *         "r": int,
+ *         "marker_type": string,
+ *         "marker_name": string,
+ *         "marker_description": string,
+ *         "marker_icon": string,
+ *         "marker_color": string,
+ *         "is_visible_to_players": bool,
+ *         "created_at": string,
+ *         "updated_at": string
+ *       },
+ *       ...
+ *     ]
+ *   }
+ * }
+ * ```
+ * 
+ * **Access Control:**
+ * - Map creator: Sees all markers
+ * - Session DM: Sees all markers
+ * - Accepted player: Only sees markers with `is_visible_to_players = true`
+ * - Others: 403 Forbidden
+ * 
+ * **Visibility Filtering:**
+ * - DM: All markers returned
+ * - Player: Only markers with `is_visible_to_players = true` returned
+ * - This prevents players from seeing hidden markers (secret locations, DM notes)
+ * 
+ * **Called From:**
+ * - `HexMapEditorModule.loadMarkers()` - Loads markers for editor
+ * - `HexMapPlayModule.loadMap()` - Loads markers for play mode
+ * 
+ * **Side Effects:**
+ * - None (read-only operation)
+ * 
+ * @package api/hex-maps/markers
+ * @api GET /api/hex-maps/markers/list.php?map_id={mapId}
+ * @since 1.0.0
  */
 
 require_once '../../../app/core/database.php';

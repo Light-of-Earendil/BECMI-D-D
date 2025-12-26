@@ -8,8 +8,8 @@
     RewriteCond %{HTTPS} off
     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
     
-    # Redirect root (/) to /public/index.html
-    RewriteRule ^/?$ /public/index.html [L,R=301]
+    # Redirect root (/) to /public/index.php
+    RewriteRule ^/?$ /public/index.php [L,R=301]
     
     # Rewrite /images/ to /public/images/
     RewriteRule ^images/(.*)$ /public/images/$1 [L]
@@ -154,6 +154,6 @@ Options +FollowSymLinks
 # ERROR PAGES
 # ============================================
 
-ErrorDocument 404 /public/index.html
-ErrorDocument 403 /public/index.html
-ErrorDocument 500 /public/index.html
+ErrorDocument 404 /public/index.php
+ErrorDocument 403 /public/index.php
+ErrorDocument 500 /public/index.php

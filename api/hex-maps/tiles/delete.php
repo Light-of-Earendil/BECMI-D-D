@@ -3,13 +3,44 @@
  * BECMI D&D Character Manager - Delete Hex Tile Endpoint
  * 
  * Deletes a hex tile from a map.
+ * Verifies tile exists and user has permission before deletion.
  * 
- * Request: POST
- * Body: {
- *   "map_id": int (required),
- *   "q": int (required),
- *   "r": int (required)
+ * **Request:** POST
+ * 
+ * **Body Parameters:**
+ * - `map_id` (int, required) - Map ID
+ * - `q` (int, required) - Hex column coordinate
+ * - `r` (int, required) - Hex row coordinate
+ * 
+ * **Response:**
+ * ```json
+ * {
+ *   "status": "success",
+ *   "message": "Hex tile deleted successfully",
+ *   "data": {
+ *     "map_id": int,
+ *     "q": int,
+ *     "r": int
+ *   }
  * }
+ * ```
+ * 
+ * **Permissions:**
+ * - Map creator: Can delete tiles
+ * - Session DM: Can delete tiles
+ * - Others: 403 Forbidden
+ * 
+ * **Called From:**
+ * - `HexMapEditorModule.saveMap()` - When deleting tiles that were removed
+ * - `HexMapEditorModule.eraseRoadFromHex()` - When deleting empty tiles after road removal
+ * 
+ * **Side Effects:**
+ * - Deletes row from `hex_tiles` table
+ * - Logs security event `hex_tile_deleted`
+ * 
+ * @package api/hex-maps/tiles
+ * @api POST /api/hex-maps/tiles/delete.php
+ * @since 1.0.0
  */
 
 require_once '../../../app/core/database.php';

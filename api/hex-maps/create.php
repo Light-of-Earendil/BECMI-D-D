@@ -3,27 +3,61 @@
  * BECMI D&D Character Manager - Create Hex Map Endpoint
  * 
  * Allows authenticated users (DMs) to create a new hex map.
+ * Validates input, checks session permissions if linking to a session, and creates map in database.
  * 
- * Request: POST
- * Body: {
- *   "map_name": string (required),
- *   "map_description": string (optional),
- *   "session_id": int (optional),
- *   "width_hexes": int (default: 20),
- *   "height_hexes": int (default: 20),
- *   "hex_size_pixels": int (default: 50),
- *   "background_image_url": string (optional)
- * }
+ * **Request:** POST
  * 
- * Response: {
+ * **Body Parameters:**
+ * - `map_name` (string, required) - Map name (3-100 characters)
+ * - `map_description` (string, optional) - Map description
+ * - `session_id` (int, optional) - Session ID to link map to (user must be DM of session)
+ * - `width_hexes` (int, optional, default: 20) - Map width in hexes (1-200)
+ * - `height_hexes` (int, optional, default: 20) - Map height in hexes (1-200)
+ * - `hex_size_pixels` (int, optional, default: 50) - Hex size in pixels (10-200)
+ * - `background_image_url` (string, optional) - Background image URL
+ * 
+ * **Response:**
+ * ```json
+ * {
  *   "status": "success",
  *   "message": "Hex map created successfully",
  *   "data": {
  *     "map_id": int,
  *     "map_name": string,
- *     ...
+ *     "map_description": string,
+ *     "created_by_user_id": int,
+ *     "session_id": int|null,
+ *     "width_hexes": int,
+ *     "height_hexes": int,
+ *     "hex_size_pixels": int,
+ *     "background_image_url": string|null,
+ *     "is_active": bool,
+ *     "created_at": string,
+ *     "updated_at": string
  *   }
  * }
+ * ```
+ * 
+ * **Permissions:**
+ * - Requires authentication
+ * - If `session_id` provided, user must be DM of that session
+ * 
+ * **Validation:**
+ * - Map name: 3-100 characters
+ * - Width/Height: 1-200 hexes
+ * - Hex size: 10-200 pixels
+ * - Session ID: Must exist and user must be DM
+ * 
+ * **Called From:**
+ * - `HexMapEditorModule.createMap()` - When creating new map
+ * 
+ * **Side Effects:**
+ * - Creates new row in `hex_maps` table
+ * - Logs security event `hex_map_created`
+ * 
+ * @package api/hex-maps
+ * @api POST /api/hex-maps/create.php
+ * @since 1.0.0
  */
 
 require_once '../../app/core/database.php';

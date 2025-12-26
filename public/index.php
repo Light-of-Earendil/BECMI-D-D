@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -297,31 +297,31 @@
     <!-- JavaScript Libraries -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <!-- BECMI Rules Engine must be loaded before app.js -->
-    <script src="js/becmi/rules-engine.js"></script>
-    <script src="js/becmi/calculations.js"></script>
-    <script src="js/becmi/class-data.js"></script>
-    <script src="js/core/app.js"></script>
-    <script src="js/core/api-client.js"></script>
-    <script src="js/core/state-manager.js"></script>
-    <script src="js/core/event-bus.js"></script>
-    <script src="js/core/realtime-client.js"></script>
-    <script src="js/core/notification-manager.js"></script>
-    <script src="js/core/error-handler.js"></script>
-    <script src="js/core/offline-detector.js"></script>
-    <script src="js/modules/auth.js"></script>
-    <script src="js/modules/dashboard.js"></script>
-    <script src="js/modules/character-sheet.js"></script>
-    <script src="js/modules/character-creation.js?v=2"></script>
-    <script src="js/modules/character-creation-gold.js"></script>
-    <script src="js/modules/character-creation-equipment.js"></script>
-    <script src="js/modules/session-management.js"></script>
-    <script src="js/modules/dm-dashboard.js"></script>
-    <script src="js/modules/level-up-wizard.js"></script>
-    <script src="js/modules/calendar.js"></script>
-    <script src="js/modules/notifications.js"></script>
-    <script src="js/modules/equipment.js"></script>
-    <script src="js/modules/hex-map-editor.js"></script>
-    <script src="js/modules/hex-map-play.js"></script>
-    <script src="js/main.js"></script>
+    <script src="js/becmi/rules-engine.js?t=<?php echo time(); ?>"></script>
+    <script src="js/becmi/calculations.js?t=<?php echo time(); ?>"></script>
+    <script src="js/becmi/class-data.js?t=<?php echo time(); ?>"></script>
+    <script src="js/core/app.js?t=<?php echo time(); ?>"></script>
+    <script src="js/core/api-client.js?t=<?php echo time(); ?>"></script>
+    <script src="js/core/state-manager.js?t=<?php echo time(); ?>"></script>
+    <script src="js/core/event-bus.js?t=<?php echo time(); ?>"></script>
+    <script src="js/core/realtime-client.js?t=<?php echo time(); ?>"></script>
+    <script src="js/core/notification-manager.js?t=<?php echo time(); ?>"></script>
+    <script src="js/core/error-handler.js?t=<?php echo time(); ?>"></script>
+    <script src="js/core/offline-detector.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/auth.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/dashboard.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/character-sheet.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/character-creation.js?v=2&t=<?php echo time(); ?>"></script>
+    <script src="js/modules/character-creation-gold.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/character-creation-equipment.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/session-management.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/dm-dashboard.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/level-up-wizard.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/calendar.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/notifications.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/equipment.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/hex-map-editor.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/hex-map-play.js?t=<?php echo time(); ?>"></script>
+    <script src="js/main.js?t=<?php echo time(); ?>"></script>
 </body>
 </html>

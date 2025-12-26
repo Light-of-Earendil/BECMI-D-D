@@ -3,15 +3,57 @@
  * BECMI D&D Character Manager - Move Player Endpoint
  * 
  * Moves a character to a new hex position on the map.
- * Updates visibility automatically when player moves.
+ * Updates visibility automatically when player moves and broadcasts real-time event.
  * 
- * Request: POST
- * Body: {
- *   "map_id": int (required),
- *   "character_id": int (required),
- *   "q": int (required),
- *   "r": int (required)
+ * **Request:** POST
+ * 
+ * **Body Parameters:**
+ * - `map_id` (int, required) - Map ID
+ * - `character_id` (int, required) - Character ID to move
+ * - `q` (int, required) - Target hex column coordinate
+ * - `r` (int, required) - Target hex row coordinate
+ * 
+ * **Response:**
+ * ```json
+ * {
+ *   "status": "success",
+ *   "message": "Character moved successfully",
+ *   "data": {
+ *     "character_id": int,
+ *     "map_id": int,
+ *     "q": int,
+ *     "r": int,
+ *     "updated_at": string
+ *   }
  * }
+ * ```
+ * 
+ * **Permissions:**
+ * - Character owner: Can move their own character
+ * - Map creator: Can move any character on their map
+ * - Session DM: Can move characters in their session
+ * - Others: 403 Forbidden
+ * 
+ * **Visibility Updates:**
+ * - Automatically sets current hex to full visibility (level 2)
+ * - Sets neighboring hexes to partial visibility (level 1)
+ * - Updates visibility for all players in session
+ * 
+ * **Real-time Events:**
+ * - Broadcasts `hex_map_player_moved` event to all session participants
+ * 
+ * **Called From:**
+ * - `HexMapPlayModule.moveCharacter()` - When player clicks hex to move
+ * 
+ * **Side Effects:**
+ * - Updates `hex_map_positions` table
+ * - Updates `hex_map_visibility` table for all players
+ * - Broadcasts real-time event
+ * - Logs security event `hex_map_character_moved`
+ * 
+ * @package api/hex-maps/play
+ * @api POST /api/hex-maps/play/move.php
+ * @since 1.0.0
  */
 
 require_once '../../../app/core/database.php';

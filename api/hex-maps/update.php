@@ -3,18 +3,55 @@
  * BECMI D&D Character Manager - Update Hex Map Endpoint
  * 
  * Allows the map creator or session DM to update map metadata.
+ * Updates only the fields provided in the request body.
  * 
- * Request: POST
- * Body: {
- *   "map_id": int (required),
- *   "map_name": string (optional),
- *   "map_description": string (optional),
- *   "width_hexes": int (optional),
- *   "height_hexes": int (optional),
- *   "hex_size_pixels": int (optional),
- *   "background_image_url": string (optional),
- *   "is_active": boolean (optional)
+ * **Request:** POST
+ * 
+ * **Body Parameters:**
+ * - `map_id` (int, required) - Map ID to update
+ * - `map_name` (string, optional) - Map name (3-100 characters)
+ * - `map_description` (string, optional) - Map description
+ * - `width_hexes` (int, optional) - Map width in hexes (1-200)
+ * - `height_hexes` (int, optional) - Map height in hexes (1-200)
+ * - `hex_size_pixels` (int, optional) - Hex size in pixels (10-200)
+ * - `background_image_url` (string, optional) - Background image URL
+ * - `is_active` (boolean, optional) - Whether map is active
+ * 
+ * **Response:**
+ * ```json
+ * {
+ *   "status": "success",
+ *   "message": "Hex map updated successfully",
+ *   "data": {
+ *     "map_id": int,
+ *     "map_name": string,
+ *     ...
+ *   }
  * }
+ * ```
+ * 
+ * **Permissions:**
+ * - Map creator: Can update map metadata
+ * - Session DM: Can update map metadata
+ * - Others: 403 Forbidden
+ * 
+ * **Validation:**
+ * - Map name: 3-100 characters
+ * - Width/Height: 1-200 hexes
+ * - Hex size: 10-200 pixels
+ * - At least one field must be provided for update
+ * 
+ * **Called From:**
+ * - `HexMapEditorModule.saveMap()` - Updates map metadata when saving
+ * 
+ * **Side Effects:**
+ * - Updates row in `hex_maps` table
+ * - Sets `updated_at = NOW()`
+ * - Logs security event `hex_map_updated`
+ * 
+ * @package api/hex-maps
+ * @api POST /api/hex-maps/update.php
+ * @since 1.0.0
  */
 
 require_once '../../app/core/database.php';

@@ -10,3 +10,5 @@ $stmt->execute(['/images/equipment/weapons/equipment_46_knife_shield.png', 46]);
 echo "✓ Updated Knife Shield (item 46) with /images/equipment/weapons/equipment_46_knife_shield.png\n";
 
 
+
+
