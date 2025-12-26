@@ -23,9 +23,10 @@ class HexMapEditorModule {
         this.initialTileKeys = new Set(); // Track which tiles existed when map was loaded (for detecting deletions)
         this.markers = new Map(); // Map of "q,r" -> marker data
         this.selectedTerrain = 'plains';
-        this.selectedTool = 'paint'; // paint, erase, select, place_settlement, draw_border, place_road, erase_road, place_path, erase_path, place_area_label
+        this.selectedTool = 'paint'; // paint, erase, select, place_settlement, draw_border, erase_border, draw_river, erase_river, place_road, erase_road, place_path, erase_path, place_area_label
         this.selectedSettlementType = 'village'; // village, town, city
         this.selectedBorderType = null; // null, 'local', 'regional', 'national'
+        this.selectedRiverType = null; // null, 'river', 'stream'
         this.isDrawing = false;
         this.isPanning = false; // For pan/drag functionality
         this.panStartX = 0;
@@ -162,6 +163,9 @@ class HexMapEditorModule {
             } catch (error) {
                 console.error('Failed to load maps list:', error);
             }
+            
+            // Load travel multipliers configuration
+            await this.loadTravelMultipliers();
             
             // If mapId provided, load it
             if (mapId) {
@@ -388,6 +392,24 @@ class HexMapEditorModule {
                             </button>
                         </div>
                         <small class="form-text text-muted">Click on a hex edge to draw a border. Click again to remove.</small>
+                    </div>
+                    
+                    <div class="sidebar-section">
+                        <h3>Rivers & Streams</h3>
+                        <div class="river-buttons border-buttons">
+                            <button class="btn btn-sm btn-secondary ${this.selectedTool === 'draw_river' && this.selectedRiverType === 'river' ? 'active' : ''}" 
+                                    id="river-river-btn" data-river="river" data-tool="draw_river">
+                                <i class="fas fa-water"></i> River
+                            </button>
+                            <button class="btn btn-sm btn-secondary ${this.selectedTool === 'draw_river' && this.selectedRiverType === 'stream' ? 'active' : ''}" 
+                                    id="river-stream-btn" data-river="stream" data-tool="draw_river">
+                                <i class="fas fa-stream"></i> Stream
+                            </button>
+                            <button class="btn btn-sm btn-secondary" id="river-erase-btn" data-tool="erase_river">
+                                <i class="fas fa-eraser"></i> Erase River
+                            </button>
+                        </div>
+                        <small class="form-text text-muted">Click on a hex edge to draw a river or stream. Click again to remove.</small>
                     </div>
                     
                     <div class="sidebar-section">
@@ -706,6 +728,138 @@ class HexMapEditorModule {
     }
     
     /**
+     * Normalize rivers data for saving to API.
+     * Converts object to object (for JSON encoding), or null if empty.
+     * 
+     * @param {object|string|null} rivers - Rivers data (object, JSON string, or null)
+     * @returns {object|null} Normalized rivers (object if has content, null if empty)
+     * 
+     * @private
+     */
+    normalizeRiversForSave(rivers) {
+        if (rivers === null || rivers === undefined) {
+            return null;
+        }
+        // If string, try to parse it
+        if (typeof rivers === 'string') {
+            if (rivers.trim() === '') {
+                return null;
+            }
+            try {
+                const parsed = JSON.parse(rivers);
+                if (parsed && typeof parsed === 'object') {
+                    return Object.keys(parsed).length > 0 ? parsed : null;
+                }
+                return null;
+            } catch (e) {
+                console.warn('[HEX MAP EDITOR] Failed to parse rivers JSON for save:', e);
+                return null;
+            }
+        }
+        // If object/array, check if it has content
+        if (typeof rivers === 'object') {
+            return Object.keys(rivers).length > 0 ? rivers : null;
+        }
+        return null;
+    }
+    
+    /**
+     * Normalize rivers data for loading from API.
+     * Converts JSON string to object, or returns empty object if null/empty.
+     * 
+     * @param {object|string|null} rivers - Rivers data (object, JSON string, or null)
+     * @returns {object} Normalized rivers (object, never null)
+     * 
+     * @private
+     */
+    normalizeRiversForLoad(rivers) {
+        if (rivers === null || rivers === undefined) {
+            return {};
+        }
+        if (typeof rivers === 'string') {
+            if (rivers.trim() === '') {
+                return {};
+            }
+            try {
+                const parsed = JSON.parse(rivers);
+                return (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) ? parsed : {};
+            } catch (e) {
+                console.warn('[HEX MAP EDITOR] Failed to parse rivers JSON for load:', e);
+                return {};
+            }
+        }
+        if (typeof rivers === 'object') {
+            return Object.keys(rivers).length > 0 ? rivers : {};
+        }
+        return {};
+    }
+    
+    /**
+     * Load travel multipliers configuration from API.
+     * Populates terrainTravelMultipliers Map and sets road/path multipliers.
+     * 
+     * @returns {Promise<void>}
+     * 
+     * @throws {Error} If API request fails or configuration is invalid
+     * 
+     * @example
+     * // Load multipliers on editor initialization
+     * await this.loadTravelMultipliers();
+     * 
+     * **Process:**
+     * 1. Fetches multipliers from API endpoint
+     * 2. Populates terrainTravelMultipliers Map with terrain type => multiplier mappings
+     * 3. Sets roadTravelMultiplier and pathTravelMultiplier
+     * 4. Sets baseTravelTimeHours
+     * 
+     * **Default Values:**
+     * - If API fails, uses default values (road: 0.5, path: 0.7, base: 1.0)
+     * - Terrain multipliers default to 1.0 if not found
+     * 
+     * @see terrainTravelMultipliers - Map storing terrain multipliers
+     * @see roadTravelMultiplier - Road travel multiplier
+     * @see pathTravelMultiplier - Path travel multiplier
+     * @see baseTravelTimeHours - Base travel time per hex in hours
+     * 
+     * @api GET /api/hex-maps/travel-multipliers.php
+     */
+    async loadTravelMultipliers() {
+        try {
+            const response = await this.apiClient.get('/api/hex-maps/travel-multipliers.php');
+            
+            if (response.status === 'success' && response.data) {
+                // Load terrain multipliers into Map
+                this.terrainTravelMultipliers.clear();
+                if (response.data.terrain && typeof response.data.terrain === 'object') {
+                    Object.entries(response.data.terrain).forEach(([terrainType, multiplier]) => {
+                        if (terrainType !== 'default' && typeof multiplier === 'number') {
+                            this.terrainTravelMultipliers.set(terrainType, multiplier);
+                        }
+                    });
+                }
+                
+                // Load road and path multipliers
+                if (typeof response.data.road === 'number') {
+                    this.roadTravelMultiplier = response.data.road;
+                }
+                if (typeof response.data.path === 'number') {
+                    this.pathTravelMultiplier = response.data.path;
+                }
+                if (typeof response.data.base_time_hours === 'number') {
+                    this.baseTravelTimeHours = response.data.base_time_hours;
+                }
+                
+                console.log(`[HEX MAP EDITOR] Loaded ${this.terrainTravelMultipliers.size} terrain multipliers, road: ${this.roadTravelMultiplier}, path: ${this.pathTravelMultiplier}, base time: ${this.baseTravelTimeHours}h`);
+            } else {
+                console.warn('[HEX MAP EDITOR] Failed to load travel multipliers, using defaults');
+            }
+        } catch (error) {
+            console.warn('[HEX MAP EDITOR] Error loading travel multipliers, using defaults:', error);
+            // Use default values if API fails
+        }
+    }
+    
+    /**
      * Load a hex map and all its tiles and markers from the API.
      * Parses JSON data for borders and roads, and tracks initial tile state for deletion detection.
      * 
@@ -743,10 +897,14 @@ class HexMapEditorModule {
                 if (response.data.tiles) {
                     response.data.tiles.forEach(tile => {
                         const key = `${tile.q},${tile.r}`;
-                        // Normalize borders, roads, and paths using utility functions
+                        // Normalize borders, roads, paths, and rivers using utility functions
                         tile.borders = this.normalizeBordersForLoad(tile.borders);
                         tile.roads = this.normalizeRoadsForLoad(tile.roads);
                         tile.paths = this.normalizePathsForLoad(tile.paths);
+                        // Use normalizeRiversForLoad if available, otherwise return empty object
+                        tile.rivers = (typeof this.normalizeRiversForLoad === 'function') 
+                            ? this.normalizeRiversForLoad(tile.rivers) 
+                            : (tile.rivers && typeof tile.rivers === 'object' ? tile.rivers : {});
                         this.tiles.set(key, tile);
                         this.initialTileKeys.add(key); // Track that this tile existed when loaded
                     });
@@ -937,6 +1095,7 @@ class HexMapEditorModule {
             if (tool === 'erase_border') {
                 this.selectedTool = 'erase_border';
                 this.selectedBorderType = null;
+                this.selectedRiverType = null;
                 $('.border-buttons .btn').removeClass('active');
                 $('.tool-buttons .btn').removeClass('active');
                 $('.settlement-buttons .btn').removeClass('active');
@@ -956,6 +1115,7 @@ class HexMapEditorModule {
                 }
                 this.selectedTool = tool;
                 this.selectedBorderType = null;
+                this.selectedRiverType = null;
                 this.roadStartHex = null; // Reset road start when switching tools
                 this.pathStartHex = null; // Reset path start when switching tools
                 $('.border-buttons .btn').removeClass('active');
@@ -973,7 +1133,34 @@ class HexMapEditorModule {
                 // Handle border tools (they have both data-border and data-tool)
                 this.selectedBorderType = border;
                 this.selectedTool = tool;
+                this.selectedRiverType = null;
                 $('.border-buttons .btn').removeClass('active');
+                $('.tool-buttons .btn').removeClass('active');
+                $('.settlement-buttons .btn').removeClass('active');
+                $(e.currentTarget).addClass('active');
+            }
+        });
+        
+        // River tool selection
+        $(document).on('click', '.river-buttons .btn, [data-river]', (e) => {
+            const river = $(e.currentTarget).data('river');
+            const tool = $(e.currentTarget).data('tool');
+            if (tool === 'erase_river') {
+                this.selectedTool = 'erase_river';
+                this.selectedRiverType = null;
+                this.selectedBorderType = null;
+                $('.border-buttons .btn').removeClass('active');
+                $('.river-buttons .btn').removeClass('active');
+                $('.tool-buttons .btn').removeClass('active');
+                $('.settlement-buttons .btn').removeClass('active');
+                $(e.currentTarget).addClass('active');
+            } else if (river && tool) {
+                // Handle river tools (they have both data-river and data-tool)
+                this.selectedRiverType = river;
+                this.selectedTool = tool;
+                this.selectedBorderType = null;
+                $('.border-buttons .btn').removeClass('active');
+                $('.river-buttons .btn').removeClass('active');
                 $('.tool-buttons .btn').removeClass('active');
                 $('.settlement-buttons .btn').removeClass('active');
                 $(e.currentTarget).addClass('active');
@@ -1051,6 +1238,9 @@ class HexMapEditorModule {
                 this.handleMouseMove(e, canvas);
                 // Show border edge feedback when hovering
                 if (this.selectedTool === 'draw_border' || this.selectedTool === 'erase_border') {
+                    this.handleMouseMoveBorder(e, canvas);
+                } else if (this.selectedTool === 'draw_river' || this.selectedTool === 'erase_river') {
+                    // Show river edge feedback when hovering (same as borders)
                     this.handleMouseMoveBorder(e, canvas);
                 } else if (this.selectedTool === 'place_road') {
                     // Show visual feedback for road placement
@@ -1537,16 +1727,32 @@ class HexMapEditorModule {
             this.drawMarker(ctx, marker);
         });
         
+        // Draw rivers and streams on top of markers but below borders
+        this.tiles.forEach((tile, key) => {
+            if (tile.rivers && Object.keys(tile.rivers).length > 0) {
+                this.drawRivers(ctx, tile.q, tile.r, tile.rivers);
+            }
+        });
+        
         // Draw borders (local/regional/national) on top of everything
-        // This ensures borders are always visible, even over markers
+        // This ensures borders are always visible, even over markers and rivers
         this.tiles.forEach((tile, key) => {
             if (tile.borders && Object.keys(tile.borders).length > 0) {
                 this.drawBorders(ctx, tile.q, tile.r, tile.borders);
             }
         });
         
+        // Draw hover feedback LAST so it's always on top
         // Draw border hover feedback if applicable
         if (this.hoverHex && (this.selectedTool === 'draw_border' || this.selectedTool === 'erase_border')) {
+            const edge = this.getEdgeAtPoint(this.hoverHex.q, this.hoverHex.r, this.hoverPixelX, this.hoverPixelY);
+            if (edge !== null) {
+                this.drawEdgeHoverFeedback(ctx, this.hoverHex.q, this.hoverHex.r, edge);
+            }
+        }
+        
+        // Draw river hover feedback if applicable (drawn after borders to be on top)
+        if (this.hoverHex && (this.selectedTool === 'draw_river' || this.selectedTool === 'erase_river')) {
             const edge = this.getEdgeAtPoint(this.hoverHex.q, this.hoverHex.r, this.hoverPixelX, this.hoverPixelY);
             if (edge !== null) {
                 this.drawEdgeHoverFeedback(ctx, this.hoverHex.q, this.hoverHex.r, edge);
@@ -1716,16 +1922,37 @@ class HexMapEditorModule {
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         
-        // Different colors for different tools
-        if (this.selectedTool === 'erase_border' || this.selectedTool === 'erase_road') {
-            ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+        // Different colors for different tools - make them more visible
+        if (this.selectedTool === 'erase_border' || this.selectedTool === 'erase_river' || this.selectedTool === 'erase_road') {
+            ctx.strokeStyle = 'rgba(255, 0, 0, 1.0)'; // Bright red for erase tools (fully opaque)
         } else if (this.selectedTool === 'place_road') {
-            ctx.strokeStyle = 'rgba(139, 69, 19, 0.8)'; // Brown for roads
+            ctx.strokeStyle = 'rgba(139, 69, 19, 1.0)'; // Brown for roads (fully opaque)
+        } else if (this.selectedTool === 'draw_river') {
+            // Bright blue highlight for rivers (matches river color, fully opaque for visibility)
+            if (this.selectedRiverType === 'river') {
+                ctx.strokeStyle = 'rgba(30, 144, 255, 1.0)'; // Deep blue (DodgerBlue) for rivers - fully opaque
+            } else if (this.selectedRiverType === 'stream') {
+                ctx.strokeStyle = 'rgba(135, 206, 235, 1.0)'; // Light blue (SkyBlue) for streams - fully opaque
+            } else {
+                ctx.strokeStyle = 'rgba(30, 144, 255, 1.0)'; // Default to river blue - fully opaque
+            }
         } else {
-            ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)'; // Yellow for borders
+            ctx.strokeStyle = 'rgba(255, 255, 0, 1.0)'; // Bright yellow for borders (fully opaque)
         }
         
-        ctx.lineWidth = 5 * this.zoom;
+        // Make hover feedback very visible - thicker line with glow effect
+        ctx.lineWidth = Math.max(8 * this.zoom, 6); // Even thicker line for better visibility
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        // Draw a glow effect (draw slightly thicker line with lower opacity first)
+        ctx.shadowBlur = 10 * this.zoom;
+        ctx.shadowColor = ctx.strokeStyle;
+        ctx.stroke();
+        
+        // Draw main line on top
+        ctx.shadowBlur = 0;
+        ctx.lineWidth = Math.max(6 * this.zoom, 4);
         ctx.stroke();
     }
     
@@ -2031,6 +2258,107 @@ class HexMapEditorModule {
     }
     
     /**
+     * Draw rivers and streams on hex edges.
+     * Similar to drawBorders() but uses blue colors and draws wavy lines.
+     * 
+     * @param {CanvasRenderingContext2D} ctx - Canvas 2D rendering context
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @param {Object} rivers - Rivers object: {edge_index: "river_type", ...}
+     * @returns {void}
+     * 
+     * @example
+     * // Draw rivers on a hex
+     * const rivers = { 1: 'river', 3: 'stream' };
+     * this.drawRivers(ctx, 5, 3, rivers);
+     * 
+     * **River Types:**
+     * - river: Deep blue (#1E90FF), width 4
+     * - stream: Light blue (#87CEEB), width 2
+     * 
+     * **Rendering:**
+     * - Draws wavy lines along hex edges
+     * - Rivers are thicker and darker than streams
+     * - Uses same edge indexing as borders (0-5)
+     * 
+     * @see drawBorders() - Similar function for borders
+     * @see toggleRiver() - Called to place/remove rivers
+     */
+    drawRivers(ctx, q, r, rivers) {
+        const center = this.hexToPixel(q, r);
+        const size = this.hexSize * this.zoom;
+        
+        const riverColors = {
+            'river': '#1E90FF',      // Deep blue (DodgerBlue)
+            'stream': '#87CEEB'      // Light blue (SkyBlue)
+        };
+        
+        const riverWidths = {
+            'river': 4,
+            'stream': 2
+        };
+        
+        // Edge angles for pointy-top hexes
+        const edgeAngles = [
+            -Math.PI / 2,      // 0: top
+            -Math.PI / 6,      // 1: top-right
+            Math.PI / 6,       // 2: bottom-right
+            Math.PI / 2,       // 3: bottom
+            5 * Math.PI / 6,   // 4: bottom-left
+            7 * Math.PI / 6    // 5: top-left
+        ];
+        
+        // Draw each river edge
+        Object.keys(rivers).forEach(edgeStr => {
+            const edge = parseInt(edgeStr);
+            const riverType = rivers[edge];
+            
+            if (riverColors[riverType]) {
+                const angle1 = edgeAngles[edge];
+                const angle2 = edgeAngles[(edge + 1) % 6];
+                
+                const x1 = center.x + size * Math.cos(angle1);
+                const y1 = center.y + size * Math.sin(angle1);
+                const x2 = center.x + size * Math.cos(angle2);
+                const y2 = center.y + size * Math.sin(angle2);
+                
+                // Draw wavy river line
+                ctx.beginPath();
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const length = Math.sqrt(dx * dx + dy * dy);
+                const segments = Math.max(Math.floor(length / 8), 4); // More segments for smoother wave
+                const waveAmplitude = riverWidths[riverType] * 0.5; // Wave height
+                
+                // Calculate perpendicular vector for wave offset
+                const perpX = -dy / length;
+                const perpY = dx / length;
+                
+                ctx.moveTo(x1, y1);
+                for (let i = 0; i <= segments; i++) {
+                    const t = i / segments;
+                    const baseX = x1 + dx * t;
+                    const baseY = y1 + dy * t;
+                    const waveOffset = Math.sin(t * Math.PI * 3) * waveAmplitude; // 3 waves along edge
+                    const waveX = baseX + perpX * waveOffset;
+                    const waveY = baseY + perpY * waveOffset;
+                    
+                    if (i === 0) {
+                        ctx.moveTo(waveX, waveY);
+                    } else {
+                        ctx.lineTo(waveX, waveY);
+                    }
+                }
+                
+                ctx.strokeStyle = riverColors[riverType];
+                ctx.lineWidth = riverWidths[riverType] * this.zoom;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+            }
+        });
+    }
+    
+    /**
      * Draw a marker (settlement, POI, etc.) on a hex.
      * Renders marker icon, background circle, and name (if zoomed in enough).
      * 
@@ -2217,6 +2545,12 @@ class HexMapEditorModule {
             if (edge !== null) {
                 this.toggleBorder(hex.q, hex.r, edge);
             }
+        } else if (this.selectedTool === 'draw_river' || this.selectedTool === 'erase_river') {
+            // Find which edge was clicked
+            const edge = this.getEdgeAtPoint(hex.q, hex.r, x, y);
+            if (edge !== null) {
+                this.toggleRiver(hex.q, hex.r, edge);
+            }
         } else if (this.selectedTool === 'place_road') {
             // Road placement: click hex to start, click neighbor to connect
             this.handleRoadPlacement(hex.q, hex.r).catch(error => {
@@ -2376,6 +2710,74 @@ class HexMapEditorModule {
         }
         
         // Redraw entire grid to show border properly
+        const canvas = document.getElementById('hex-canvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            this.drawHexGrid(ctx);
+        }
+    }
+    
+    /**
+     * Toggle river/stream on a hex edge.
+     * Identical functionality to toggleBorder() but for rivers and streams.
+     * 
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @param {number} edge - Edge index (0-5)
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * // Place a river on edge 1 of hex (5, 3)
+     * this.selectedTool = 'draw_river';
+     * this.selectedRiverType = 'river';
+     * await this.toggleRiver(5, 3, 1);
+     * 
+     * **Behavior:**
+     * - If tool is 'erase_river': Removes river/stream from edge
+     * - If tool is 'draw_river' and selectedRiverType is set: Places river/stream on edge
+     * - Creates tile if it doesn't exist
+     * - Redraws canvas after change
+     * 
+     * @see toggleBorder() - Identical function for borders
+     * @see selectedRiverType - Current river type ('river' or 'stream')
+     * @see drawRivers() - Called to render rivers on canvas
+     */
+    async toggleRiver(q, r, edge) {
+        const key = `${q},${r}`;
+        let tile = this.tiles.get(key);
+        
+        if (!tile) {
+            // Create new tile if it doesn't exist
+            tile = {
+                q,
+                r,
+                terrain_type: null,
+                is_passable: true,
+                movement_cost: 1,
+                rivers: {}
+            };
+            this.tiles.set(key, tile);
+        }
+        
+        if (!tile.rivers) {
+            tile.rivers = {};
+        }
+        
+        if (this.selectedTool === 'erase_river') {
+            // Remove river
+            delete tile.rivers[edge];
+        } else if (this.selectedTool === 'draw_river' && this.selectedRiverType) {
+            // Set river
+            tile.rivers[edge] = this.selectedRiverType;
+        }
+        
+        // Track tile for batch save (will be saved when user clicks "Save Map")
+        // Add to initialTileKeys if it wasn't there (tile now exists in memory)
+        if (!this.initialTileKeys.has(key)) {
+            this.initialTileKeys.add(key);
+        }
+        
+        // Redraw entire grid to show river properly
         const canvas = document.getElementById('hex-canvas');
         if (canvas) {
             const ctx = canvas.getContext('2d');
@@ -3639,10 +4041,11 @@ class HexMapEditorModule {
             // Clean tiles data - ensure only serializable data is sent
             const tiles = Array.from(this.tiles.values());
             const cleanTiles = tiles.map(tile => {
-                // Normalize borders, roads, and paths using utility functions
+                // Normalize borders, roads, paths, and rivers using utility functions
                 const borders = this.normalizeBordersForSave(tile.borders);
                 const roads = this.normalizeRoadsForSave(tile.roads);
                 const paths = this.normalizePathsForSave(tile.paths);
+                const rivers = this.normalizeRiversForSave(tile.rivers);
                 
                 // Return only fields that the API expects (no tile_id, created_at, updated_at)
                 const cleanTile = {
@@ -3660,9 +4063,12 @@ class HexMapEditorModule {
                     roads: roads
                 };
                 
-                // Only include paths if it's not null (for backward compatibility)
+                // Only include paths and rivers if they're not null (for backward compatibility)
                 if (paths !== null) {
                     cleanTile.paths = paths;
+                }
+                if (rivers !== null) {
+                    cleanTile.rivers = rivers;
                 }
                 
                 return cleanTile;

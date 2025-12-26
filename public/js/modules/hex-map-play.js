@@ -55,6 +55,15 @@ class HexMapPlayModule {
         ]);
         this.terrainImageMaxSizeDefault = 0.95; // Default max size for terrain types not in the map above
         
+        // Travel time multipliers
+        this.terrainTravelMultipliers = new Map(); // Map<terrainType, multiplier>
+        this.roadTravelMultiplier = 0.5; // Road multiplier (default, loaded from API)
+        this.pathTravelMultiplier = 0.7; // Path multiplier (default, loaded from API)
+        this.baseTravelTimeHours = 1.0; // Base travel time per hex in hours (default, loaded from API)
+        
+        // Game time tracking
+        this.gameTime = null; // Current game time (Date object or timestamp)
+        
         // Terrain type to image mapping
         this.terrainImages = new Map();
         this.loadTerrainImages();
@@ -143,6 +152,9 @@ class HexMapPlayModule {
      */
     async renderPlayView(mapId) {
         try {
+            // Load travel multipliers configuration
+            await this.loadTravelMultipliers();
+            
             if (!mapId) {
                 return '<div class="alert alert-danger">Map ID required</div>';
             }
@@ -220,6 +232,16 @@ class HexMapPlayModule {
      * @see renderPlayView() - Calls this to render sidebar
      */
     renderSidebar() {
+        // Format game time for display
+        let gameTimeDisplay = 'Not set';
+        if (this.gameTime) {
+            const date = this.gameTime instanceof Date ? this.gameTime : new Date(this.gameTime);
+            const day = Math.floor((date - new Date(date.getFullYear(), 0, 1)) / (1000 * 60 * 60 * 24)) + 1;
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            gameTimeDisplay = `Day ${day}, ${hours}:${minutes}`;
+        }
+        
         return `
             <div class="sidebar-section">
                 <h3>Map Info</h3>
@@ -228,6 +250,7 @@ class HexMapPlayModule {
                 ${this.playerPosition ? `
                     <p><strong>Your Position:</strong> (${this.playerPosition.q}, ${this.playerPosition.r})</p>
                 ` : ''}
+                <p><strong>Game Time:</strong> <span id="game-time-display">${gameTimeDisplay}</span></p>
             </div>
             
             ${this.isDM ? `
@@ -241,7 +264,187 @@ class HexMapPlayModule {
                     <p>You can only see your current hex fully. Neighboring hexes show terrain type only.</p>
                 </div>
             `}
+            <div class="sidebar-section">
+                <h3>Travel Info</h3>
+                <p id="travel-time-info" class="text-muted">Hover over a neighboring hex to see travel time</p>
+            </div>
         `;
+    }
+    
+    /**
+     * Format game time for display.
+     * Converts Date object to "Day X, HH:MM" format.
+     * 
+     * @param {Date} gameTime - Game time Date object
+     * @returns {string} Formatted time string (e.g., "Day 3, 14:30")
+     * 
+     * @example
+     * const timeStr = this.formatGameTime(new Date('2024-01-15T14:30:00'));
+     * // Returns: "Day 15, 14:30"
+     */
+    formatGameTime(gameTime) {
+        if (!gameTime) return 'Not set';
+        
+        const date = gameTime instanceof Date ? gameTime : new Date(gameTime);
+        const day = Math.floor((date - new Date(date.getFullYear(), 0, 1)) / (1000 * 60 * 60 * 24)) + 1;
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        return `Day ${day}, ${hours}:${minutes}`;
+    }
+    
+    /**
+     * Update game time display in sidebar.
+     * Called when game time changes (e.g., after movement).
+     * 
+     * @returns {void}
+     * 
+     * @example
+     * // Update display after game time changes
+     * this.updateGameTimeDisplay();
+     */
+    updateGameTimeDisplay() {
+        const displayElement = document.getElementById('game-time-display');
+        if (displayElement && this.gameTime) {
+            displayElement.textContent = this.formatGameTime(this.gameTime);
+        }
+    }
+    
+    /**
+     * Load travel multipliers configuration from API.
+     * Populates terrainTravelMultipliers Map and sets road/path multipliers.
+     * 
+     * @returns {Promise<void>}
+     * 
+     * @throws {Error} If API request fails or configuration is invalid
+     * 
+     * @example
+     * // Load multipliers on play mode initialization
+     * await this.loadTravelMultipliers();
+     * 
+     * **Process:**
+     * 1. Fetches multipliers from API endpoint
+     * 2. Populates terrainTravelMultipliers Map with terrain type => multiplier mappings
+     * 3. Sets roadTravelMultiplier and pathTravelMultiplier
+     * 4. Sets baseTravelTimeHours
+     * 
+     * **Default Values:**
+     * - If API fails, uses default values (road: 0.5, path: 0.7, base: 1.0)
+     * - Terrain multipliers default to 1.0 if not found
+     * 
+     * @see terrainTravelMultipliers - Map storing terrain multipliers
+     * @see roadTravelMultiplier - Road travel multiplier
+     * @see pathTravelMultiplier - Path travel multiplier
+     * @see baseTravelTimeHours - Base travel time per hex in hours
+     * 
+     * @api GET /api/hex-maps/travel-multipliers.php
+     */
+    async loadTravelMultipliers() {
+        try {
+            const response = await this.apiClient.get('/api/hex-maps/travel-multipliers.php');
+            
+            if (response.status === 'success' && response.data) {
+                // Load terrain multipliers into Map
+                this.terrainTravelMultipliers.clear();
+                if (response.data.terrain && typeof response.data.terrain === 'object') {
+                    Object.entries(response.data.terrain).forEach(([terrainType, multiplier]) => {
+                        if (terrainType !== 'default' && typeof multiplier === 'number') {
+                            this.terrainTravelMultipliers.set(terrainType, multiplier);
+                        }
+                    });
+                }
+                
+                // Load road and path multipliers
+                if (typeof response.data.road === 'number') {
+                    this.roadTravelMultiplier = response.data.road;
+                }
+                if (typeof response.data.path === 'number') {
+                    this.pathTravelMultiplier = response.data.path;
+                }
+                if (typeof response.data.base_time_hours === 'number') {
+                    this.baseTravelTimeHours = response.data.base_time_hours;
+                }
+                
+                console.log(`[HEX MAP PLAY] Loaded ${this.terrainTravelMultipliers.size} terrain multipliers, road: ${this.roadTravelMultiplier}, path: ${this.pathTravelMultiplier}, base time: ${this.baseTravelTimeHours}h`);
+            } else {
+                console.warn('[HEX MAP PLAY] Failed to load travel multipliers, using defaults');
+            }
+        } catch (error) {
+            console.warn('[HEX MAP PLAY] Error loading travel multipliers, using defaults:', error);
+            // Use default values if API fails
+        }
+    }
+    
+    /**
+     * Calculate travel time multiplier for moving from one hex to another.
+     * Returns the multiplier based on terrain type, roads, or paths.
+     * Road/path multipliers override terrain multipliers when present on the edge.
+     * 
+     * @param {Object} fromHex - Source hex tile object (with q, r, roads, paths properties)
+     * @param {Object} toHex - Destination hex tile object (with q, r, terrain_type properties)
+     * @param {number} neighborIndex - Neighbor index from fromHex to toHex (0-5)
+     * @returns {number} Travel time multiplier (e.g., 1.0 = normal, 1.5 = 1.5x slower, 0.5 = 2x faster)
+     * 
+     * @example
+     * // Calculate travel time from hex (5,3) to neighbor 1
+     * const fromHex = this.visibleHexes.get('5,3');
+     * const toHex = this.visibleHexes.get('6,2');
+     * const multiplier = this.calculateTravelTimeMultiplier(fromHex, toHex, 1);
+     * 
+     * @see calculateTravelTime() - Calculates actual travel time in hours
+     * @see terrainTravelMultipliers - Map of terrain type => multiplier
+     * @see roadTravelMultiplier - Road multiplier (typically 0.5)
+     * @see pathTravelMultiplier - Path multiplier (typically 0.7)
+     * 
+     * @since 1.0.0
+     */
+    calculateTravelTimeMultiplier(fromHex, toHex, neighborIndex) {
+        if (!fromHex || !toHex || neighborIndex < 0 || neighborIndex > 5) {
+            return 1.0; // Default multiplier if invalid input
+        }
+        
+        // Check if road exists on edge (road overrides terrain)
+        if (fromHex.roads && fromHex.roads[neighborIndex]) {
+            return this.roadTravelMultiplier; // Typically 0.5 (twice as fast)
+        }
+        
+        // Check if path exists on edge (path overrides terrain, but slower than road)
+        if (fromHex.paths && fromHex.paths[neighborIndex]) {
+            return this.pathTravelMultiplier; // Typically 0.7 (faster than terrain, slower than road)
+        }
+        
+        // Otherwise, use terrain multiplier
+        const terrainType = toHex.terrain_type || 'plains';
+        return this.terrainTravelMultipliers.get(terrainType) || 1.0;
+    }
+    
+    /**
+     * Calculate actual travel time in hours for moving from one hex to another.
+     * Returns base travel time multiplied by the travel time multiplier.
+     * 
+     * @param {Object} fromHex - Source hex tile object
+     * @param {Object} toHex - Destination hex tile object
+     * @param {number} neighborIndex - Neighbor index from fromHex to toHex (0-5)
+     * @returns {number} Travel time in hours
+     * 
+     * @example
+     * // Calculate travel time from hex (5,3) to neighbor 1
+     * const fromHex = this.visibleHexes.get('5,3');
+     * const toHex = this.visibleHexes.get('6,2');
+     * const hours = this.calculateTravelTime(fromHex, toHex, 1);
+     * // Returns: 0.5 hours if road, 0.7 hours if path, 1.5 hours if hills, etc.
+     * 
+     * **Calculation:**
+     * - Travel time = baseTravelTimeHours × multiplier
+     * - Example: baseTime = 1.0h, multiplier = 1.5 → travel time = 1.5 hours
+     * 
+     * @see calculateTravelTimeMultiplier() - Gets the multiplier
+     * @see baseTravelTimeHours - Base time per hex (typically 1.0 hour)
+     * 
+     * @since 1.0.0
+     */
+    calculateTravelTime(fromHex, toHex, neighborIndex) {
+        const multiplier = this.calculateTravelTimeMultiplier(fromHex, toHex, neighborIndex);
+        return this.baseTravelTimeHours * multiplier;
     }
     
     /**
@@ -263,6 +466,7 @@ class HexMapPlayModule {
      * 2. Sets `this.currentMap` and `this.currentMapId`
      * 3. Sets `this.hexSize` from map data
      * 4. Loads markers from response
+     * 5. Loads game time from map data (if available)
      * 
      * @see loadVisibleHexes() - Called separately to load tiles with visibility
      * 
@@ -286,6 +490,15 @@ class HexMapPlayModule {
                         const key = `${marker.q},${marker.r}`;
                         this.markers.set(key, marker);
                     });
+                }
+                
+                // Load game time from map data
+                if (this.currentMap.game_time) {
+                    // Parse game_time string to Date object
+                    this.gameTime = new Date(this.currentMap.game_time);
+                } else {
+                    // Initialize to current date/time if not set
+                    this.gameTime = new Date();
                 }
                 
                 return this.currentMap;
@@ -485,7 +698,142 @@ class HexMapPlayModule {
         canvas.addEventListener('click', (e) => {
             this.handleCanvasClick(e, canvas);
         });
+        
+        // Mouse move handler for travel time hover feedback
+        let hoverHex = null;
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+            
+            // Account for offset in pixelToHex
+            const hex = this.pixelToHex(x - this.offsetX, y - this.offsetY);
+            const key = `${hex.q},${hex.r}`;
+            const newHoverHex = this.visibleHexes.get(key);
+            
+            // Only update if hover hex changed
+            if (hoverHex !== newHoverHex) {
+                hoverHex = newHoverHex;
+                this.updateTravelTimeInfo(hoverHex);
+            }
+        });
+        
+        // Clear travel time info when mouse leaves canvas
+        canvas.addEventListener('mouseleave', () => {
+            hoverHex = null;
+            this.updateTravelTimeInfo(null);
+        });
     }
+    
+    /**
+     * Update travel time info display when hovering over a hex.
+     * Shows travel time from player position to hovered hex (if neighbor).
+     * 
+     * @param {Object|null} hoverHex - Hex being hovered over, or null if not hovering
+     * @returns {void}
+     * 
+     * @example
+     * // Update info when hovering over hex
+     * this.updateTravelTimeInfo(this.visibleHexes.get('5,3'));
+     */
+    updateTravelTimeInfo(hoverHex) {
+        const infoElement = document.getElementById('travel-time-info');
+        if (!infoElement) return;
+        
+        if (!hoverHex || !this.playerPosition) {
+            infoElement.textContent = 'Hover over a neighboring hex to see travel time';
+            infoElement.className = 'text-muted';
+            return;
+        }
+        
+        // Check if hovered hex is a neighbor of player position
+        const neighbors = this.getHexNeighbors(this.playerPosition.q, this.playerPosition.r);
+        let neighborIndex = -1;
+        for (let i = 0; i < 6; i++) {
+            if (neighbors[i].q === hoverHex.q && neighbors[i].r === hoverHex.r) {
+                neighborIndex = i;
+                break;
+            }
+        }
+        
+        if (neighborIndex === -1) {
+            infoElement.textContent = 'Hover over a neighboring hex to see travel time';
+            infoElement.className = 'text-muted';
+            return;
+        }
+        
+        // Get player's current hex
+        const playerHexKey = `${this.playerPosition.q},${this.playerPosition.r}`;
+        const playerHex = this.visibleHexes.get(playerHexKey);
+        
+        if (!playerHex) {
+            infoElement.textContent = 'Hover over a neighboring hex to see travel time';
+            infoElement.className = 'text-muted';
+            return;
+        }
+        
+        // Calculate travel time
+        const travelTimeHours = this.calculateTravelTime(playerHex, hoverHex, neighborIndex);
+        const multiplier = this.calculateTravelTimeMultiplier(playerHex, hoverHex, neighborIndex);
+        
+        // Format travel time display
+        let timeDisplay = '';
+        if (travelTimeHours < 1.0) {
+            const minutes = Math.round(travelTimeHours * 60);
+            timeDisplay = `${minutes} min`;
+        } else if (travelTimeHours === 1.0) {
+            timeDisplay = '1 hour';
+        } else {
+            const hours = Math.floor(travelTimeHours);
+            const minutes = Math.round((travelTimeHours - hours) * 60);
+            if (minutes > 0) {
+                timeDisplay = `${hours}h ${minutes}m`;
+            } else {
+                timeDisplay = `${hours} hours`;
+            }
+        }
+        
+        // Determine travel type
+        let travelType = 'Terrain';
+        if (playerHex.roads && playerHex.roads[neighborIndex]) {
+            travelType = 'Road';
+        } else if (playerHex.paths && playerHex.paths[neighborIndex]) {
+            travelType = 'Path';
+        }
+        
+        infoElement.innerHTML = `<strong>Travel Time:</strong> ${timeDisplay} (${travelType}, ${multiplier.toFixed(1)}x)`;
+        infoElement.className = 'text-info';
+    }
+    
+    /**
+     * Get all six neighboring hexes for a given hex coordinate.
+     * Returns neighbors in order: top, top-right, bottom-right, bottom, bottom-left, top-left.
+     * 
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @returns {Array<Object>} Array of 6 neighbor objects, each with `{q: number, r: number}`
+     * 
+     * @example
+     * // Get neighbors of hex (5, 3)
+     * const neighbors = this.getHexNeighbors(5, 3);
+     * 
+     * @see calculateTravelTime() - Uses to find neighbor index
+     * @see updateTravelTimeInfo() - Uses to check if hovered hex is neighbor
+     */
+    getHexNeighbors(q, r) {
+        // For pointy-top hexes, neighbors are:
+        return [
+            { q: q, r: r - 1 },      // Top
+            { q: q + 1, r: r - 1 },  // Top-right
+            { q: q + 1, r: r },      // Bottom-right
+            { q: q, r: r + 1 },      // Bottom
+            { q: q - 1, r: r + 1 },  // Bottom-left
+            { q: q - 1, r: r }       // Top-left
+        ];
+    }
+    
     
     /**
      * Draw the complete play canvas with fog of war and visibility system.
@@ -1012,9 +1360,42 @@ class HexMapPlayModule {
             });
             
             if (response.status === 'success') {
+                // Update game time if provided in response
+                if (response.data.game_time) {
+                    this.gameTime = new Date(response.data.game_time);
+                    this.updateGameTimeDisplay();
+                }
+                
+                // Update player position
+                if (response.data.position) {
+                    this.playerPosition = response.data.position;
+                }
+                
                 // Reload visible hexes
                 await this.loadVisibleHexes();
-                this.app.showSuccess('Moved to hex (' + q + ', ' + r + ')');
+                
+                // Show success message with travel time if available
+                let message = `Moved to hex (${q}, ${r})`;
+                if (response.data.travel_time_hours) {
+                    const hours = response.data.travel_time_hours;
+                    let timeDisplay = '';
+                    if (hours < 1.0) {
+                        const minutes = Math.round(hours * 60);
+                        timeDisplay = `${minutes} min`;
+                    } else if (hours === 1.0) {
+                        timeDisplay = '1 hour';
+                    } else {
+                        const h = Math.floor(hours);
+                        const m = Math.round((hours - h) * 60);
+                        if (m > 0) {
+                            timeDisplay = `${h}h ${m}m`;
+                        } else {
+                            timeDisplay = `${h} hours`;
+                        }
+                    }
+                    message += ` (Travel time: ${timeDisplay})`;
+                }
+                this.app.showSuccess(message);
             } else {
                 throw new Error(response.message || 'Failed to move');
             }

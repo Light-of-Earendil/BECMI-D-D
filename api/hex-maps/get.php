@@ -104,19 +104,43 @@ try {
     $db = getDB();
     
     // Get map and verify access
-    $map = $db->selectOne(
-        "SELECT hm.map_id, hm.map_name, hm.map_description, hm.created_by_user_id,
-                hm.session_id, hm.width_hexes, hm.height_hexes, hm.hex_size_pixels,
-                hm.background_image_url, hm.is_active, hm.created_at, hm.updated_at,
-                u.username as created_by_username,
-                gs.session_title as session_title,
-                gs.dm_user_id as session_dm_user_id
-         FROM hex_maps hm
-         LEFT JOIN users u ON hm.created_by_user_id = u.user_id
-         LEFT JOIN game_sessions gs ON hm.session_id = gs.session_id
-         WHERE hm.map_id = ?",
-        [$mapId]
-    );
+    // Try to include game_time column, but handle gracefully if it doesn't exist yet
+    try {
+        $map = $db->selectOne(
+            "SELECT hm.map_id, hm.map_name, hm.map_description, hm.created_by_user_id,
+                    hm.session_id, hm.width_hexes, hm.height_hexes, hm.hex_size_pixels,
+                    hm.background_image_url, hm.is_active, hm.game_time, hm.created_at, hm.updated_at,
+                    u.username as created_by_username,
+                    gs.session_title as session_title,
+                    gs.dm_user_id as session_dm_user_id
+             FROM hex_maps hm
+             LEFT JOIN users u ON hm.created_by_user_id = u.user_id
+             LEFT JOIN game_sessions gs ON hm.session_id = gs.session_id
+             WHERE hm.map_id = ?",
+            [$mapId]
+        );
+    } catch (Exception $e) {
+        // If game_time column doesn't exist yet, select without it
+        if (strpos($e->getMessage(), 'game_time') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
+            $map = $db->selectOne(
+                "SELECT hm.map_id, hm.map_name, hm.map_description, hm.created_by_user_id,
+                        hm.session_id, hm.width_hexes, hm.height_hexes, hm.hex_size_pixels,
+                        hm.background_image_url, hm.is_active, hm.created_at, hm.updated_at,
+                        u.username as created_by_username,
+                        gs.session_title as session_title,
+                        gs.dm_user_id as session_dm_user_id
+                 FROM hex_maps hm
+                 LEFT JOIN users u ON hm.created_by_user_id = u.user_id
+                 LEFT JOIN game_sessions gs ON hm.session_id = gs.session_id
+                 WHERE hm.map_id = ?",
+                [$mapId]
+            );
+            // Set game_time to null if column doesn't exist
+            $map['game_time'] = null;
+        } else {
+            throw $e;
+        }
+    }
     
     if (!$map) {
         Security::sendErrorResponse('Hex map not found', 404);
@@ -167,6 +191,7 @@ try {
         'hex_size_pixels' => (int) $map['hex_size_pixels'],
         'background_image_url' => $map['background_image_url'],
         'is_active' => (bool) $map['is_active'],
+        'game_time' => isset($map['game_time']) ? $map['game_time'] : null,
         'created_at' => $map['created_at'],
         'updated_at' => $map['updated_at']
     ];
@@ -211,8 +236,8 @@ try {
     
     // Include tiles if requested
     if ($includeTiles) {
-        // Use CAST to ensure borders, roads, and paths are returned as strings (not objects)
-        // Try to select paths column, but handle gracefully if it doesn't exist yet
+        // Use CAST to ensure borders, roads, paths, and rivers are returned as strings (not objects)
+        // Try to select paths and rivers columns, but handle gracefully if they don't exist yet
         try {
             $tiles = $db->select(
                 "SELECT tile_id, q, r, terrain_type, terrain_name, description, notes,
@@ -220,6 +245,7 @@ try {
                         CAST(borders AS CHAR) as borders,
                         CAST(roads AS CHAR) as roads,
                         CAST(paths AS CHAR) as paths,
+                        CAST(rivers AS CHAR) as rivers,
                         created_at, updated_at
                  FROM hex_tiles
                  WHERE map_id = ?
@@ -227,20 +253,43 @@ try {
                 [$mapId]
             );
         } catch (Exception $e) {
-            // If paths column doesn't exist, select without it
-            if (strpos($e->getMessage(), 'paths') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
-                $tiles = $db->select(
-                    "SELECT tile_id, q, r, terrain_type, terrain_name, description, notes,
-                            image_url, elevation, is_passable, movement_cost,
-                            CAST(borders AS CHAR) as borders,
-                            CAST(roads AS CHAR) as roads,
-                            NULL as paths,
-                            created_at, updated_at
-                     FROM hex_tiles
-                     WHERE map_id = ?
-                     ORDER BY r, q",
-                    [$mapId]
-                );
+            // If rivers column doesn't exist, try without it
+            if (strpos($e->getMessage(), 'rivers') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
+                try {
+                    // Try with paths but without rivers
+                    $tiles = $db->select(
+                        "SELECT tile_id, q, r, terrain_type, terrain_name, description, notes,
+                                image_url, elevation, is_passable, movement_cost,
+                                CAST(borders AS CHAR) as borders,
+                                CAST(roads AS CHAR) as roads,
+                                CAST(paths AS CHAR) as paths,
+                                NULL as rivers,
+                                created_at, updated_at
+                         FROM hex_tiles
+                         WHERE map_id = ?
+                         ORDER BY r, q",
+                        [$mapId]
+                    );
+                } catch (Exception $e2) {
+                    // If paths column also doesn't exist, select without paths or rivers
+                    if (strpos($e2->getMessage(), 'paths') !== false || strpos($e2->getMessage(), 'Unknown column') !== false) {
+                        $tiles = $db->select(
+                            "SELECT tile_id, q, r, terrain_type, terrain_name, description, notes,
+                                    image_url, elevation, is_passable, movement_cost,
+                                    CAST(borders AS CHAR) as borders,
+                                    CAST(roads AS CHAR) as roads,
+                                    NULL as paths,
+                                    NULL as rivers,
+                                    created_at, updated_at
+                             FROM hex_tiles
+                             WHERE map_id = ?
+                             ORDER BY r, q",
+                            [$mapId]
+                        );
+                    } else {
+                        throw $e2;
+                    }
+                }
             } else {
                 throw $e; // Re-throw if it's a different error
             }
@@ -277,6 +326,21 @@ try {
                 }
             }
             
+            // Normalize rivers: return null for empty/null, otherwise return JSON string
+            $rivers = null;
+            try {
+                if (isset($tile['rivers']) && $tile['rivers'] !== null && trim($tile['rivers']) !== '') {
+                    // Validate it's valid JSON
+                    $decoded = json_decode($tile['rivers'], true);
+                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && count($decoded) > 0) {
+                        $rivers = $tile['rivers']; // Return as JSON string
+                    }
+                }
+            } catch (Exception $e) {
+                // If rivers column doesn't exist, set to null
+                $rivers = null;
+            }
+            
             return [
                 'tile_id' => (int) $tile['tile_id'],
                 'q' => (int) $tile['q'],
@@ -292,6 +356,7 @@ try {
                 'borders' => $borders, // JSON string or null
                 'roads' => $roads, // JSON string or null
                 'paths' => $paths, // JSON string or null
+                'rivers' => $rivers, // JSON string or null
                 'created_at' => $tile['created_at'],
                 'updated_at' => $tile['updated_at']
             ];

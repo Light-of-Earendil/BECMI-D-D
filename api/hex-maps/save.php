@@ -327,6 +327,33 @@ try {
                     }
                 }
                 
+                // Normalize rivers: convert to object, then to JSON string or null
+                $rivers = null;
+                if (isset($tileData['rivers']) && $tileData['rivers'] !== null) {
+                    $riversObj = null;
+                    
+                    // Convert to object/array if needed
+                    if (is_string($tileData['rivers'])) {
+                        $decoded = json_decode($tileData['rivers'], true);
+                        if (json_last_error() === JSON_ERROR_NONE) {
+                            $riversObj = $decoded;
+                        } else {
+                            throw new Exception("Invalid rivers JSON for tile ({$q}, {$r}): " . json_last_error_msg());
+                        }
+                    } elseif (is_array($tileData['rivers']) || is_object($tileData['rivers'])) {
+                        $riversObj = (array) $tileData['rivers'];
+                    }
+                    
+                    // Only encode if object has content (empty objects become null)
+                    if ($riversObj !== null && count($riversObj) > 0) {
+                        $encoded = json_encode($riversObj, JSON_UNESCAPED_UNICODE);
+                        if ($encoded === false) {
+                            throw new Exception("Failed to encode rivers JSON for tile ({$q}, {$r}): " . json_last_error_msg());
+                        }
+                        $rivers = $encoded;
+                    }
+                }
+                
                 if ($movementCost < 1) {
                     $movementCost = 1;
                 }
@@ -341,7 +368,7 @@ try {
                     // Update - check if paths column exists
                     $tileId = $existingTile['tile_id'];
                     try {
-                        // Try with paths column
+                        // Try with paths and rivers columns
                         $db->update(
                             "UPDATE hex_tiles SET
                                 terrain_type = ?,
@@ -355,6 +382,7 @@ try {
                                 borders = ?,
                                 roads = ?,
                                 paths = ?,
+                                rivers = ?,
                                 updated_at = NOW()
                              WHERE tile_id = ?",
                             [
@@ -369,55 +397,95 @@ try {
                                 $borders,
                                 $roads,
                                 $paths,
+                                $rivers,
                                 $tileId
                             ]
                         );
                     } catch (Exception $e) {
-                        // If paths column doesn't exist, update without it
-                        if (strpos($e->getMessage(), 'paths') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
-                            $db->update(
-                                "UPDATE hex_tiles SET
-                                    terrain_type = ?,
-                                    terrain_name = ?,
-                                    description = ?,
-                                    notes = ?,
-                                    image_url = ?,
-                                    elevation = ?,
-                                    is_passable = ?,
-                                    movement_cost = ?,
-                                    borders = ?,
-                                    roads = ?,
-                                    updated_at = NOW()
-                                 WHERE tile_id = ?",
-                                [
-                                    $terrainType,
-                                    $terrainName ?: null,
-                                    $description ?: null,
-                                    $notes ?: null,
-                                    $imageUrl ?: null,
-                                    $elevation,
-                                    $isPassable,
-                                    $movementCost,
-                                    $borders,
-                                    $roads,
-                                    $tileId
-                                ]
-                            );
+                        // If rivers column doesn't exist, try without it
+                        if (strpos($e->getMessage(), 'rivers') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
+                            try {
+                                // Try with paths but without rivers
+                                $db->update(
+                                    "UPDATE hex_tiles SET
+                                        terrain_type = ?,
+                                        terrain_name = ?,
+                                        description = ?,
+                                        notes = ?,
+                                        image_url = ?,
+                                        elevation = ?,
+                                        is_passable = ?,
+                                        movement_cost = ?,
+                                        borders = ?,
+                                        roads = ?,
+                                        paths = ?,
+                                        updated_at = NOW()
+                                     WHERE tile_id = ?",
+                                    [
+                                        $terrainType,
+                                        $terrainName ?: null,
+                                        $description ?: null,
+                                        $notes ?: null,
+                                        $imageUrl ?: null,
+                                        $elevation,
+                                        $isPassable,
+                                        $movementCost,
+                                        $borders,
+                                        $roads,
+                                        $paths,
+                                        $tileId
+                                    ]
+                                );
+                            } catch (Exception $e2) {
+                                // If paths column also doesn't exist, update without paths or rivers
+                                if (strpos($e2->getMessage(), 'paths') !== false || strpos($e2->getMessage(), 'Unknown column') !== false) {
+                                    $db->update(
+                                        "UPDATE hex_tiles SET
+                                            terrain_type = ?,
+                                            terrain_name = ?,
+                                            description = ?,
+                                            notes = ?,
+                                            image_url = ?,
+                                            elevation = ?,
+                                            is_passable = ?,
+                                            movement_cost = ?,
+                                            borders = ?,
+                                            roads = ?,
+                                            updated_at = NOW()
+                                         WHERE tile_id = ?",
+                                        [
+                                            $terrainType,
+                                            $terrainName ?: null,
+                                            $description ?: null,
+                                            $notes ?: null,
+                                            $imageUrl ?: null,
+                                            $elevation,
+                                            $isPassable,
+                                            $movementCost,
+                                            $borders,
+                                            $roads,
+                                            $tileId
+                                        ]
+                                    );
+                                } else {
+                                    throw $e2;
+                                }
+                            }
                         } else {
                             throw $e; // Re-throw if it's a different error
                         }
                     }
                     $tilesUpdated++;
                 } else {
-                    // Create - check if paths column exists
+                    // Create - check if paths and rivers columns exist
                     try {
-                        // Try with paths column
+                        // Try with paths and rivers columns
                         $db->insert(
                             "INSERT INTO hex_tiles (
                                 map_id, q, r, terrain_type, terrain_name, description, notes,
-                                image_url, elevation, is_passable, movement_cost, borders, roads, paths,
+                                image_url, elevation, is_passable, movement_cost, borders, roads, paths, rivers,
                                 created_at, updated_at
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
                             [
                                 $mapId,
                                 $q,
@@ -432,34 +500,67 @@ try {
                                 $movementCost,
                                 $borders,
                                 $roads,
-                                $paths
+                                $paths,
+                                $rivers
                             ]
                         );
                     } catch (Exception $e) {
-                        // If paths column doesn't exist, insert without it
-                        if (strpos($e->getMessage(), 'paths') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
-                            $db->insert(
-                                "INSERT INTO hex_tiles (
-                                    map_id, q, r, terrain_type, terrain_name, description, notes,
-                                    image_url, elevation, is_passable, movement_cost, borders, roads,
-                                    created_at, updated_at
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
-                                [
-                                    $mapId,
-                                    $q,
-                                    $r,
-                                    $terrainType,
-                                    $terrainName ?: null,
-                                    $description ?: null,
-                                    $notes ?: null,
-                                    $imageUrl ?: null,
-                                    $elevation,
-                                    $isPassable,
-                                    $movementCost,
-                                    $borders,
-                                    $roads
-                                ]
-                            );
+                        // If rivers column doesn't exist, try without it
+                        if (strpos($e->getMessage(), 'rivers') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
+                            try {
+                                // Try with paths but without rivers
+                                $db->insert(
+                                    "INSERT INTO hex_tiles (
+                                        map_id, q, r, terrain_type, terrain_name, description, notes,
+                                        image_url, elevation, is_passable, movement_cost, borders, roads, paths,
+                                        created_at, updated_at
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                                    [
+                                        $mapId,
+                                        $q,
+                                        $r,
+                                        $terrainType,
+                                        $terrainName ?: null,
+                                        $description ?: null,
+                                        $notes ?: null,
+                                        $imageUrl ?: null,
+                                        $elevation,
+                                        $isPassable,
+                                        $movementCost,
+                                        $borders,
+                                        $roads,
+                                        $paths
+                                    ]
+                                );
+                            } catch (Exception $e2) {
+                                // If paths column also doesn't exist, insert without paths or rivers
+                                if (strpos($e2->getMessage(), 'paths') !== false || strpos($e2->getMessage(), 'Unknown column') !== false) {
+                                    $db->insert(
+                                        "INSERT INTO hex_tiles (
+                                            map_id, q, r, terrain_type, terrain_name, description, notes,
+                                            image_url, elevation, is_passable, movement_cost, borders, roads,
+                                            created_at, updated_at
+                                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                                        [
+                                            $mapId,
+                                            $q,
+                                            $r,
+                                            $terrainType,
+                                            $terrainName ?: null,
+                                            $description ?: null,
+                                            $notes ?: null,
+                                            $imageUrl ?: null,
+                                            $elevation,
+                                            $isPassable,
+                                            $movementCost,
+                                            $borders,
+                                            $roads
+                                        ]
+                                    );
+                                } else {
+                                    throw $e2;
+                                }
+                            }
                         } else {
                             throw $e; // Re-throw if it's a different error
                         }
