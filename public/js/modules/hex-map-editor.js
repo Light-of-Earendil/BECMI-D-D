@@ -315,9 +315,9 @@ class HexMapEditorModule {
                             <small class="form-text text-muted">Size of each hex in pixels (10-200). Larger = bigger hexes. Recommended: 40-60 for normal view</small>
                         </div>
                         <div class="form-group">
-                            <label>Scale (distance per hex)</label>
+                            <label>Scale (miles per hex)</label>
                             <input type="number" class="form-control" id="map-scale-input" value="${this.currentMap.scale || ''}" min="0" step="0.01" placeholder="e.g., 5.0">
-                            <small class="form-text text-muted">Distance from center of one hex to center of the next (in any unit - specify unit in notes). Leave empty if not applicable.</small>
+                            <small class="form-text text-muted">Distance in miles from center of one hex to center of the next. Leave empty if not applicable.</small>
                         </div>
                         <div class="form-group">
                             <label>
@@ -4053,7 +4053,7 @@ class HexMapEditorModule {
             const mapHeight = parseInt(document.getElementById('map-height-input')?.value);
             const hexSize = parseInt(document.getElementById('hex-size-input')?.value) || this.currentMap.hex_size_pixels;
             
-            // Get scale - distance from center of one hex to center of the next
+            // Get scale - distance in miles from center of one hex to center of the next
             const scaleInput = document.getElementById('map-scale-input')?.value;
             const scale = scaleInput && scaleInput.trim() !== '' ? parseFloat(scaleInput) : null;
             
@@ -4120,7 +4120,7 @@ class HexMapEditorModule {
                 width_hexes: mapWidth,
                 height_hexes: mapHeight,
                 hex_size_pixels: hexSize,
-                scale: scale, // Distance from center of one hex to center of the next
+                scale: scale, // Distance in miles from center of one hex to center of the next
                 tiles: cleanTiles,
                 deleted_tiles: deletedTiles
             };

@@ -247,7 +247,7 @@ class HexMapPlayModule {
                 <h3>Map Info</h3>
                 <p><strong>${this.currentMap.map_name}</strong></p>
                 ${this.currentMap.map_description ? `<p>${this.currentMap.map_description}</p>` : ''}
-                ${this.currentMap.scale ? `<p><strong>Scale:</strong> ${this.currentMap.scale} units per hex</p>` : ''}
+                ${this.currentMap.scale ? `<p><strong>Scale:</strong> ${this.currentMap.scale} miles per hex</p>` : ''}
                 ${this.playerPosition ? `
                     <p><strong>Your Position:</strong> (${this.playerPosition.q}, ${this.playerPosition.r})</p>
                 ` : ''}
@@ -1579,6 +1579,367 @@ class HexMapPlayModule {
         if (infoEl) {
             infoEl.textContent = `Zoom: ${Math.round(this.zoom * 100)}%`;
         }
+    }
+    
+    /**
+     * Draw rivers and streams on hex edges.
+     * Similar to drawBorders() but uses blue colors and draws wavy lines.
+     * 
+     * @param {CanvasRenderingContext2D} ctx - Canvas 2D rendering context
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @param {Object} rivers - Rivers object: {edge_index: "river_type", ...}
+     * @returns {void}
+     * 
+     * @example
+     * // Draw rivers on a hex
+     * const rivers = { 1: 'river', 3: 'stream' };
+     * this.drawRivers(ctx, 5, 3, rivers);
+     * 
+     * **River Types:**
+     * - river: Deep blue (#1E90FF), width 4
+     * - stream: Light blue (#87CEEB), width 2
+     * 
+     * **Rendering:**
+     * - Draws wavy lines along hex edges
+     * - Rivers are thicker and darker than streams
+     * - Uses same edge indexing as borders (0-5)
+     * 
+     * @see drawBorders() - Similar function for borders
+     * @see drawPlayCanvas() - Calls this for each visible hex with rivers
+     */
+    drawRivers(ctx, q, r, rivers) {
+        const center = this.hexToPixel(q, r);
+        const size = this.hexSize * this.zoom;
+        
+        const riverColors = {
+            'river': '#1E90FF',      // Deep blue (DodgerBlue)
+            'stream': '#87CEEB'      // Light blue (SkyBlue)
+        };
+        
+        const riverWidths = {
+            'river': 4,
+            'stream': 2
+        };
+        
+        // Edge angles for pointy-top hexes
+        const edgeAngles = [
+            -Math.PI / 2,      // 0: top
+            -Math.PI / 6,      // 1: top-right
+            Math.PI / 6,       // 2: bottom-right
+            Math.PI / 2,       // 3: bottom
+            5 * Math.PI / 6,   // 4: bottom-left
+            7 * Math.PI / 6    // 5: top-left
+        ];
+        
+        // Draw each river edge
+        Object.keys(rivers).forEach(edgeStr => {
+            const edge = parseInt(edgeStr);
+            const riverType = rivers[edge];
+            
+            if (riverColors[riverType]) {
+                const angle1 = edgeAngles[edge];
+                const angle2 = edgeAngles[(edge + 1) % 6];
+                
+                const x1 = center.x + size * Math.cos(angle1);
+                const y1 = center.y + size * Math.sin(angle1);
+                const x2 = center.x + size * Math.cos(angle2);
+                const y2 = center.y + size * Math.sin(angle2);
+                
+                // Draw wavy river line
+                ctx.beginPath();
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const length = Math.sqrt(dx * dx + dy * dy);
+                const segments = Math.max(Math.floor(length / 8), 4); // More segments for smoother wave
+                const waveAmplitude = riverWidths[riverType] * 0.5; // Wave height
+                
+                // Calculate perpendicular vector for wave offset
+                const perpX = -dy / length;
+                const perpY = dx / length;
+                
+                ctx.moveTo(x1, y1);
+                for (let i = 0; i <= segments; i++) {
+                    const t = i / segments;
+                    const baseX = x1 + dx * t;
+                    const baseY = y1 + dy * t;
+                    const waveOffset = Math.sin(t * Math.PI * 3) * waveAmplitude; // 3 waves along edge
+                    const waveX = baseX + perpX * waveOffset;
+                    const waveY = baseY + perpY * waveOffset;
+                    
+                    if (i === 0) {
+                        ctx.moveTo(waveX, waveY);
+                    } else {
+                        ctx.lineTo(waveX, waveY);
+                    }
+                }
+                
+                ctx.strokeStyle = riverColors[riverType];
+                ctx.lineWidth = riverWidths[riverType] * this.zoom;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+            }
+        });
+    }
+    
+    /**
+     * Draw roads on a hex (connecting to neighboring hexes).
+     * Roads connect hex centers and are drawn as solid brown lines.
+     * 
+     * @param {CanvasRenderingContext2D} ctx - Canvas 2D rendering context
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @param {Object} roads - Roads object with neighbor indices as keys and true as values
+     * @returns {void}
+     * 
+     * @example
+     * // Draw roads on a hex
+     * const roads = { 1: true, 3: true };
+     * this.drawRoads(ctx, 5, 3, roads);
+     * 
+     * **Road Rendering:**
+     * - Solid brown lines (#8B4513)
+     * - Connects hex centers
+     * - Thicker than paths (4px vs 3px)
+     * 
+     * @see drawPaths() - Similar function for dotted paths
+     * @see drawPlayCanvas() - Calls this for each visible hex with roads
+     */
+    drawRoads(ctx, q, r, roads) {
+        if (!roads || Object.keys(roads).length === 0) return;
+        
+        const center = this.hexToPixel(q, r);
+        const size = this.hexSize * this.zoom;
+        
+        // Edge angles for pointy-top hexes (starting from top, going clockwise)
+        const edgeAngles = [
+            -Math.PI / 2,                    // 0: top
+            -Math.PI / 6,                    // 1: top-right
+            Math.PI / 6,                     // 2: bottom-right
+            Math.PI / 2,                     // 3: bottom
+            5 * Math.PI / 6,                 // 4: bottom-left
+            -5 * Math.PI / 6                 // 5: top-left
+        ];
+        
+        // Get neighbors
+        const neighbors = this.getHexNeighbors(q, r);
+        
+        // Draw each road edge - connect to neighbor center
+        Object.keys(roads).forEach(edgeStr => {
+            const edge = parseInt(edgeStr);
+            if (roads[edge] && edge >= 0 && edge < 6) {
+                const neighbor = neighbors[edge];
+                if (neighbor) {
+                    const neighborCenter = this.hexToPixel(neighbor.q, neighbor.r);
+                    
+                    // Draw road line from this hex center to neighbor center
+                    ctx.beginPath();
+                    ctx.moveTo(center.x, center.y);
+                    ctx.lineTo(neighborCenter.x, neighborCenter.y);
+                    ctx.strokeStyle = '#8B4513'; // Saddle brown
+                    ctx.lineWidth = Math.max(4 * this.zoom, 3);
+                    ctx.lineCap = 'round';
+                    ctx.stroke();
+                } else {
+                    // No neighbor - draw from center to edge
+                    const angle = edgeAngles[edge];
+                    const endX = center.x + size * Math.cos(angle);
+                    const endY = center.y + size * Math.sin(angle);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(center.x, center.y);
+                    ctx.lineTo(endX, endY);
+                    ctx.strokeStyle = '#8B4513'; // Saddle brown
+                    ctx.lineWidth = Math.max(4 * this.zoom, 3);
+                    ctx.lineCap = 'round';
+                    ctx.stroke();
+                }
+            }
+        });
+    }
+    
+    /**
+     * Draw paths (dotted lines) connecting hex centers.
+     * Similar to roads but drawn as dotted lines to distinguish them.
+     * 
+     * @param {CanvasRenderingContext2D} ctx - Canvas 2D rendering context
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @param {Object} paths - Paths object with neighbor indices as keys and true as values
+     * @returns {void}
+     * 
+     * @example
+     * // Draw paths on a hex
+     * const paths = { 1: true, 3: true };
+     * this.drawPaths(ctx, 5, 3, paths);
+     * 
+     * **Path Rendering:**
+     * - Dotted lines (unlike solid roads)
+     * - Sienna color (#A0522D)
+     * - Thinner than roads (3px vs 4px)
+     * - Connects hex centers (same as roads)
+     * 
+     * @see drawRoads() - Similar function for solid roads
+     * @see drawPlayCanvas() - Calls this for each visible hex with paths
+     */
+    drawPaths(ctx, q, r, paths) {
+        if (!paths || Object.keys(paths).length === 0) return;
+        
+        const center = this.hexToPixel(q, r);
+        const size = this.hexSize * this.zoom;
+        
+        // Edge angles for pointy-top hexes (starting from top, going clockwise)
+        const edgeAngles = [
+            -Math.PI / 2,                    // 0: top
+            -Math.PI / 6,                    // 1: top-right
+            Math.PI / 6,                     // 2: bottom-right
+            Math.PI / 2,                     // 3: bottom
+            5 * Math.PI / 6,                 // 4: bottom-left
+            -5 * Math.PI / 6                 // 5: top-left
+        ];
+        
+        // Get neighbors
+        const neighbors = this.getHexNeighbors(q, r);
+        
+        // Draw each path edge - connect to neighbor center (as dotted line)
+        Object.keys(paths).forEach(edgeStr => {
+            const edge = parseInt(edgeStr);
+            if (paths[edge] && edge >= 0 && edge < 6) {
+                const neighbor = neighbors[edge];
+                if (neighbor) {
+                    const neighborCenter = this.hexToPixel(neighbor.q, neighbor.r);
+                    
+                    // Draw path as dotted line from this hex center to neighbor center
+                    // Calculate distance and draw dots along the path
+                    const dx = neighborCenter.x - center.x;
+                    const dy = neighborCenter.y - center.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const dotRadius = Math.max(2 * this.zoom, 1.5);
+                    const dotSpacing = Math.max(6 * this.zoom, 5); // Space between dot centers
+                    
+                    ctx.fillStyle = '#A0522D'; // Sienna (darker than roads)
+                    
+                    // Draw dots along the path
+                    const numDots = Math.floor(distance / dotSpacing);
+                    for (let i = 0; i <= numDots; i++) {
+                        const t = i / Math.max(numDots, 1);
+                        const dotX = center.x + dx * t;
+                        const dotY = center.y + dy * t;
+                        
+                        ctx.beginPath();
+                        ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                } else {
+                    // No neighbor - draw from center to edge as dotted line
+                    const angle = edgeAngles[edge];
+                    const endX = center.x + size * Math.cos(angle);
+                    const endY = center.y + size * Math.sin(angle);
+                    
+                    // Calculate distance and draw dots along the path
+                    const dx = endX - center.x;
+                    const dy = endY - center.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const dotRadius = Math.max(2 * this.zoom, 1.5);
+                    const dotSpacing = Math.max(6 * this.zoom, 5); // Space between dot centers
+                    
+                    ctx.fillStyle = '#A0522D'; // Sienna
+                    
+                    // Draw dots along the path
+                    const numDots = Math.floor(distance / dotSpacing);
+                    for (let i = 0; i <= numDots; i++) {
+                        const t = i / Math.max(numDots, 1);
+                        const dotX = center.x + dx * t;
+                        const dotY = center.y + dy * t;
+                        
+                        ctx.beginPath();
+                        ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+        });
+    }
+    
+    /**
+     * Draw borders (local/regional/national) on hex edges.
+     * Called after markers to ensure borders are always visible on top.
+     * 
+     * @param {CanvasRenderingContext2D} ctx - Canvas 2D rendering context
+     * @param {number} q - Hex column coordinate
+     * @param {number} r - Hex row coordinate
+     * @param {Object} borders - Borders object with edge numbers as keys and border types as values
+     * @returns {void}
+     * 
+     * @example
+     * // Draw borders on a hex
+     * const borders = { 0: 'local', 1: 'regional' };
+     * this.drawBorders(ctx, 5, 3, borders);
+     * 
+     * **Border Types:**
+     * - local: Bright yellow (#FFD700), width 2
+     * - regional: Royal blue (#4169E1), width 3
+     * - national: Red (#B33A2B), width 4
+     * 
+     * **Edge Numbers:**
+     * - 0: top
+     * - 1: top-right
+     * - 2: bottom-right
+     * - 3: bottom
+     * - 4: bottom-left
+     * - 5: top-left
+     * 
+     * @see drawPlayCanvas() - Calls this after markers to ensure borders are on top
+     */
+    drawBorders(ctx, q, r, borders) {
+        const center = this.hexToPixel(q, r);
+        const size = this.hexSize * this.zoom;
+        
+        const borderColors = {
+            'local': '#FFD700',      // Bright yellow (high contrast)
+            'regional': '#4169E1',   // Royal blue
+            'national': '#B33A2B'     // Red
+        };
+        
+        const borderWidths = {
+            'local': 2,
+            'regional': 3,
+            'national': 4
+        };
+        
+        // Edge angles for pointy-top hexes
+        const edgeAngles = [
+            -Math.PI / 2,      // 0: top
+            -Math.PI / 6,      // 1: top-right
+            Math.PI / 6,       // 2: bottom-right
+            Math.PI / 2,       // 3: bottom
+            5 * Math.PI / 6,   // 4: bottom-left
+            7 * Math.PI / 6    // 5: top-left
+        ];
+        
+        // Draw each border edge
+        Object.keys(borders).forEach(edgeStr => {
+            const edge = parseInt(edgeStr);
+            const borderType = borders[edge];
+            
+            if (borderColors[borderType]) {
+                const angle1 = edgeAngles[edge];
+                const angle2 = edgeAngles[(edge + 1) % 6];
+                
+                const x1 = center.x + size * Math.cos(angle1);
+                const y1 = center.y + size * Math.sin(angle1);
+                const x2 = center.x + size * Math.cos(angle2);
+                const y2 = center.y + size * Math.sin(angle2);
+                
+                // Draw border line
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.strokeStyle = borderColors[borderType];
+                ctx.lineWidth = borderWidths[borderType] * this.zoom;
+                ctx.stroke();
+            }
+        });
     }
     
     /**

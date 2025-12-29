@@ -196,7 +196,7 @@ try {
                 $updateParams[] = $hexSizePixels;
             }
             
-            // Handle scale - distance from center of one hex to center of the next
+            // Handle scale - distance in miles from center of one hex to center of the next
             if (isset($input['scale'])) {
                 if ($input['scale'] === null || $input['scale'] === '') {
                     // Allow null/empty to clear scale
@@ -212,7 +212,7 @@ try {
                 } else {
                     $scale = filter_var($input['scale'], FILTER_VALIDATE_FLOAT);
                     if ($scale === false || $scale < 0) {
-                        throw new Exception('Scale must be a positive number');
+                        throw new Exception('Scale must be a positive number (miles)');
                     }
                     try {
                         $updateFields[] = "scale = ?";

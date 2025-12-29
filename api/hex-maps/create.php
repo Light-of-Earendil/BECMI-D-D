@@ -15,6 +15,7 @@
  * - `height_hexes` (int, optional, default: 20) - Map height in hexes (1-200)
  * - `hex_size_pixels` (int, optional, default: 50) - Hex size in pixels (10-200)
  * - `background_image_url` (string, optional) - Background image URL
+ * - `scale` (float, optional) - Distance in miles from center of one hex to center of the next (positive number, or null/empty if not applicable)
  * 
  * **Response:**
  * ```json
@@ -95,12 +96,12 @@ try {
     $hexSizePixels = isset($input['hex_size_pixels']) ? (int) $input['hex_size_pixels'] : 50;
     $backgroundImageUrl = Security::sanitizeInput($input['background_image_url'] ?? '');
     
-    // Handle scale - distance from center of one hex to center of the next
+    // Handle scale - distance in miles from center of one hex to center of the next
     $scale = null;
     if (isset($input['scale']) && $input['scale'] !== null && $input['scale'] !== '') {
         $scale = filter_var($input['scale'], FILTER_VALIDATE_FLOAT);
         if ($scale === false || $scale < 0) {
-            $errors['scale'] = 'Scale must be a positive number';
+            $errors['scale'] = 'Scale must be a positive number (miles)';
         }
     }
     
