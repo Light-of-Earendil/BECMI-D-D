@@ -247,6 +247,7 @@ class HexMapPlayModule {
                 <h3>Map Info</h3>
                 <p><strong>${this.currentMap.map_name}</strong></p>
                 ${this.currentMap.map_description ? `<p>${this.currentMap.map_description}</p>` : ''}
+                ${this.currentMap.scale ? `<p><strong>Scale:</strong> ${this.currentMap.scale} units per hex</p>` : ''}
                 ${this.playerPosition ? `
                     <p><strong>Your Position:</strong> (${this.playerPosition.q}, ${this.playerPosition.r})</p>
                 ` : ''}
@@ -873,12 +874,37 @@ class HexMapPlayModule {
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         
-        // Draw visible hexes
+        // Draw visible hexes (terrain layer)
         this.visibleHexes.forEach((hex, key) => {
             this.drawPlayHex(ctx, hex);
         });
         
-        // Draw markers on visible hexes
+        // Draw rivers and streams FIRST (lowest overlay layer - under roads, paths, markers, and borders)
+        // Rivers are part of the terrain, so they should be drawn before infrastructure
+        this.visibleHexes.forEach((hex, key) => {
+            if (hex.rivers && Object.keys(hex.rivers).length > 0 && (this.isDM || hex.visibility_level >= 1)) {
+                this.drawRivers(ctx, hex.q, hex.r, hex.rivers);
+            }
+        });
+        
+        // Draw roads on top of rivers (but below markers)
+        // Roads connect hex centers, so draw them after all hexes are drawn
+        this.visibleHexes.forEach((hex, key) => {
+            if (hex.roads && Object.keys(hex.roads).length > 0 && (this.isDM || hex.visibility_level >= 2)) {
+                this.drawRoads(ctx, hex.q, hex.r, hex.roads);
+            }
+        });
+        
+        // Draw paths on top of roads (but below markers)
+        // Paths connect hex centers, drawn as dotted lines
+        this.visibleHexes.forEach((hex, key) => {
+            if (hex.paths && Object.keys(hex.paths).length > 0 && (this.isDM || hex.visibility_level >= 2)) {
+                this.drawPaths(ctx, hex.q, hex.r, hex.paths);
+            }
+        });
+        
+        // Draw markers on top of hexes, rivers, roads, and paths
+        // Markers include villages, towns, cities, forts, castles, ruins, and area labels
         this.markers.forEach((marker, key) => {
             // Only show markers on visible hexes (or all if DM)
             const hex = this.visibleHexes.get(key);
@@ -887,6 +913,14 @@ class HexMapPlayModule {
                 if (this.isDM || marker.is_visible_to_players) {
                     this.drawPlayMarker(ctx, marker);
                 }
+            }
+        });
+        
+        // Draw borders (local/regional/national) on top of everything
+        // This ensures borders are always visible, even over markers, roads, and paths
+        this.visibleHexes.forEach((hex, key) => {
+            if (hex.borders && Object.keys(hex.borders).length > 0 && (this.isDM || hex.visibility_level >= 2)) {
+                this.drawBorders(ctx, hex.q, hex.r, hex.borders);
             }
         });
         

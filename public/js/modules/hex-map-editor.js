@@ -315,6 +315,11 @@ class HexMapEditorModule {
                             <small class="form-text text-muted">Size of each hex in pixels (10-200). Larger = bigger hexes. Recommended: 40-60 for normal view</small>
                         </div>
                         <div class="form-group">
+                            <label>Scale (distance per hex)</label>
+                            <input type="number" class="form-control" id="map-scale-input" value="${this.currentMap.scale || ''}" min="0" step="0.01" placeholder="e.g., 5.0">
+                            <small class="form-text text-muted">Distance from center of one hex to center of the next (in any unit - specify unit in notes). Leave empty if not applicable.</small>
+                        </div>
+                        <div class="form-group">
                             <label>
                                 <input type="checkbox" id="show-coords-checkbox" ${this.showCoordinates ? 'checked' : ''}>
                                 Show Coordinates (Debug)
@@ -1721,7 +1726,15 @@ class HexMapEditorModule {
             this.drawHex(ctx, q, r, tile);
         });
         
-        // Draw roads on top of terrain (but below markers)
+        // Draw rivers and streams FIRST (lowest layer - under roads, paths, markers, and borders)
+        // Rivers are part of the terrain, so they should be drawn before infrastructure
+        this.tiles.forEach((tile, key) => {
+            if (tile.rivers && Object.keys(tile.rivers).length > 0) {
+                this.drawRivers(ctx, tile.q, tile.r, tile.rivers);
+            }
+        });
+        
+        // Draw roads on top of rivers (but below markers)
         // Roads connect hex centers, so draw them after all hexes are drawn
         this.tiles.forEach((tile, key) => {
             if (tile.roads && Object.keys(tile.roads).length > 0) {
@@ -1737,20 +1750,14 @@ class HexMapEditorModule {
             }
         });
         
-        // Draw markers on top of hexes, roads, and paths
+        // Draw markers on top of hexes, rivers, roads, and paths
+        // Markers include villages, towns, cities, forts, castles, ruins, and area labels
         this.markers.forEach((marker, key) => {
             this.drawMarker(ctx, marker);
         });
         
-        // Draw rivers and streams on top of markers but below borders
-        this.tiles.forEach((tile, key) => {
-            if (tile.rivers && Object.keys(tile.rivers).length > 0) {
-                this.drawRivers(ctx, tile.q, tile.r, tile.rivers);
-            }
-        });
-        
         // Draw borders (local/regional/national) on top of everything
-        // This ensures borders are always visible, even over markers and rivers
+        // This ensures borders are always visible, even over markers, roads, and paths
         this.tiles.forEach((tile, key) => {
             if (tile.borders && Object.keys(tile.borders).length > 0) {
                 this.drawBorders(ctx, tile.q, tile.r, tile.borders);
@@ -4046,6 +4053,10 @@ class HexMapEditorModule {
             const mapHeight = parseInt(document.getElementById('map-height-input')?.value);
             const hexSize = parseInt(document.getElementById('hex-size-input')?.value) || this.currentMap.hex_size_pixels;
             
+            // Get scale - distance from center of one hex to center of the next
+            const scaleInput = document.getElementById('map-scale-input')?.value;
+            const scale = scaleInput && scaleInput.trim() !== '' ? parseFloat(scaleInput) : null;
+            
             // Find tiles that were deleted (existed initially but don't exist now)
             const currentTileKeys = new Set(this.tiles.keys());
             const deletedTileKeys = Array.from(this.initialTileKeys).filter(key => !currentTileKeys.has(key));
@@ -4109,6 +4120,7 @@ class HexMapEditorModule {
                 width_hexes: mapWidth,
                 height_hexes: mapHeight,
                 hex_size_pixels: hexSize,
+                scale: scale, // Distance from center of one hex to center of the next
                 tiles: cleanTiles,
                 deleted_tiles: deletedTiles
             };

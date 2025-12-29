@@ -177,21 +177,106 @@ try {
     
     // If DM, return all tiles with full visibility
     if ($isDM) {
-        $tiles = $db->select(
-            "SELECT ht.tile_id, ht.q, ht.r, ht.terrain_type, ht.terrain_name,
-                    ht.description, ht.notes, ht.image_url, ht.elevation,
-                    ht.is_passable, ht.movement_cost,
-                    hpp.character_id, c.character_name
-             FROM hex_tiles ht
-             LEFT JOIN hex_player_positions hpp ON ht.map_id = hpp.map_id 
-                AND ht.q = hpp.q AND ht.r = hpp.r
-             LEFT JOIN characters c ON hpp.character_id = c.character_id
-             WHERE ht.map_id = ?
-             ORDER BY ht.r, ht.q",
-            [$mapId]
-        );
+        // Try to include rivers, roads, paths, and borders, but handle gracefully if columns don't exist
+        try {
+            $tiles = $db->select(
+                "SELECT ht.tile_id, ht.q, ht.r, ht.terrain_type, ht.terrain_name,
+                        ht.description, ht.notes, ht.image_url, ht.elevation,
+                        ht.is_passable, ht.movement_cost,
+                        CAST(ht.borders AS CHAR) as borders,
+                        CAST(ht.roads AS CHAR) as roads,
+                        CAST(ht.paths AS CHAR) as paths,
+                        CAST(ht.rivers AS CHAR) as rivers,
+                        hpp.character_id, c.character_name
+                 FROM hex_tiles ht
+                 LEFT JOIN hex_player_positions hpp ON ht.map_id = hpp.map_id 
+                    AND ht.q = hpp.q AND ht.r = hpp.r
+                 LEFT JOIN characters c ON hpp.character_id = c.character_id
+                 WHERE ht.map_id = ?
+                 ORDER BY ht.r, ht.q",
+                [$mapId]
+            );
+        } catch (Exception $e) {
+            // If rivers/paths columns don't exist, try without them
+            if (strpos($e->getMessage(), 'rivers') !== false || strpos($e->getMessage(), 'paths') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
+                try {
+                    $tiles = $db->select(
+                        "SELECT ht.tile_id, ht.q, ht.r, ht.terrain_type, ht.terrain_name,
+                                ht.description, ht.notes, ht.image_url, ht.elevation,
+                                ht.is_passable, ht.movement_cost,
+                                CAST(ht.borders AS CHAR) as borders,
+                                CAST(ht.roads AS CHAR) as roads,
+                                NULL as paths,
+                                NULL as rivers,
+                                hpp.character_id, c.character_name
+                         FROM hex_tiles ht
+                         LEFT JOIN hex_player_positions hpp ON ht.map_id = hpp.map_id 
+                            AND ht.q = hpp.q AND ht.r = hpp.r
+                         LEFT JOIN characters c ON hpp.character_id = c.character_id
+                         WHERE ht.map_id = ?
+                         ORDER BY ht.r, ht.q",
+                        [$mapId]
+                    );
+                } catch (Exception $e2) {
+                    // Fallback to basic query without roads/borders
+                    $tiles = $db->select(
+                        "SELECT ht.tile_id, ht.q, ht.r, ht.terrain_type, ht.terrain_name,
+                                ht.description, ht.notes, ht.image_url, ht.elevation,
+                                ht.is_passable, ht.movement_cost,
+                                NULL as borders,
+                                NULL as roads,
+                                NULL as paths,
+                                NULL as rivers,
+                                hpp.character_id, c.character_name
+                         FROM hex_tiles ht
+                         LEFT JOIN hex_player_positions hpp ON ht.map_id = hpp.map_id 
+                            AND ht.q = hpp.q AND ht.r = hpp.r
+                         LEFT JOIN characters c ON hpp.character_id = c.character_id
+                         WHERE ht.map_id = ?
+                         ORDER BY ht.r, ht.q",
+                        [$mapId]
+                    );
+                }
+            } else {
+                throw $e;
+            }
+        }
         
         $visibleHexes = array_map(function($tile) {
+            // Normalize JSON fields
+            $borders = null;
+            $roads = null;
+            $paths = null;
+            $rivers = null;
+            
+            if ($tile['borders']) {
+                $decoded = json_decode($tile['borders'], true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && count($decoded) > 0) {
+                    $borders = $decoded;
+                }
+            }
+            
+            if ($tile['roads']) {
+                $decoded = json_decode($tile['roads'], true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && count($decoded) > 0) {
+                    $roads = $decoded;
+                }
+            }
+            
+            if ($tile['paths']) {
+                $decoded = json_decode($tile['paths'], true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && count($decoded) > 0) {
+                    $paths = $decoded;
+                }
+            }
+            
+            if ($tile['rivers']) {
+                $decoded = json_decode($tile['rivers'], true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && count($decoded) > 0) {
+                    $rivers = $decoded;
+                }
+            }
+            
             $hex = [
                 'q' => (int) $tile['q'],
                 'r' => (int) $tile['r'],
@@ -205,6 +290,10 @@ try {
                 'is_passable' => (bool) $tile['is_passable'],
                 'movement_cost' => (int) $tile['movement_cost'],
                 'visibility_level' => 2, // DM sees everything
+                'borders' => $borders,
+                'roads' => $roads,
+                'paths' => $paths,
+                'rivers' => $rivers,
                 'characters' => []
             ];
             
@@ -255,16 +344,61 @@ try {
     
     // Get all tiles in a reasonable range (current hex + neighbors)
     // For now, get tiles within 2 hexes of player position
-    $tiles = $db->select(
-        "SELECT ht.tile_id, ht.q, ht.r, ht.terrain_type, ht.terrain_name,
-                ht.description, ht.notes, ht.image_url, ht.elevation,
-                ht.is_passable, ht.movement_cost
-         FROM hex_tiles ht
-         WHERE ht.map_id = ?
-         AND ABS(ht.q - ?) + ABS(ht.r - ?) + ABS(ht.q + ht.r - ? - ?) <= 4
-         ORDER BY ht.r, ht.q",
-        [$mapId, $playerQ, $playerR, $playerQ, $playerR]
-    );
+    // Try to include rivers, roads, paths, and borders, but handle gracefully if columns don't exist
+    try {
+        $tiles = $db->select(
+            "SELECT ht.tile_id, ht.q, ht.r, ht.terrain_type, ht.terrain_name,
+                    ht.description, ht.notes, ht.image_url, ht.elevation,
+                    ht.is_passable, ht.movement_cost,
+                    CAST(ht.borders AS CHAR) as borders,
+                    CAST(ht.roads AS CHAR) as roads,
+                    CAST(ht.paths AS CHAR) as paths,
+                    CAST(ht.rivers AS CHAR) as rivers
+             FROM hex_tiles ht
+             WHERE ht.map_id = ?
+             AND ABS(ht.q - ?) + ABS(ht.r - ?) + ABS(ht.q + ht.r - ? - ?) <= 4
+             ORDER BY ht.r, ht.q",
+            [$mapId, $playerQ, $playerR, $playerQ, $playerR]
+        );
+    } catch (Exception $e) {
+        // If rivers/paths columns don't exist, try without them
+        if (strpos($e->getMessage(), 'rivers') !== false || strpos($e->getMessage(), 'paths') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
+            try {
+                $tiles = $db->select(
+                    "SELECT ht.tile_id, ht.q, ht.r, ht.terrain_type, ht.terrain_name,
+                            ht.description, ht.notes, ht.image_url, ht.elevation,
+                            ht.is_passable, ht.movement_cost,
+                            CAST(ht.borders AS CHAR) as borders,
+                            CAST(ht.roads AS CHAR) as roads,
+                            NULL as paths,
+                            NULL as rivers
+                     FROM hex_tiles ht
+                     WHERE ht.map_id = ?
+                     AND ABS(ht.q - ?) + ABS(ht.r - ?) + ABS(ht.q + ht.r - ? - ?) <= 4
+                     ORDER BY ht.r, ht.q",
+                    [$mapId, $playerQ, $playerR, $playerQ, $playerR]
+                );
+            } catch (Exception $e2) {
+                // Fallback to basic query without roads/borders
+                $tiles = $db->select(
+                    "SELECT ht.tile_id, ht.q, ht.r, ht.terrain_type, ht.terrain_name,
+                            ht.description, ht.notes, ht.image_url, ht.elevation,
+                            ht.is_passable, ht.movement_cost,
+                            NULL as borders,
+                            NULL as roads,
+                            NULL as paths,
+                            NULL as rivers
+                     FROM hex_tiles ht
+                     WHERE ht.map_id = ?
+                     AND ABS(ht.q - ?) + ABS(ht.r - ?) + ABS(ht.q + ht.r - ? - ?) <= 4
+                     ORDER BY ht.r, ht.q",
+                    [$mapId, $playerQ, $playerR, $playerQ, $playerR]
+                );
+            }
+        } else {
+            throw $e;
+        }
+    }
     
     // Calculate hex distance (axial coordinates)
     function hexDistance($q1, $r1, $q2, $r2) {
@@ -310,6 +444,40 @@ try {
             }
         }
         
+        // Normalize JSON fields
+        $borders = null;
+        $roads = null;
+        $paths = null;
+        $rivers = null;
+        
+        if (isset($tile['borders']) && $tile['borders']) {
+            $decoded = json_decode($tile['borders'], true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && count($decoded) > 0) {
+                $borders = $decoded;
+            }
+        }
+        
+        if (isset($tile['roads']) && $tile['roads']) {
+            $decoded = json_decode($tile['roads'], true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && count($decoded) > 0) {
+                $roads = $decoded;
+            }
+        }
+        
+        if (isset($tile['paths']) && $tile['paths']) {
+            $decoded = json_decode($tile['paths'], true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && count($decoded) > 0) {
+                $paths = $decoded;
+            }
+        }
+        
+        if (isset($tile['rivers']) && $tile['rivers']) {
+            $decoded = json_decode($tile['rivers'], true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && count($decoded) > 0) {
+                $rivers = $decoded;
+            }
+        }
+        
         // Build hex data based on visibility level
         $hex = [
             'q' => $q,
@@ -320,19 +488,36 @@ try {
         ];
         
         if ($visLevel >= 1) {
-            // Partial or full: show terrain type
+            // Partial or full: show terrain type and basic features
             $hex['terrain_type'] = $tile['terrain_type'];
             $hex['terrain_name'] = $tile['terrain_name'];
             $hex['elevation'] = (int) $tile['elevation'];
             $hex['is_passable'] = (bool) $tile['is_passable'];
             $hex['movement_cost'] = (int) $tile['movement_cost'];
+            // Rivers are part of terrain, so show them at partial visibility
+            if ($rivers) {
+                $hex['rivers'] = $rivers;
+            }
         }
         
         if ($visLevel >= 2) {
-            // Full visibility: show all details
+            // Full visibility: show all details including infrastructure
             $hex['description'] = $tile['description'];
             $hex['notes'] = $tile['notes'];
             $hex['image_url'] = $tile['image_url'];
+            // Show all infrastructure at full visibility
+            if ($borders) {
+                $hex['borders'] = $borders;
+            }
+            if ($roads) {
+                $hex['roads'] = $roads;
+            }
+            if ($paths) {
+                $hex['paths'] = $paths;
+            }
+            if ($rivers) {
+                $hex['rivers'] = $rivers;
+            }
         }
         
         $visibleHexes[] = $hex;

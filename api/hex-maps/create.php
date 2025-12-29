@@ -95,6 +95,15 @@ try {
     $hexSizePixels = isset($input['hex_size_pixels']) ? (int) $input['hex_size_pixels'] : 50;
     $backgroundImageUrl = Security::sanitizeInput($input['background_image_url'] ?? '');
     
+    // Handle scale - distance from center of one hex to center of the next
+    $scale = null;
+    if (isset($input['scale']) && $input['scale'] !== null && $input['scale'] !== '') {
+        $scale = filter_var($input['scale'], FILTER_VALIDATE_FLOAT);
+        if ($scale === false || $scale < 0) {
+            $errors['scale'] = 'Scale must be a positive number';
+        }
+    }
+    
     $errors = [];
     
     // Validate map name
@@ -145,40 +154,93 @@ try {
     $db = getDB();
     
     // Create the map
-    $mapId = $db->insert(
-        'INSERT INTO hex_maps (
-            map_name,
-            map_description,
-            created_by_user_id,
-            session_id,
-            width_hexes,
-            height_hexes,
-            hex_size_pixels,
-            background_image_url,
-            created_at,
-            updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
-        [
-            $mapName,
-            $mapDescription ?: null,
-            $userId,
-            $sessionId,
-            $widthHexes,
-            $heightHexes,
-            $hexSizePixels,
-            $backgroundImageUrl ?: null
-        ]
-    );
+    // Try to include scale, but handle gracefully if column doesn't exist yet
+    try {
+        $mapId = $db->insert(
+            'INSERT INTO hex_maps (
+                map_name,
+                map_description,
+                created_by_user_id,
+                session_id,
+                width_hexes,
+                height_hexes,
+                hex_size_pixels,
+                background_image_url,
+                scale,
+                created_at,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
+            [
+                $mapName,
+                $mapDescription ?: null,
+                $userId,
+                $sessionId,
+                $widthHexes,
+                $heightHexes,
+                $hexSizePixels,
+                $backgroundImageUrl ?: null,
+                $scale
+            ]
+        );
+    } catch (Exception $e) {
+        // If scale column doesn't exist yet, insert without it
+        if (strpos($e->getMessage(), 'scale') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
+            $mapId = $db->insert(
+                'INSERT INTO hex_maps (
+                    map_name,
+                    map_description,
+                    created_by_user_id,
+                    session_id,
+                    width_hexes,
+                    height_hexes,
+                    hex_size_pixels,
+                    background_image_url,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
+                [
+                    $mapName,
+                    $mapDescription ?: null,
+                    $userId,
+                    $sessionId,
+                    $widthHexes,
+                    $heightHexes,
+                    $hexSizePixels,
+                    $backgroundImageUrl ?: null
+                ]
+            );
+        } else {
+            throw $e;
+        }
+    }
     
     // Get the created map
-    $map = $db->selectOne(
-        "SELECT map_id, map_name, map_description, created_by_user_id, session_id,
-                width_hexes, height_hexes, hex_size_pixels, background_image_url,
-                is_active, created_at, updated_at
-         FROM hex_maps
-         WHERE map_id = ?",
-        [$mapId]
-    );
+    // Try to include scale, but handle gracefully if column doesn't exist yet
+    try {
+        $map = $db->selectOne(
+            "SELECT map_id, map_name, map_description, created_by_user_id, session_id,
+                    width_hexes, height_hexes, hex_size_pixels, background_image_url,
+                    scale, is_active, created_at, updated_at
+             FROM hex_maps
+             WHERE map_id = ?",
+            [$mapId]
+        );
+    } catch (Exception $e) {
+        // If scale column doesn't exist yet, select without it
+        if (strpos($e->getMessage(), 'scale') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
+            $map = $db->selectOne(
+                "SELECT map_id, map_name, map_description, created_by_user_id, session_id,
+                        width_hexes, height_hexes, hex_size_pixels, background_image_url,
+                        is_active, created_at, updated_at
+                 FROM hex_maps
+                 WHERE map_id = ?",
+                [$mapId]
+            );
+            $map['scale'] = null;
+        } else {
+            throw $e;
+        }
+    }
     
     Security::logSecurityEvent('hex_map_created', [
         'map_id' => $mapId,
@@ -195,6 +257,7 @@ try {
         'height_hexes' => (int) $map['height_hexes'],
         'hex_size_pixels' => (int) $map['hex_size_pixels'],
         'background_image_url' => $map['background_image_url'],
+        'scale' => isset($map['scale']) && $map['scale'] !== null ? (float) $map['scale'] : null,
         'is_active' => (bool) $map['is_active'],
         'created_at' => $map['created_at'],
         'updated_at' => $map['updated_at']

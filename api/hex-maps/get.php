@@ -109,7 +109,7 @@ try {
         $map = $db->selectOne(
             "SELECT hm.map_id, hm.map_name, hm.map_description, hm.created_by_user_id,
                     hm.session_id, hm.width_hexes, hm.height_hexes, hm.hex_size_pixels,
-                    hm.background_image_url, hm.is_active, hm.game_time, hm.created_at, hm.updated_at,
+                    hm.background_image_url, hm.is_active, hm.game_time, hm.scale, hm.created_at, hm.updated_at,
                     u.username as created_by_username,
                     gs.session_title as session_title,
                     gs.dm_user_id as session_dm_user_id
@@ -120,23 +120,51 @@ try {
             [$mapId]
         );
     } catch (Exception $e) {
-        // If game_time column doesn't exist yet, select without it
-        if (strpos($e->getMessage(), 'game_time') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
-            $map = $db->selectOne(
-                "SELECT hm.map_id, hm.map_name, hm.map_description, hm.created_by_user_id,
-                        hm.session_id, hm.width_hexes, hm.height_hexes, hm.hex_size_pixels,
-                        hm.background_image_url, hm.is_active, hm.created_at, hm.updated_at,
-                        u.username as created_by_username,
-                        gs.session_title as session_title,
-                        gs.dm_user_id as session_dm_user_id
-                 FROM hex_maps hm
-                 LEFT JOIN users u ON hm.created_by_user_id = u.user_id
-                 LEFT JOIN game_sessions gs ON hm.session_id = gs.session_id
-                 WHERE hm.map_id = ?",
-                [$mapId]
-            );
-            // Set game_time to null if column doesn't exist
-            $map['game_time'] = null;
+        // If game_time or scale column doesn't exist yet, select without them
+        if (strpos($e->getMessage(), 'game_time') !== false || strpos($e->getMessage(), 'scale') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
+            try {
+                $map = $db->selectOne(
+                    "SELECT hm.map_id, hm.map_name, hm.map_description, hm.created_by_user_id,
+                            hm.session_id, hm.width_hexes, hm.height_hexes, hm.hex_size_pixels,
+                            hm.background_image_url, hm.is_active, hm.game_time, hm.created_at, hm.updated_at,
+                            u.username as created_by_username,
+                            gs.session_title as session_title,
+                            gs.dm_user_id as session_dm_user_id
+                     FROM hex_maps hm
+                     LEFT JOIN users u ON hm.created_by_user_id = u.user_id
+                     LEFT JOIN game_sessions gs ON hm.session_id = gs.session_id
+                     WHERE hm.map_id = ?",
+                    [$mapId]
+                );
+                // Set missing fields to null if columns don't exist
+                if (strpos($e->getMessage(), 'game_time') !== false) {
+                    $map['game_time'] = null;
+                }
+                if (strpos($e->getMessage(), 'scale') !== false) {
+                    $map['scale'] = null;
+                }
+            } catch (Exception $e2) {
+                // If both game_time and scale don't exist, try without both
+                if (strpos($e2->getMessage(), 'game_time') !== false || strpos($e2->getMessage(), 'scale') !== false || strpos($e2->getMessage(), 'Unknown column') !== false) {
+                    $map = $db->selectOne(
+                        "SELECT hm.map_id, hm.map_name, hm.map_description, hm.created_by_user_id,
+                                hm.session_id, hm.width_hexes, hm.height_hexes, hm.hex_size_pixels,
+                                hm.background_image_url, hm.is_active, hm.created_at, hm.updated_at,
+                                u.username as created_by_username,
+                                gs.session_title as session_title,
+                                gs.dm_user_id as session_dm_user_id
+                         FROM hex_maps hm
+                         LEFT JOIN users u ON hm.created_by_user_id = u.user_id
+                         LEFT JOIN game_sessions gs ON hm.session_id = gs.session_id
+                         WHERE hm.map_id = ?",
+                        [$mapId]
+                    );
+                    $map['game_time'] = null;
+                    $map['scale'] = null;
+                } else {
+                    throw $e2;
+                }
+            }
         } else {
             throw $e;
         }
@@ -192,6 +220,7 @@ try {
         'background_image_url' => $map['background_image_url'],
         'is_active' => (bool) $map['is_active'],
         'game_time' => isset($map['game_time']) ? $map['game_time'] : null,
+        'scale' => isset($map['scale']) && $map['scale'] !== null ? (float) $map['scale'] : null,
         'created_at' => $map['created_at'],
         'updated_at' => $map['updated_at']
     ];
