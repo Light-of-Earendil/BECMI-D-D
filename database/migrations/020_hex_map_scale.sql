@@ -13,3 +13,4 @@ ADD COLUMN scale DECIMAL(10, 2) NULL COMMENT 'Distance in miles from center of o
 COMMIT;
 
 
+
