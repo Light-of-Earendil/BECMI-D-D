@@ -3,9 +3,9 @@
 A comprehensive web-based management system for the Basic, Expert, Companion, Master, and Immortal (BECMI) ruleset of Dungeons & Dragons.
 
 **Live URL**: https://becmi.snilld-api.dk/  
-**Status**: Production-Ready (95% Complete)  
-**Version**: 2.0.0-beta  
-**Last Updated**: October 2025
+**Status**: Production-Ready (96% Complete)  
+**Version**: 2.1.0-beta  
+**Last Updated**: January 2026
 
 ---
 
@@ -20,6 +20,7 @@ This system provides a complete virtual tabletop experience for BECMI D&D campai
 - **Level Progression**: Automated level-up wizard with XP tracking
 - **Real-Time Updates**: Live HP, XP, and inventory updates across all session participants
 - **Notifications**: Browser push notifications and email reminders
+- **Video Conferencing**: Google Meet integration for remote sessions
 
 ### For Dungeon Masters:
 - **Session Management**: Create, schedule, and manage game sessions
@@ -29,6 +30,7 @@ This system provides a complete virtual tabletop experience for BECMI D&D campai
 - **Item Distribution**: Give items (including magical items) to players
 - **Hex Map Editor**: Create and manage hex-based campaign maps with markers, tiles, and fog of war
 - **DM Dashboard**: Real-time overview of all active sessions and players
+- **Video Conferencing**: Add Google Meet links to sessions for remote play
 
 ### Rule Automation:
 - **THAC0**: Automated calculations with Strength/Dexterity bonuses
@@ -44,9 +46,11 @@ This system provides a complete virtual tabletop experience for BECMI D&D campai
 
 ### Technology Stack
 - **Frontend**: jQuery 3.7.1 Single-Page Application (SPA)
+- **Styling**: Stylus CSS preprocessor (modular architecture)
 - **Backend**: Vanilla PHP 8.x (no Composer dependencies)
 - **Database**: MySQL/MariaDB with InnoDB
 - **Real-Time**: Long-polling system (25s timeout)
+- **Video Conferencing**: Google Meet integration
 - **Deployment**: Direct network drive on webserver
 
 ### Design Patterns
@@ -68,7 +72,13 @@ BECMI VTT/
 │   │   ├── core/            # Core application (app, api-client, state-manager, event-bus)
 │   │   ├── modules/         # Feature modules (character, session, dm-dashboard, etc.)
 │   │   └── utils/           # Utility functions
-│   ├── css/                  # Compiled CSS (2500+ lines)
+│   ├── css/                  # Compiled CSS (from Stylus)
+│   ├── stylus/               # Stylus source files (modular architecture)
+│   │   ├── main.styl        # Main entry point
+│   │   ├── _variables.styl  # Design tokens
+│   │   ├── _mixins.styl     # Reusable mixins
+│   │   ├── _components.styl # UI components
+│   │   └── _features.styl   # Feature-specific styles
 │   └── images/               # Static images and equipment assets
 │
 ├── api/                       # PHP API endpoints (40+ endpoints)
@@ -98,7 +108,8 @@ BECMI VTT/
 │
 ├── database/                  # Database schema and migrations
 │   ├── schema.sql           # Base schema
-│   └── migrations/          # Migration files (020+ migrations)
+│   └── migrations/          # Migration files (021+ migrations)
+│       └── 021_add_meet_link_to_sessions.sql  # Video conferencing support
 │
 ├── cron/                     # Scheduled tasks
 │   └── send-session-reminders.php  # Email reminder cron job
@@ -135,6 +146,7 @@ BECMI VTT/
    - Create database: `becmi_vtt`
    - Import base schema: `database/schema.sql`
    - Run migrations in order (see `database/migrations/`)
+   - **Important**: Run migration `021_add_meet_link_to_sessions.sql` for video conferencing support
 
 3. **Configuration**
    - Update `config/database.php` with database credentials
@@ -214,13 +226,21 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 - ✅ Map borders, roads, paths, rivers
 - ✅ Configurable hex scale
 
+### Video Conferencing (100% Complete)
+- ✅ Google Meet link integration
+- ✅ Session creation with video links
+- ✅ "Join Video Call" button in session views
+- ✅ DM dashboard video call access
+- ✅ Link generation helper
+
 ### UI/UX (100% Complete)
-- ✅ Professional styling (2500+ CSS lines)
+- ✅ Professional styling (modular Stylus architecture)
 - ✅ Responsive design
 - ✅ Smooth animations and transitions
 - ✅ Error handling and recovery
 - ✅ Offline detection and auto-reconnect
 - ✅ Loading states and skeletons
+- ✅ Improved form readability and contrast
 
 ### Security (100% Complete)
 - ✅ CSRF token protection
@@ -258,6 +278,7 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 - Session reminders (email + browser notifications)
 - DM dashboard with live player status
 - Combat initiative tracking
+- **Video Conferencing**: Google Meet link integration for remote sessions
 
 ### Real-Time Collaboration
 - Live updates across all session participants
@@ -288,7 +309,7 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 
 ### Development Environment
 - **Location**: Network drive on webserver (`m:\rpg\BECMI VTT\`)
-- **No Prepros**: Direct file editing on network drive
+- **Stylus Compilation**: Prepros handles Stylus → CSS compilation
 - **Database Access**: MySQL MCP tools available
 - **Browser Testing**: Built-in Chrome browser tools
 
@@ -319,7 +340,7 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 
 ## 🐛 Known Issues & Future Enhancements
 
-### Minor Polish (5% remaining)
+### Minor Polish (4% remaining)
 - Additional loading skeletons
 - In-app help system
 - Enhanced accessibility (ARIA labels, keyboard navigation)
@@ -331,6 +352,7 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 - Virtual dice roller with animations
 - Enhanced battle map tools
 - Character portrait uploads
+- WebRTC-based video conferencing (alternative to Google Meet)
 
 See [FEJL_OG_MANGLER.md](FEJL_OG_MANGLER.md) for detailed issue tracking.
 
@@ -351,6 +373,28 @@ For issues, questions, or contributions:
 
 ---
 
-**Last Updated**: October 2025  
-**Version**: 2.0.0-beta  
+**Last Updated**: January 2026  
+**Version**: 2.1.0-beta  
 **Status**: Production-Ready 🚀
+
+---
+
+## 🆕 Recent Updates (January 2026)
+
+### Google Meet Integration
+- Added `meet_link` field to sessions table (Migration 021)
+- Session creation form now includes video conference link field
+- "Join Video Call" button appears in session details and DM dashboard
+- Link generation helper opens Google Meet in new tab
+- Full integration with session management system
+
+### UI Improvements
+- Refactored CSS to modular Stylus architecture
+- Improved form readability and contrast
+- Enhanced session creation form styling
+- Better input field visibility and accessibility
+
+### Code Quality
+- Improved error handling in session creation API
+- Enhanced database migration system
+- Better logging for debugging

@@ -85,7 +85,7 @@ try {
     // Get session details
     $session = $db->selectOne(
         "SELECT session_id, dm_user_id, session_title, session_description,
-                session_datetime, duration_minutes, status, max_players,
+                meet_link, session_datetime, duration_minutes, status, max_players,
                 created_at, updated_at
          FROM game_sessions
          WHERE session_id = ?",
@@ -378,6 +378,7 @@ try {
             'session_id' => (int) $session['session_id'],
             'session_title' => $session['session_title'],
             'session_description' => $session['session_description'],
+            'meet_link' => $session['meet_link'] ?? null,
             'session_datetime' => $sessionDatetime,
             'duration_minutes' => (int) $session['duration_minutes'],
             'status' => $session['status'],

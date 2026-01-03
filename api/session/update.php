@@ -49,6 +49,16 @@ try {
     $duration = isset($payload['duration_minutes']) ? (int) $payload['duration_minutes'] : 240;
     $maxPlayers = isset($payload['max_players']) ? (int) $payload['max_players'] : 6;
     $status = $payload['status'] ?? 'scheduled';
+    $meetLink = Security::sanitizeInput($payload['meet_link'] ?? '');
+    
+    // Validate meet_link if provided
+    if (!empty($meetLink)) {
+        if (!filter_var($meetLink, FILTER_VALIDATE_URL)) {
+            $errors['meet_link'] = 'Meet link must be a valid URL';
+        } elseif (strlen($meetLink) > 500) {
+            $errors['meet_link'] = 'Meet link must be less than 500 characters';
+        }
+    }
 
     if ($sessionId <= 0) {
         $errors['session_id'] = 'Invalid session ID';
@@ -109,6 +119,7 @@ try {
         'UPDATE game_sessions SET
             session_title = ?,
             session_description = ?,
+            meet_link = ?,
             session_datetime = ?,
             duration_minutes = ?,
             max_players = ?,
@@ -118,6 +129,7 @@ try {
         [
             $title,
             $description,
+            $meetLink ?: null,
             $dateTime->format('Y-m-d H:i:s'),
             $duration,
             $maxPlayers,
@@ -137,6 +149,7 @@ try {
             'dm_user_id' => $userId,
             'session_title' => $title,
             'session_description' => $description,
+            'meet_link' => $meetLink ?: null,
             'session_datetime' => $dateTime->format('Y-m-d H:i:s'),
             'duration_minutes' => $duration,
             'status' => $status,

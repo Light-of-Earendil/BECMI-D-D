@@ -199,6 +199,17 @@ class SessionManagementModule {
                         <textarea id="session-description" name="session_description" rows="3" placeholder="Describe the session, adventure, or campaign..."></textarea>
                     </div>
                     
+                    <div class="form-group">
+                        <label for="meet-link">Video Conference Link (Optional):</label>
+                        <div class="input-with-button">
+                            <input type="url" id="meet-link" name="meet_link" placeholder="https://meet.google.com/xxx-xxxx-xxx" pattern="https?://.*">
+                            <button type="button" class="btn btn-secondary" id="generate-meet-link-btn" title="Open Google Meet to create a new meeting">
+                                <i class="fas fa-video"></i> Generate Link
+                            </button>
+                        </div>
+                        <small class="form-hint">Add a Google Meet or other video conference link for this session</small>
+                    </div>
+                    
                     <div class="form-row">
                         <div class="form-group">
                             <label for="session-date">Date:</label>
@@ -266,6 +277,16 @@ class SessionManagementModule {
         $('#cancel-session-creation').off('click').on('click', () => {
             this.hideCreationModal();
         });
+        
+        // Generate Meet Link button
+        $('#generate-meet-link-btn').off('click').on('click', () => {
+            // Open Google Meet in new tab
+            window.open('https://meet.google.com/new', '_blank');
+            // Show hint to copy link
+            setTimeout(() => {
+                this.app.showInfo('Create a meeting in the new tab, then copy the link and paste it above.');
+            }, 500);
+        });
     }
     
     /**
@@ -278,6 +299,7 @@ class SessionManagementModule {
             const sessionData = {
                 session_title: formData.get('session_title'),
                 session_description: formData.get('session_description'),
+                meet_link: formData.get('meet_link') || '',
                 session_datetime: `${formData.get('session_date')} ${formData.get('session_time')}:00`,
                 duration_minutes: parseInt(formData.get('duration_minutes')),
                 max_players: parseInt(formData.get('max_players'))
@@ -397,6 +419,13 @@ class SessionManagementModule {
             const userId = $(e.currentTarget).data('user-id');
             const username = $(e.currentTarget).data('username');
             this.removePlayer(sessionId, userId, username);
+        });
+        
+        // Add/Edit Meet Link buttons
+        $(document).on('click', '#add-meet-link-btn, #edit-meet-link-btn', (e) => {
+            e.preventDefault();
+            const sessionId = $(e.currentTarget).data('session-id');
+            this.editSession(sessionId); // Opens edit modal where they can add/edit meet link
         });
         
         $(document).on('click', '[data-action="accept-invitation"]', (e) => {
@@ -730,11 +759,38 @@ class SessionManagementModule {
         
         return `<div class="session-details-container">
                 <div class="session-details-header">
-                    <h1>${session.session_title}</h1>
-                    <div class="session-status ${session.status}">${session.status}</div>
+                    <div>
+                        <h1>${session.session_title}</h1>
+                        <div class="session-status ${session.status}">${session.status}</div>
+                    </div>
+                    ${session.meet_link ? `
+                        <a href="${session.meet_link}" target="_blank" class="btn btn-success btn-lg" id="join-video-call-btn">
+                            <i class="fas fa-video"></i> Join Video Call
+                        </a>
+                    ` : session.is_dm ? `
+                        <button class="btn btn-secondary btn-lg" id="add-meet-link-btn" data-session-id="${session.session_id}">
+                            <i class="fas fa-video"></i> Add Video Link
+                        </button>
+                    ` : ''}
                 </div>
                 
                 <div class="session-details-content">
+                    ${session.meet_link ? `
+                        <div class="video-conference-section">
+                            <div class="meet-link-display">
+                                <h3><i class="fas fa-video"></i> Video Conference</h3>
+                                <p class="meet-link-text">
+                                    <a href="${session.meet_link}" target="_blank" class="meet-link-url">${session.meet_link}</a>
+                                </p>
+                                ${session.is_dm ? `
+                                    <button class="btn btn-secondary btn-sm" id="edit-meet-link-btn" data-session-id="${session.session_id}">
+                                        <i class="fas fa-edit"></i> Edit Link
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    ` : ''}
+                    
                     <div class="session-info">
                         <h3>Session Information</h3>
                         <div class="info-grid">
@@ -832,6 +888,17 @@ class SessionManagementModule {
                         <textarea id="edit-session-description" name="session_description" rows="3">${session.session_description || ''}</textarea>
                     </div>
                     
+                    <div class="form-group">
+                        <label for="edit-meet-link">Video Conference Link (Optional):</label>
+                        <div class="input-with-button">
+                            <input type="url" id="edit-meet-link" name="meet_link" value="${session.meet_link || ''}" placeholder="https://meet.google.com/xxx-xxxx-xxx" pattern="https?://.*">
+                            <button type="button" class="btn btn-secondary" id="edit-generate-meet-link-btn" title="Open Google Meet to create a new meeting">
+                                <i class="fas fa-video"></i> Generate Link
+                            </button>
+                        </div>
+                        <small class="form-hint">Add a Google Meet or other video conference link for this session</small>
+                    </div>
+                    
                     <div class="form-row">
                         <div class="form-group">
                             <label for="edit-session-datetime">Date & Time:</label>
@@ -883,6 +950,14 @@ class SessionManagementModule {
             }
         });
         
+        // Generate Meet Link button in edit form
+        $('#edit-generate-meet-link-btn').off('click').on('click', () => {
+            window.open('https://meet.google.com/new', '_blank');
+            setTimeout(() => {
+                this.app.showInfo('Create a meeting in the new tab, then copy the link and paste it above.');
+            }, 500);
+        });
+        
         modal.show();
     }
     
@@ -900,10 +975,13 @@ class SessionManagementModule {
             const maxPlayers = parseInt($('#edit-max-players').val());
             const status = $('#edit-status').val();
             
+            const meetLink = $('#edit-meet-link').val() || '';
+            
             const response = await this.apiClient.put('/api/session/update.php', {
                 session_id: parseInt(sessionId),
                 session_title: title,
                 session_description: description,
+                meet_link: meetLink,
                 session_datetime: datetime.replace('T', ' ') + ':00',
                 duration_minutes: duration,
                 max_players: maxPlayers,

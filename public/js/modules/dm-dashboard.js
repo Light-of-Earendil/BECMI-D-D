@@ -91,6 +91,15 @@ class DMDashboardModule {
                         </div>
                     </div>
                     <div class="header-actions">
+                        ${data.session.meet_link ? `
+                            <a href="${data.session.meet_link}" target="_blank" class="btn btn-success" id="join-video-call-dm-btn">
+                                <i class="fas fa-video"></i> Join Video Call
+                            </a>
+                        ` : `
+                            <button class="btn btn-secondary" id="add-meet-link-dm-btn" data-session-id="${data.session.session_id}" title="Add video conference link">
+                                <i class="fas fa-video"></i> Add Video Link
+                            </button>
+                        `}
                         <button class="btn btn-success" id="award-xp-btn" data-session-id="${data.session.session_id}">
                             <i class="fas fa-star"></i> Award XP
                         </button>
@@ -483,8 +492,18 @@ class DMDashboardModule {
         $(document).on('click', '#award-xp-btn', async (e) => {
             e.preventDefault();
             const sessionId = $(e.currentTarget).data('session-id');
-            
+
             await this.showAwardXPModal(sessionId);
+        });
+        
+        // Add Meet Link button in DM dashboard
+        $(document).on('click', '#add-meet-link-dm-btn', async (e) => {
+            e.preventDefault();
+            const sessionId = $(e.currentTarget).data('session-id');
+            // Navigate to session edit via SessionManagementModule
+            if (this.app.modules.sessionManagement) {
+                await this.app.modules.sessionManagement.editSession(sessionId);
+            }
         });
     }
     

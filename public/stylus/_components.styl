@@ -1,0 +1,330 @@
+// ==========================================================================
+// Component Styles
+// ==========================================================================
+
+// Panel System
+.panel
+  background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
+  border-radius: var(--radius-md)
+  box-shadow: var(--shadow-wood)
+  padding: var(--space-4)
+  position: relative
+
+  &::before
+    content: ""
+    position: absolute
+    inset: 6px
+    border-radius: calc(var(--radius-md) - 6px)
+    box-shadow: inset 0 2px 0 var(--bevel-light), inset 0 -2px 0 rgba(0,0,0,0.55)
+    pointer-events: none
+    z-index: 1
+
+.panel__inner
+  background: radial-gradient(120% 120% at 20% 10%, rgba(255,255,255,0.30), transparent), linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+  color: var(--text-ink)
+  border-radius: var(--radius-sm)
+  padding: var(--space-4)
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.25), inset 0 -3px 0 rgba(0,0,0,0.25)
+  position: relative
+  z-index: 2
+
+.panel__title
+  font-family: "Cinzel", Georgia, serif
+  font-weight: 600
+  font-size: 1.5rem
+  letter-spacing: 0.02em
+  color: var(--wood-900)
+  margin-bottom: var(--space-3)
+  text-shadow: 0 1px 0 var(--parchment-100)
+
+// Button System
+.btn
+  --bg: linear-gradient(180deg, var(--parchment-300), var(--parchment-500))
+  --fg: var(--wood-900)
+  --ring: var(--brass-300)
+  
+  button-base()
+  button-variant(var(--bg), var(--fg))
+
+  &:hover
+    button-hover()
+
+  &:active
+    button-active()
+
+  &:focus-visible
+    button-focus(var(--ring))
+
+  &:disabled
+    button-disabled()
+
+// Button Variants
+.btn--primary,
+.btn-primary
+  --bg: linear-gradient(180deg, #f0e7cd, #d7c796)
+  --fg: #2a1409
+
+.btn--secondary,
+.btn-secondary
+  --bg: linear-gradient(180deg, var(--wood-400), var(--wood-600))
+  --fg: var(--text-soft)
+
+.btn--danger,
+.btn-error
+  --bg: linear-gradient(180deg, #d86c5d, #b33a2b)
+  --fg: #fff
+
+.btn--success
+  --bg: linear-gradient(180deg, #9fcd85, #6dab4f)
+  --fg: #fff
+
+.btn--ghost
+  --bg: rgba(0,0,0,0.15)
+  --fg: var(--text-soft)
+  border: 1px solid rgba(255,255,255,0.15)
+
+// Button Sizes
+.btn--sm,
+.btn-sm
+  button-size-sm()
+
+.btn--lg
+  button-size-lg()
+
+// Icon Button
+.icon-btn
+  icon-button-base()
+
+// Form Inputs
+.input,
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="date"],
+input[type="time"]
+  input-base()
+
+  &:focus
+    input-focus()
+
+  &::placeholder
+    input-placeholder()
+
+// Textarea
+.textarea,
+textarea
+  textarea-base()
+
+  &:focus
+    textarea-focus()
+
+// Select
+.select,
+select
+  select-base()
+
+  &:focus
+    select-focus()
+
+// General Input Styling for Better Contrast
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"]
+  input-contrast()
+
+  &:focus
+    input-focus-contrast()
+
+// Button Text Color Fix
+.btn
+  color: var(--wood-900) !important
+
+.btn-primary
+  background: linear-gradient(180deg, var(--brass-400), var(--brass-600)) !important
+  color: var(--wood-900) !important
+  border: 2px solid var(--brass-700) !important
+
+.btn-secondary
+  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400)) !important
+  color: var(--wood-900) !important
+  border: 2px solid var(--wood-600) !important
+
+// Form Labels
+label
+  display: block
+  margin-bottom: var(--space-2)
+  color: var(--wood-800)
+  font-weight: 600
+
+.form-group
+  margin-bottom: var(--space-4)
+
+.form-row
+  display: grid
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))
+  gap: var(--space-4)
+  margin-bottom: var(--space-4)
+
+.form-actions
+  display: flex
+  gap: var(--space-3)
+  margin-top: var(--space-6)
+
+.form-footnote
+  margin-top: var(--space-4)
+  text-align: center
+
+// Link Button (for text links that should look like buttons)
+.link-button
+  link-base()
+  link-hover-underline()
+  
+  // Remove default link styling
+  &:link,
+  &:visited,
+  &:active
+    color: var(--brass-300)
+    text-decoration: none
+  
+  &:focus-visible
+    link-focus()
+
+// Checkbox and Radio
+.control
+  display: inline-flex
+  align-items: center
+  gap: 10px
+  cursor: pointer
+  user-select: none
+  color: var(--text-ink)
+
+  input
+    position: absolute
+    opacity: 0
+    pointer-events: none
+
+  .box,
+  .dot
+    width: 20px
+    height: 20px
+    border-radius: 6px
+    background: linear-gradient(180deg, var(--parchment-200), var(--parchment-500))
+    border: 1px solid rgba(0,0,0,0.35)
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -1px 0 rgba(0,0,0,0.25)
+    position: relative
+    flex-shrink: 0
+
+  .dot
+    border-radius: 50%
+
+  input:checked + .box::after
+    content: "✓"
+    position: absolute
+    inset: 0
+    display: grid
+    place-items: center
+    color: var(--wood-900)
+    font-weight: 700
+    font-size: 16px
+
+  input:checked + .dot::after
+    content: ""
+    position: absolute
+    width: 10px
+    height: 10px
+    border-radius: 50%
+    background: radial-gradient(circle at 30% 30%, var(--brass-300), var(--brass-600))
+    top: 50%
+    left: 50%
+    transform: translate(-50%, -50%)
+
+  &:hover .box,
+  &:hover .dot
+    border-color: var(--brass-500)
+
+// Advanced Controls
+.switch
+  --w: 56px
+  --h: 28px
+  position: relative
+  width: var(--w)
+  height: var(--h)
+  background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
+  border-radius: var(--h)
+  box-shadow: var(--shadow-wood)
+  border: 1px solid rgba(0,0,0,0.5)
+  cursor: pointer
+
+  &__thumb
+    position: absolute
+    top: 3px
+    left: 3px
+    width: 22px
+    height: 22px
+    border-radius: 50%
+    background: radial-gradient(circle at 35% 30%, var(--parchment-300), var(--parchment-600))
+    transition: left var(--t-med) var(--ease)
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.65), inset 0 -1px 0 rgba(0,0,0,0.25)
+
+  &[data-state="on"] &__thumb
+    left: calc(var(--w) - 25px)
+
+  &:focus-visible
+    outline: 3px solid var(--brass-300)
+    outline-offset: 2px
+
+// Slider
+.slider
+  width: 100%
+  height: 8px
+  background: rgba(0,0,0,0.35)
+  border-radius: 999px
+  position: relative
+
+  &__fill
+    position: absolute
+    height: 100%
+    background: linear-gradient(90deg, var(--brass-400), var(--brass-300))
+    border-radius: inherit
+
+  &__thumb
+    position: absolute
+    top: 50%
+    transform: translate(-50%, -50%)
+    width: 18px
+    height: 18px
+    border-radius: 50%
+    background: radial-gradient(circle at 35% 30%, var(--parchment-300), var(--parchment-600))
+    border: 1px solid rgba(0,0,0,0.5)
+    box-shadow: var(--shadow-wood)
+    cursor: pointer
+
+// Progress Bar
+.progress
+  width: 100%
+  height: 16px
+  border-radius: 10px
+  background: linear-gradient(180deg, var(--wood-700), var(--wood-900))
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.15), inset 0 -2px 0 rgba(0,0,0,0.55)
+  overflow: hidden
+
+  &__value
+    height: 100%
+    background: linear-gradient(90deg, var(--brass-300), var(--brass-500), var(--brass-600))
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 0 8px rgba(202, 162, 74, 0.4)
+    transition: width var(--t-med) var(--ease)
+
+// CRT Panel
+.crt
+  font-family: "VT323", ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace
+  font-size: 1.25rem
+  line-height: 1.35
+  color: var(--green-crt)
+  text-shadow: 0 0 6px rgba(142,242,126,0.65)
+  background: #000
+  padding: var(--space-3)
+  border-radius: var(--radius-sm)
+  border: 1px solid #123a12
+  box-shadow: inset 0 0 12px rgba(142,242,126,0.25)

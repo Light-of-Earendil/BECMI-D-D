@@ -1,0 +1,283 @@
+// ==========================================================================
+// Mixins - Reusable Interaction Element Styles
+// ==========================================================================
+//
+// This file contains mixins for common interaction elements:
+// - Buttons (base, variants, sizes, states)
+// - Links (base, hover effects, focus)
+// - Inputs (text, number, email, password)
+// - Textareas
+// - Selects
+// - Form states (disabled, readonly, error, success)
+// - Focus rings
+//
+// Usage Example:
+//   .my-button
+//     button-base()
+//     button-variant(linear-gradient(180deg, #f0e7cd, #d7c796), #2a1409)
+//     button-size-lg()
+//
+//   .my-input
+//     input-base()
+//     input-contrast()
+//
+// ==========================================================================
+
+// ==========================================================================
+// Button Mixins
+// ==========================================================================
+
+// Base button styles
+button-base()
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  gap: var(--space-2)
+  padding: 10px 16px
+  border-radius: 999px
+  border: 1px solid rgba(0,0,0,0.25)
+  box-shadow: 0 2px 0 rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.65)
+  cursor: pointer
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease), background var(--t-med) var(--ease)
+  text-decoration: none
+  user-select: none
+  font-weight: 500
+  font-size: 1rem
+  font-family: 'Lora', Georgia, 'Times New Roman', serif
+
+// Button variant (background and foreground colors)
+button-variant(bg, fg = var(--wood-900))
+  background: bg
+  color: fg
+
+// Button hover state
+button-hover()
+  transform: translateY(-1px)
+  box-shadow: 0 3px 0 rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.65)
+
+// Button active state
+button-active()
+  transform: translateY(0)
+  box-shadow: 0 1px 0 rgba(0,0,0,0.65), inset 0 2px 0 rgba(0,0,0,0.15)
+
+// Button focus state
+button-focus(ring = var(--brass-300))
+  outline: 3px solid ring
+  outline-offset: 2px
+
+// Button disabled state
+button-disabled()
+  opacity: 0.6
+  cursor: not-allowed
+  box-shadow: 0 1px 0 rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3)
+  
+  &:hover
+    transform: none
+
+// Button size variants
+button-size-sm()
+  padding: 6px 12px
+  font-size: 0.875rem
+
+button-size-lg()
+  padding: 14px 24px
+  font-size: 1.125rem
+
+// ==========================================================================
+// Link Mixins
+// ==========================================================================
+
+// Base link styles
+link-base(color = var(--brass-300))
+  background: none
+  border: none
+  color: color
+  cursor: pointer
+  text-decoration: none
+  padding: 0
+  font-size: 0.875rem
+  font-family: 'Lora', Georgia, 'Times New Roman', serif
+  transition: color var(--t-fast) var(--ease)
+  display: inline-block
+  position: relative
+
+// Link hover effect with underline
+link-hover-underline(color = var(--brass-300))
+  &:hover
+    color: var(--brass-400)
+    text-decoration: none
+    
+    &::after
+      width: 100%
+  
+  &::after
+    content: ""
+    position: absolute
+    bottom: -2px
+    left: 0
+    width: 0
+    height: 1px
+    background: color
+    transition: width var(--t-fast) var(--ease)
+
+// Link focus state
+link-focus(ring = var(--brass-300))
+  outline: 2px solid ring
+  outline-offset: 2px
+  border-radius: 2px
+
+// ==========================================================================
+// Input Mixins
+// ==========================================================================
+
+// Base input styles (text, number, email, password)
+input-base()
+  width: 100%
+  padding: 10px 12px
+  border-radius: 10px
+  border: 1px solid rgba(0,0,0,0.35)
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+  color: var(--wood-900)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -1px 0 rgba(0,0,0,0.25)
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease)
+  font-family: 'Lora', Georgia, 'Times New Roman', serif
+  font-size: 1rem
+
+// Input with better contrast (for text, number, email, password)
+input-contrast()
+  color: var(--wood-900) !important
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-200)) !important
+  border: 2px solid var(--wood-600) !important
+
+// Input focus state
+input-focus(ring = var(--brass-300))
+  outline: none
+  border-color: ring
+  box-shadow: 0 0 0 3px rgba(202, 162, 74, 0.35), inset 0 1px 0 rgba(255,255,255,0.7)
+
+// Input focus with contrast
+input-focus-contrast(ring = var(--brass-500))
+  color: var(--wood-900) !important
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300)) !important
+  border-color: ring !important
+
+// Input placeholder
+input-placeholder()
+  color: var(--wood-700)
+  opacity: 0.7
+
+// ==========================================================================
+// Textarea Mixins
+// ==========================================================================
+
+// Base textarea styles
+textarea-base()
+  width: 100%
+  padding: 10px 12px
+  border-radius: 10px
+  border: 1px solid rgba(0,0,0,0.35)
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+  color: var(--wood-900)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -1px 0 rgba(0,0,0,0.25)
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease)
+  font-family: 'Lora', Georgia, 'Times New Roman', serif
+  font-size: 1rem
+  resize: vertical
+  min-height: 100px
+
+// Textarea focus state
+textarea-focus(ring = var(--brass-300))
+  outline: none
+  border-color: ring
+  box-shadow: 0 0 0 3px rgba(202, 162, 74, 0.35), inset 0 1px 0 rgba(255,255,255,0.7)
+
+// ==========================================================================
+// Select Mixins
+// ==========================================================================
+
+// Base select styles
+select-base()
+  width: 100%
+  padding: 10px 12px
+  border-radius: 10px
+  border: 1px solid rgba(0,0,0,0.35)
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+  color: var(--wood-900)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -1px 0 rgba(0,0,0,0.25)
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease)
+  font-family: 'Lora', Georgia, 'Times New Roman', serif
+  font-size: 1rem
+  cursor: pointer
+  appearance: none
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%232a1409' d='M6 9L1 4h10z'/%3E%3C/svg%3E")
+  background-repeat: no-repeat
+  background-position: right 12px center
+  padding-right: 36px
+
+// Select focus state
+select-focus(ring = var(--brass-300))
+  outline: none
+  border-color: ring
+  box-shadow: 0 0 0 3px rgba(202, 162, 74, 0.35), inset 0 1px 0 rgba(255,255,255,0.7)
+
+// ==========================================================================
+// Focus Ring Utility
+// ==========================================================================
+
+// Universal focus ring for accessibility
+focus-ring(ring = var(--brass-300), offset = 2px)
+  outline: 3px solid ring
+  outline-offset: offset
+
+// ==========================================================================
+// Form Element States
+// ==========================================================================
+
+// Disabled state for form elements
+form-disabled()
+  opacity: 0.6
+  cursor: not-allowed
+  pointer-events: none
+
+// Read-only state
+form-readonly()
+  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-300)) !important
+  cursor: default
+
+// Error state
+form-error()
+  border-color: var(--red-500) !important
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2), inset 0 1px 0 rgba(255,255,255,0.6)
+
+// Success state
+form-success()
+  border-color: var(--green-crt) !important
+  box-shadow: 0 0 0 3px rgba(142, 242, 126, 0.2), inset 0 1px 0 rgba(255,255,255,0.6)
+
+// ==========================================================================
+// Icon Button Mixin
+// ==========================================================================
+
+icon-button-base()
+  width: 40px
+  height: 40px
+  min-width: 40px
+  border-radius: 50%
+  background: radial-gradient(circle at 35% 30%, var(--wood-200), var(--wood-500) 60%, var(--wood-700))
+  border: 1px solid rgba(0,0,0,0.45)
+  box-shadow: var(--shadow-wood)
+  display: inline-grid
+  place-items: center
+  color: var(--text-soft)
+  cursor: pointer
+  transition: transform var(--t-fast) var(--ease)
+  padding: 0
+
+  &:hover
+    transform: translateY(-1px)
+
+  &:active
+    transform: translateY(0)
+
+  &:focus-visible
+    focus-ring()

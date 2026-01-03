@@ -30,6 +30,16 @@ try {
     $datetimeRaw = Security::sanitizeInput($payload['session_datetime'] ?? '');
     $duration = isset($payload['duration_minutes']) ? (int) $payload['duration_minutes'] : 240;
     $maxPlayers = isset($payload['max_players']) ? (int) $payload['max_players'] : 6;
+    $meetLink = Security::sanitizeInput($payload['meet_link'] ?? '');
+    
+    // Validate meet_link if provided (should be a valid URL)
+    if (!empty($meetLink)) {
+        if (!filter_var($meetLink, FILTER_VALIDATE_URL)) {
+            $errors['meet_link'] = 'Meet link must be a valid URL';
+        } elseif (strlen($meetLink) > 500) {
+            $errors['meet_link'] = 'Meet link must be less than 500 characters';
+        }
+    }
 
     if (strlen($title) < 3 || strlen($title) > 100) {
         $errors['session_title'] = 'Session title must be between 3 and 100 characters';
@@ -73,17 +83,19 @@ try {
             dm_user_id,
             session_title,
             session_description,
+            meet_link,
             session_datetime,
             duration_minutes,
             status,
             max_players,
             created_at,
             updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
         [
             $userId,
             $title,
             $description,
+            $meetLink ?: null,
             $dateTime->format('Y-m-d H:i:s'),
             $duration,
             'scheduled',
@@ -103,6 +115,7 @@ try {
             'dm_user_id' => $userId,
             'session_title' => $title,
             'session_description' => $description,
+            'meet_link' => $meetLink ?: null,
             'session_datetime' => $dateTime->format('Y-m-d H:i:s'),
             'duration_minutes' => $duration,
             'status' => 'scheduled',
@@ -111,5 +124,13 @@ try {
     ], 'Session created successfully');
 } catch (Exception $e) {
     error_log('Session creation error: '. $e->getMessage());
-    Security::sendErrorResponse('An error occurred while creating the session', 500);
+    error_log('Session creation error trace: '. $e->getTraceAsString());
+    
+    // In development, show more details
+    $errorMessage = 'An error occurred while creating the session';
+    if (defined('DEBUG') && DEBUG) {
+        $errorMessage .= ': ' . $e->getMessage();
+    }
+    
+    Security::sendErrorResponse($errorMessage, 500);
 }
