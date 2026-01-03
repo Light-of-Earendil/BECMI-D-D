@@ -102,6 +102,7 @@ BECMI VTT/
 │       ├── becmi-rules.php  # BECMI rules engine
 │       ├── event-broadcaster.php  # Real-time event broadcasting
 │       ├── email-service.php      # Email notifications
+│       ├── email-queue-service.php # Email queue management
 │       └── portrait-manager.php   # Character portrait generation
 │
 ├── config/                   # Configuration files
@@ -110,11 +111,13 @@ BECMI VTT/
 │
 ├── database/                  # Database schema and migrations
 │   ├── schema.sql           # Base schema
-│   └── migrations/          # Migration files (021+ migrations)
-│       └── 021_add_meet_link_to_sessions.sql  # Video conferencing support
+│   └── migrations/          # Migration files (022+ migrations)
+│       ├── 021_add_meet_link_to_sessions.sql  # Video conferencing support
+│       └── 022_email_queue_system.sql  # Email queue system
 │
 ├── cron/                     # Scheduled tasks
-│   └── send-session-reminders.php  # Email reminder cron job
+│   ├── send-session-reminders.php  # Email reminder cron job
+│   └── process-email-queue.php     # Email queue processor
 │
 ├── docs/                     # Documentation
 │   ├── INSTALLATION.md      # Installation guide
@@ -164,7 +167,15 @@ BECMI VTT/
    ```bash
    # Send session reminders every hour
    0 * * * * php /path/to/becmi-vtt/cron/send-session-reminders.php >> /var/log/becmi-reminders.log 2>&1
+   
+   # Process email queue every 5 minutes
+   */5 * * * * php /path/to/becmi-vtt/cron/process-email-queue.php >> /var/log/becmi-email-queue.log 2>&1
+   
+   # Cleanup old emails daily at 2 AM (optional)
+   0 2 * * * php /path/to/becmi-vtt/cron/cleanup-email-queue.php >> /var/log/becmi-email-cleanup.log 2>&1
    ```
+   
+   **Important**: Run migration `022_email_queue_system.sql` for email queue support
 
 For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
@@ -218,6 +229,7 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 - ✅ Email notifications with HTML templates
 - ✅ Session reminder emails (24h before)
 - ✅ User-configurable preferences
+- ✅ **Email Queue System** ⭐ NEW - Asynchronous email sending with retry mechanism
 
 ### Hex Maps System (100% Complete)
 - ✅ Hex map editor (create, edit, delete)
@@ -259,6 +271,7 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 - **[Installation Guide](docs/INSTALLATION.md)** - Detailed setup instructions
 - **[Character Creation System](docs/CHARACTER_CREATION_SYSTEM.md)** - Character creation process
 - **[Hex Maps System](docs/HEX_MAPS_SYSTEM.md)** - Hex map editor documentation
+- **[Email Queue System](docs/EMAIL_QUEUE_SYSTEM.md)** - Email queue documentation
 - **[Function Documentation](docs/FUNCTION_DOCUMENTATION.md)** - Complete API and function reference
 - **[Implementation Status](FINAL_IMPLEMENTATION_STATUS.md)** - Detailed feature status
 - **[Contributing Guide](CONTRIBUTING.md)** - How to contribute to this project
@@ -418,3 +431,13 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - Improved error handling in session creation API
 - Enhanced database migration system
 - Better logging for debugging
+
+### Email Queue System
+- Added `email_queue` table (Migration 022)
+- EmailQueueService for queueing emails
+- Background processor (`process-email-queue.php`)
+- Priority support (low, normal, high, urgent)
+- Scheduled sending support
+- Automatic retry mechanism
+- Queue statistics API endpoint
+- Cleanup script for old emails

@@ -131,7 +131,7 @@ class EmailService {
     
     /**
      * Send email using PHP mail() function.
-     * Private method used by all public email methods.
+     * Can be called directly for queue processing.
      * 
      * @param string $to Recipient email address
      * @param string $subject Email subject line
@@ -159,7 +159,7 @@ class EmailService {
      * 
      * @since 1.0.0
      */
-    private function sendEmail($to, $subject, $body) {
+    public function sendEmail($to, $subject, $body) {
         try {
             $headers = [
                 "From: {$this->fromName} <{$this->fromEmail}>",
