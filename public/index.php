@@ -330,6 +330,7 @@
     <script src="js/modules/hex-map-editor.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/hex-map-play.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/forum.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/forum-text-editor.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/forum-thread.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/forum-moderation.js?t=<?php echo time(); ?>"></script>
     <script src="js/main.js?t=<?php echo time(); ?>"></script>

@@ -250,6 +250,66 @@ class Security {
     }
     
     /**
+     * Sanitize HTML content for forum posts
+     * Allows safe HTML tags and attributes
+     */
+    public static function sanitizeForumHtml($html) {
+        if (empty($html)) {
+            return '';
+        }
+        
+        // Remove null bytes
+        $html = str_replace("\0", '', $html);
+        
+        // Allowed HTML tags
+        $allowedTags = '<p><br><strong><b><em><i><u><ul><ol><li><h1><h2><h3><h4><h5><h6><pre><code><a><blockquote>';
+        
+        // Strip disallowed tags
+        $html = strip_tags($html, $allowedTags);
+        
+        // Clean up attributes - only allow href and target on links
+        $html = preg_replace_callback('/<a\s+([^>]*)>/i', function($matches) {
+            $attrs = $matches[1];
+            $href = '';
+            $target = '';
+            
+            // Extract href
+            if (preg_match('/href=["\']([^"\']*)["\']/i', $attrs, $hrefMatch)) {
+                $url = $hrefMatch[1];
+                // Validate URL
+                if (filter_var($url, FILTER_VALIDATE_URL) || preg_match('/^\/|^#/', $url)) {
+                    $href = 'href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '"';
+                }
+            }
+            
+            // Extract target if present
+            if (preg_match('/target=["\']([^"\']*)["\']/i', $attrs, $targetMatch)) {
+                $targetValue = strtolower($targetMatch[1]);
+                if (in_array($targetValue, ['_blank', '_self', '_parent', '_top'])) {
+                    $target = 'target="' . htmlspecialchars($targetValue, ENT_QUOTES, 'UTF-8') . '" rel="noopener"';
+                }
+            } else if ($href) {
+                // If href exists but no target, add target="_blank" for external links
+                if (preg_match('/^https?:\/\//', $href)) {
+                    $target = 'target="_blank" rel="noopener"';
+                }
+            }
+            
+            $result = '<a';
+            if ($href) $result .= ' ' . $href;
+            if ($target) $result .= ' ' . $target;
+            $result .= '>';
+            
+            return $result;
+        }, $html);
+        
+        // Remove any remaining attributes from other tags
+        $html = preg_replace('/<(?!a\s)([a-z]+)\s+[^>]*>/i', '<$1>', $html);
+        
+        return trim($html);
+    }
+    
+    /**
      * Validate email address
      */
     public static function validateEmail($email) {
@@ -613,8 +673,13 @@ class Security {
      * Send success response
      */
     public static function sendSuccessResponse($data = null, $message = 'Success') {
+        // Clear any output buffers first
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+        
         http_response_code(200);
-        header('Content-Type: application/json');
+        header('Content-Type: application/json; charset=utf-8');
         
         $response = [
             'status' => 'success',
@@ -636,12 +701,7 @@ class Security {
             error_log("WARNING: Failed to add CSRF token to success response: " . $e->getMessage());
         }
         
-        // Clear output buffer before sending JSON
-        if (ob_get_level()) {
-            ob_clean();
-        }
-        
-        echo json_encode($response);
+        echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }
     
@@ -649,18 +709,18 @@ class Security {
      * Send error response
      */
     public static function sendErrorResponse($message = 'An error occurred', $code = 500) {
-        // Clear output buffer before sending JSON
-        if (ob_get_level()) {
-            ob_clean();
+        // Clear any output buffers first
+        while (ob_get_level()) {
+            ob_end_clean();
         }
         
         http_response_code($code);
-        header('Content-Type: application/json');
+        header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
             'status' => 'error',
             'message' => $message,
             'code' => 'ERROR'
-        ]);
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }
     

@@ -40,7 +40,7 @@ try {
     }
     
     $postId = (int) $data['post_id'];
-    $newContent = trim($data['post_content']);
+    $newContent = Security::sanitizeForumHtml(trim($data['post_content']));
     $editReason = isset($data['edit_reason']) ? trim($data['edit_reason']) : null;
     
     // Get post
