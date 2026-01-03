@@ -5,7 +5,9 @@ A comprehensive web-based management system for the Basic, Expert, Companion, Ma
 **Live URL**: https://becmi.snilld-api.dk/  
 **Status**: Production-Ready (96% Complete)  
 **Version**: 2.1.0-beta  
-**Last Updated**: January 2026
+**Last Updated**: January 2026  
+**License**: Custom (Open Source with Hosting Restrictions) - See [LICENSE](LICENSE)  
+**GitHub**: [Repository Link] - Contributions Welcome! See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ---
 
@@ -259,6 +261,8 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 - **[Hex Maps System](docs/HEX_MAPS_SYSTEM.md)** - Hex map editor documentation
 - **[Function Documentation](docs/FUNCTION_DOCUMENTATION.md)** - Complete API and function reference
 - **[Implementation Status](FINAL_IMPLEMENTATION_STATUS.md)** - Detailed feature status
+- **[Contributing Guide](CONTRIBUTING.md)** - How to contribute to this project
+- **[Credits](CREDITS.md)** - Contributors and acknowledgments
 
 ---
 
@@ -360,16 +364,32 @@ See [FEJL_OG_MANGLER.md](FEJL_OG_MANGLER.md) for detailed issue tracking.
 
 ## 📝 License
 
-This project is proprietary software developed for BECMI D&D campaigns.
+This project is **open source** with hosting restrictions. See [LICENSE](LICENSE) for full details.
+
+### Summary:
+- ✅ **Allowed**: View, study, modify, contribute, fork for development
+- ✅ **Contributors**: Will be credited in the Credits page
+- ❌ **Restricted**: Hosting/deployment without explicit permission
+- ❌ **Restricted**: Commercial use of hosted instances
+
+**For hosting permissions or questions**, please contact the project maintainer through GitHub Issues.
 
 ---
 
-## 👥 Support
+## 👥 Support & Contributing
 
-For issues, questions, or contributions:
-1. Check the documentation in `/docs/`
-2. Review error logs and browser console
-3. Check [FEJL_OG_MANGLER.md](FEJL_OG_MANGLER.md) for known issues
+### Getting Help
+- Check the documentation in `/docs/`
+- Review error logs and browser console
+- Check [FEJL_OG_MANGLER.md](FEJL_OG_MANGLER.md) for known issues
+- Open an issue on GitHub for bugs or questions
+
+### Contributing
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+**Contributors will be credited** in [CREDITS.md](CREDITS.md).
+
+**Note**: This project is open source, but hosting is restricted. See [LICENSE](LICENSE) for details.
 
 ---
 

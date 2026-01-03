@@ -1,0 +1,67 @@
+BECMI D&D Virtual Tabletop (VTT) - Custom License
+
+Copyright (c) 2024-2026 Peter Munkholm / Third Eagle Studio
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to:
+
+1. VIEW, STUDY, AND MODIFY the Software for personal or educational purposes
+2. CONTRIBUTE code, bug fixes, and improvements to the Software
+3. FORK the Software repository for development and testing purposes
+4. USE the Software's code as reference or learning material
+
+UNDER THE FOLLOWING CONDITIONS:
+
+1. ATTRIBUTION: All contributions must include proper attribution. Contributors
+   will be credited in the project's Credits page.
+
+2. HOSTING RESTRICTION: You may NOT host, deploy, or run a live instance of
+   this Software without explicit written permission from the copyright holder.
+   This includes but is not limited to:
+   - Public web hosting
+   - Private server deployment
+   - Cloud platform deployment (AWS, Azure, GCP, etc.)
+   - Docker container deployment
+   - Any form of production or staging environment hosting
+
+3. COMMERCIAL USE: You may NOT use this Software or any derivative works for
+   commercial purposes, including but not limited to:
+   - Offering hosted services
+   - Selling access to hosted instances
+   - Using in commercial products or services
+
+4. DISTRIBUTION: You may share the source code, but recipients must also
+   comply with this license, particularly the hosting restriction.
+
+5. MODIFICATIONS: You may modify the Software, but modified versions are
+   subject to the same restrictions as the original Software.
+
+EXCEPTIONS:
+
+- The copyright holder reserves the right to grant exceptions to the hosting
+  restriction on a case-by-case basis.
+- Educational institutions may request permission for academic use.
+- Contributors may be granted hosting privileges at the copyright holder's
+  discretion.
+
+CONTRIBUTIONS:
+
+By contributing code to this project, you agree that:
+- Your contributions will be licensed under this same license
+- You grant the copyright holder the right to use, modify, and distribute
+  your contributions
+- You will be credited in the project's Credits page
+- You retain copyright to your contributions
+
+DISCLAIMER:
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+For questions about this license or to request hosting permissions, please
+contact the copyright holder through the project's GitHub repository.
