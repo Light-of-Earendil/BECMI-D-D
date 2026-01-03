@@ -1,0 +1,791 @@
+// ==========================================================================
+// Forum System Styles
+// BBforums-inspired wood/parchment theme
+// ==========================================================================
+
+// Forum Container
+.forum-container
+  max-width: 1200px
+  margin: 0 auto
+  padding: var(--space-6)
+
+// Forum Header
+.forum-header
+  margin-bottom: var(--space-6)
+  display: flex
+  justify-content: space-between
+  align-items: center
+  flex-wrap: wrap
+  gap: var(--space-4)
+
+  h1, h2
+    font-family: "Cinzel", Georgia, serif
+    font-weight: 700
+    color: var(--text-strong)
+    margin: 0
+    display: flex
+    align-items: center
+    gap: var(--space-3)
+
+    i
+      color: var(--brass-300)
+      font-size: 1.5em
+
+  p
+    color: var(--text-soft)
+    margin: var(--space-2) 0 0 0
+
+.forum-actions
+  display: flex
+  gap: var(--space-2)
+
+// Breadcrumb Navigation
+.forum-breadcrumb
+  display: flex
+  align-items: center
+  gap: var(--space-2)
+  margin-bottom: var(--space-4)
+  padding: var(--space-3)
+  background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
+  border-radius: var(--radius-sm)
+  box-shadow: var(--shadow-wood)
+  font-size: 0.9rem
+
+  a
+    color: var(--text-soft)
+    text-decoration: none
+    transition: color var(--t-fast) var(--ease)
+
+    &:hover
+      color: var(--brass-300)
+
+  i
+    color: var(--brass-500)
+    font-size: 0.8em
+
+  span
+    color: var(--text-strong)
+    font-weight: 600
+
+// Category List
+.forum-categories
+  display: flex
+  flex-direction: column
+  gap: var(--space-3)
+
+.forum-category-item
+  background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
+  border-radius: var(--radius-md)
+  padding: var(--space-4)
+  box-shadow: var(--shadow-wood)
+  display: flex
+  align-items: center
+  gap: var(--space-4)
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease)
+  border: 2px solid var(--wood-700)
+
+  &:hover
+    transform: translateY(-2px)
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4), inset 0 1px 0 var(--bevel-light)
+
+  &::before
+    content: ""
+    position: absolute
+    inset: 6px
+    border-radius: calc(var(--radius-md) - 6px)
+    box-shadow: inset 0 2px 0 var(--bevel-light), inset 0 -2px 0 rgba(0,0,0,0.55)
+    pointer-events: none
+    z-index: 1
+
+.category-icon
+  font-size: 2rem
+  color: var(--brass-300)
+  min-width: 48px
+  text-align: center
+  z-index: 2
+
+.category-content
+  flex: 1
+  z-index: 2
+
+.category-header
+  h3
+    font-family: "Cinzel", Georgia, serif
+    font-size: 1.25rem
+    font-weight: 600
+    color: var(--text-strong)
+    margin: 0 0 var(--space-2) 0
+    display: flex
+    align-items: center
+    gap: var(--space-2)
+
+    a
+      color: var(--text-strong)
+      text-decoration: none
+      transition: color var(--t-fast) var(--ease)
+
+      &:hover
+        color: var(--brass-300)
+
+  .category-description
+    color: var(--text-soft)
+    font-size: 0.9rem
+    margin: var(--space-2) 0
+
+.category-stats
+  display: flex
+  gap: var(--space-4)
+  margin-top: var(--space-2)
+  font-size: 0.85rem
+  color: var(--text-dim)
+
+  i
+    color: var(--brass-400)
+    margin-right: var(--space-1)
+
+.category-last-activity
+  min-width: 200px
+  text-align: right
+  z-index: 2
+
+.category-last-post
+  font-size: 0.85rem
+  color: var(--text-soft)
+
+  .last-post-author
+    color: var(--text-strong)
+    font-weight: 600
+    display: block
+    margin-bottom: var(--space-1)
+
+  .last-post-time
+    color: var(--text-dim)
+    font-size: 0.8rem
+
+// Thread List
+.forum-threads
+  display: flex
+  flex-direction: column
+  gap: var(--space-2)
+
+.forum-thread-item
+  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+  border-radius: var(--radius-md)
+  padding: var(--space-4)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 8px rgba(0,0,0,0.15)
+  border: 2px solid rgba(0,0,0,0.1)
+  display: flex
+  align-items: center
+  gap: var(--space-4)
+  transition: all var(--t-fast) var(--ease)
+  color: var(--text-ink)
+
+  &:hover
+    transform: translateY(-1px)
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 12px rgba(0,0,0,0.2)
+    border-color: var(--brass-400)
+
+  &.thread-sticky
+    background: linear-gradient(180deg, var(--parchment-300), var(--parchment-500))
+    border-color: var(--brass-500)
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 8px rgba(0,0,0,0.2), 0 0 0 2px var(--brass-500)
+
+.thread-icon
+  font-size: 1.25rem
+  color: var(--brass-500)
+  min-width: 32px
+  text-align: center
+
+.thread-content
+  flex: 1
+
+  h4
+    font-family: "Cinzel", Georgia, serif
+    font-size: 1.1rem
+    font-weight: 600
+    color: var(--wood-900)
+    margin: 0 0 var(--space-2) 0
+
+    a
+      color: var(--wood-900)
+      text-decoration: none
+      transition: color var(--t-fast) var(--ease)
+
+      &:hover
+        color: var(--brass-600)
+
+.thread-meta
+  display: flex
+  gap: var(--space-4)
+  font-size: 0.85rem
+  color: var(--wood-700)
+
+  i
+    color: var(--brass-500)
+    margin-right: var(--space-1)
+
+.thread-stats
+  display: flex
+  gap: var(--space-3)
+
+.thread-activity
+  min-width: 180px
+  text-align: right
+
+.thread-last-post
+  font-size: 0.85rem
+  color: var(--wood-700)
+
+  .last-post-author
+    color: var(--wood-900)
+    font-weight: 600
+    display: block
+    margin-bottom: var(--space-1)
+
+  .last-post-time
+    color: var(--wood-600)
+    font-size: 0.8rem
+
+// Thread Header (in thread view)
+.forum-thread-header
+  background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
+  border-radius: var(--radius-md)
+  padding: var(--space-5)
+  box-shadow: var(--shadow-wood)
+  margin-bottom: var(--space-4)
+  border: 2px solid var(--wood-700)
+  display: flex
+  justify-content: space-between
+  align-items: flex-start
+  gap: var(--space-4)
+  flex-wrap: wrap
+
+.thread-title-section
+  flex: 1
+
+  h2
+    font-family: "Cinzel", Georgia, serif
+    font-size: 1.5rem
+    font-weight: 700
+    color: var(--text-strong)
+    margin: 0 0 var(--space-3) 0
+    display: flex
+    align-items: center
+    gap: var(--space-2)
+
+    i
+      color: var(--brass-300)
+      font-size: 1.2em
+
+.thread-actions
+  display: flex
+  gap: var(--space-2)
+  flex-wrap: wrap
+
+// Posts
+.forum-posts
+  display: flex
+  flex-direction: column
+  gap: var(--space-4)
+  margin-bottom: var(--space-6)
+
+.forum-post
+  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+  border-radius: var(--radius-md)
+  padding: var(--space-5)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 8px rgba(0,0,0,0.15)
+  border: 2px solid rgba(0,0,0,0.1)
+  color: var(--text-ink)
+  position: relative
+
+  &::before
+    content: ""
+    position: absolute
+    left: 0
+    top: 0
+    bottom: 0
+    width: 4px
+    background: linear-gradient(180deg, var(--brass-400), var(--brass-600))
+    border-radius: var(--radius-md) 0 0 var(--radius-md)
+
+.post-header
+  display: flex
+  justify-content: space-between
+  align-items: flex-start
+  margin-bottom: var(--space-4)
+  padding-bottom: var(--space-3)
+  border-bottom: 2px solid rgba(0,0,0,0.1)
+
+.post-author
+  display: flex
+  align-items: center
+  gap: var(--space-3)
+
+.author-avatar
+  width: 48px
+  height: 48px
+  border-radius: 50%
+  background: linear-gradient(180deg, var(--wood-400), var(--wood-600))
+  display: flex
+  align-items: center
+  justify-content: center
+  box-shadow: inset 0 1px 0 var(--bevel-light), 0 2px 4px rgba(0,0,0,0.2)
+
+  i
+    font-size: 1.5rem
+    color: var(--text-soft)
+
+.author-info
+  strong
+    font-family: "Cinzel", Georgia, serif
+    font-weight: 600
+    color: var(--wood-900)
+    display: block
+    margin-bottom: var(--space-1)
+
+.post-meta
+  display: flex
+  flex-direction: column
+  align-items: flex-end
+  gap: var(--space-1)
+  font-size: 0.85rem
+  color: var(--wood-700)
+
+.post-number
+  font-weight: 600
+  color: var(--brass-600)
+
+.post-date
+  color: var(--wood-600)
+
+.post-edited
+  font-size: 0.8rem
+  color: var(--wood-600)
+  font-style: italic
+
+  i
+    color: var(--brass-500)
+    margin-right: var(--space-1)
+
+.post-content
+  line-height: 1.6
+  color: var(--text-ink)
+  margin-bottom: var(--space-4)
+  font-family: "Lora", Georgia, serif
+
+  a
+    color: var(--brass-600)
+    text-decoration: underline
+
+    &:hover
+      color: var(--brass-500)
+
+.post-actions
+  display: flex
+  gap: var(--space-2)
+  flex-wrap: wrap
+
+// Reply Section
+.forum-reply-section
+  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+  border-radius: var(--radius-md)
+  padding: var(--space-5)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 8px rgba(0,0,0,0.15)
+  border: 2px solid rgba(0,0,0,0.1)
+  margin-top: var(--space-6)
+
+  h3
+    font-family: "Cinzel", Georgia, serif
+    font-size: 1.25rem
+    font-weight: 600
+    color: var(--wood-900)
+    margin: 0 0 var(--space-4) 0
+    display: flex
+    align-items: center
+    gap: var(--space-2)
+
+    i
+      color: var(--brass-500)
+
+  textarea
+    width: 100%
+    min-height: 200px
+    padding: var(--space-3)
+    border: 2px solid rgba(0,0,0,0.2)
+    border-radius: var(--radius-sm)
+    background: var(--parchment-100)
+    color: var(--text-ink)
+    font-family: "Lora", Georgia, serif
+    font-size: 1rem
+    line-height: 1.6
+    resize: vertical
+    transition: border-color var(--t-fast) var(--ease)
+
+    &:focus
+      outline: none
+      border-color: var(--brass-500)
+      box-shadow: 0 0 0 3px rgba(202, 162, 74, 0.1)
+
+// Pagination
+.forum-pagination
+  display: flex
+  justify-content: center
+  align-items: center
+  gap: var(--space-2)
+  margin: var(--space-6) 0
+  flex-wrap: wrap
+
+  .pagination-btn
+    min-width: 40px
+    height: 40px
+    padding: var(--space-2) var(--space-3)
+    border-radius: var(--radius-sm)
+
+    &.active
+      background: linear-gradient(180deg, var(--brass-400), var(--brass-600))
+      color: var(--text-strong)
+      box-shadow: inset 0 1px 0 var(--bevel-light), 0 2px 4px rgba(0,0,0,0.2)
+
+// Edit History Styles
+.edit-history-item
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-200))
+  border-radius: var(--radius-sm)
+  padding: var(--space-4)
+  margin-bottom: var(--space-4)
+  border: 1px solid var(--wood-500)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3)
+
+.edit-history-header
+  display: flex
+  justify-content: space-between
+  align-items: center
+  margin-bottom: var(--space-3)
+  padding-bottom: var(--space-2)
+  border-bottom: 1px solid var(--wood-400)
+
+  strong
+    color: var(--wood-900)
+    font-weight: 600
+
+.edit-history-meta
+  color: var(--wood-700)
+  font-size: 0.9rem
+
+.edit-history-reason
+  margin-bottom: var(--space-3)
+  padding: var(--space-2)
+  background: var(--parchment-50)
+  border-radius: var(--radius-sm)
+  font-style: italic
+  color: var(--wood-800)
+
+.edit-history-content
+  margin-top: var(--space-3)
+
+  strong
+    display: block
+    margin-bottom: var(--space-2)
+    color: var(--wood-900)
+
+.edit-history-text
+  background: var(--parchment-50)
+  padding: var(--space-3)
+  border-radius: var(--radius-sm)
+  border: 1px solid var(--wood-400)
+  white-space: pre-wrap
+  word-wrap: break-word
+  color: var(--text-ink)
+  line-height: 1.6
+
+.edit-history-info
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-200))
+  border-radius: var(--radius-sm)
+  padding: var(--space-4)
+  margin-bottom: var(--space-4)
+  border: 1px solid var(--wood-500)
+
+  p
+    margin: var(--space-2) 0
+    color: var(--wood-800)
+
+.edit-history-current
+  margin-bottom: var(--space-4)
+
+  h3
+    font-family: "Cinzel", Georgia, serif
+    color: var(--wood-900)
+    margin-bottom: var(--space-3)
+    padding-bottom: var(--space-2)
+    border-bottom: 2px solid var(--brass-500)
+
+.edit-history-list
+  h3
+    font-family: "Cinzel", Georgia, serif
+    color: var(--wood-900)
+    margin-bottom: var(--space-3)
+    padding-bottom: var(--space-2)
+    border-bottom: 2px solid var(--brass-500)
+
+// Search Results Styles
+.search-results-section
+  margin-bottom: var(--space-6)
+
+  h4
+    font-family: "Cinzel", Georgia, serif
+    color: var(--wood-900)
+    margin-bottom: var(--space-3)
+    padding-bottom: var(--space-2)
+    border-bottom: 2px solid var(--brass-500)
+    display: flex
+    align-items: center
+    gap: var(--space-2)
+
+    i
+      color: var(--brass-500)
+
+.search-result-item
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-200))
+  border-radius: var(--radius-sm)
+  padding: var(--space-4)
+  margin-bottom: var(--space-3)
+  border: 1px solid var(--wood-500)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3)
+  transition: all var(--t-fast) var(--ease)
+
+  &:hover
+    background: linear-gradient(180deg, var(--parchment-200), var(--parchment-300))
+    transform: translateY(-1px)
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15)
+
+  h5
+    margin: 0 0 var(--space-2) 0
+    font-family: "Cinzel", Georgia, serif
+    font-size: 1.1rem
+
+    a
+      color: var(--wood-900)
+      text-decoration: none
+      transition: color var(--t-fast) var(--ease)
+
+      &:hover
+        color: var(--brass-600)
+        text-decoration: underline
+
+.search-result-content
+  margin: var(--space-2) 0
+  color: var(--wood-800)
+  line-height: 1.6
+  font-size: 0.95rem
+
+.search-result-meta
+  display: flex
+  gap: var(--space-3)
+  flex-wrap: wrap
+  font-size: 0.875rem
+  color: var(--wood-700)
+  margin-top: var(--space-2)
+
+  span
+    display: flex
+    align-items: center
+    gap: var(--space-1)
+
+// Moderation Panel
+.forum-moderation-container
+  max-width: 1400px
+  margin: 0 auto
+  padding: var(--space-6)
+
+.moderation-header
+  margin-bottom: var(--space-6)
+
+  h1
+    font-family: "Cinzel", Georgia, serif
+    font-weight: 700
+    color: var(--text-strong)
+    margin: 0 0 var(--space-2) 0
+    display: flex
+    align-items: center
+    gap: var(--space-3)
+
+    i
+      color: var(--brass-300)
+
+.moderation-stats
+  display: grid
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))
+  gap: var(--space-4)
+  margin-bottom: var(--space-6)
+
+.moderation-sections
+  display: grid
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr))
+  gap: var(--space-6)
+
+.moderation-section
+  background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
+  border-radius: var(--radius-md)
+  padding: var(--space-5)
+  box-shadow: var(--shadow-wood)
+  border: 2px solid var(--wood-700)
+
+  .section-header
+    display: flex
+    justify-content: space-between
+    align-items: center
+    margin-bottom: var(--space-4)
+    padding-bottom: var(--space-3)
+    border-bottom: 2px solid var(--brass-500)
+
+  h2
+    font-family: "Cinzel", Georgia, serif
+    font-size: 1.25rem
+    font-weight: 600
+    color: var(--text-strong)
+    margin: 0
+    display: flex
+    align-items: center
+    gap: var(--space-2)
+
+    i
+      color: var(--brass-300)
+
+.moderation-list
+  display: flex
+  flex-direction: column
+  gap: var(--space-3)
+
+.moderation-item
+  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+  border-radius: var(--radius-sm)
+  padding: var(--space-4)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 4px rgba(0,0,0,0.1)
+  border: 1px solid rgba(0,0,0,0.1)
+  display: flex
+  justify-content: space-between
+  align-items: flex-start
+  gap: var(--space-4)
+  color: var(--text-ink)
+
+.item-content
+  flex: 1
+
+.item-header
+  display: flex
+  justify-content: space-between
+  align-items: center
+  margin-bottom: var(--space-2)
+
+  strong
+    font-family: "Cinzel", Georgia, serif
+    font-weight: 600
+    color: var(--wood-900)
+
+.item-meta
+  font-size: 0.85rem
+  color: var(--wood-600)
+
+.item-preview
+  color: var(--wood-700)
+  font-size: 0.9rem
+  margin: var(--space-2) 0
+  line-height: 1.5
+
+.item-context
+  font-size: 0.85rem
+  color: var(--wood-600)
+  margin-top: var(--space-2)
+
+  a
+    color: var(--brass-600)
+    text-decoration: none
+
+    &:hover
+      text-decoration: underline
+
+.item-stats
+  margin-left: var(--space-2)
+  color: var(--wood-500)
+
+.item-actions
+  display: flex
+  gap: var(--space-2)
+  flex-wrap: wrap
+
+// Badges
+.badge
+  display: inline-block
+  padding: var(--space-1) var(--space-2)
+  border-radius: var(--radius-xs)
+  font-size: 0.75rem
+  font-weight: 600
+  text-transform: uppercase
+  letter-spacing: 0.05em
+
+.badge-primary
+  background: linear-gradient(180deg, var(--brass-400), var(--brass-600))
+  color: var(--text-strong)
+
+.badge-warning
+  background: linear-gradient(180deg, #d4a574, #b8864f)
+  color: var(--text-strong)
+
+// Empty State
+.empty-state
+  text-align: center
+  padding: var(--space-8)
+  color: var(--text-dim)
+
+  i
+    font-size: 3rem
+    color: var(--wood-500)
+    margin-bottom: var(--space-4)
+    display: block
+
+  p
+    font-size: 1.1rem
+    margin-bottom: var(--space-4)
+
+// Responsive Design
+@media (max-width: 768px)
+  .forum-container
+    padding: var(--space-4)
+
+  .forum-header
+    flex-direction: column
+    align-items: flex-start
+
+  .forum-category-item
+    flex-direction: column
+    align-items: flex-start
+
+  .category-last-activity
+    width: 100%
+    text-align: left
+    margin-top: var(--space-2)
+
+  .forum-thread-item
+    flex-direction: column
+    align-items: flex-start
+
+  .thread-activity
+    width: 100%
+    text-align: left
+    margin-top: var(--space-2)
+
+  .forum-thread-header
+    flex-direction: column
+
+  .thread-actions
+    width: 100%
+    justify-content: flex-start
+
+  .moderation-sections
+    grid-template-columns: 1fr
+
+  .moderation-item
+    flex-direction: column
+
+  .item-actions
+    width: 100%
+    justify-content: flex-start

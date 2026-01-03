@@ -416,6 +416,96 @@ class Security {
     }
     
     /**
+     * Check if current user is a moderator
+     * 
+     * @return bool True if user is authenticated and is a moderator
+     */
+    public static function isModerator() {
+        if (!self::isAuthenticated()) {
+            return false;
+        }
+        
+        $userId = self::getCurrentUserId();
+        if (!$userId) {
+            return false;
+        }
+        
+        try {
+            require_once __DIR__ . '/database.php';
+            $db = getDB();
+            
+            $user = $db->selectOne(
+                "SELECT is_moderator FROM users WHERE user_id = ? AND is_active = 1",
+                [$userId]
+            );
+            
+            return $user && (bool) $user['is_moderator'];
+        } catch (Exception $e) {
+            error_log("Error checking moderator status: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Require moderator status
+     * Sends 403 Forbidden response if user is not a moderator
+     */
+    public static function requireModerator() {
+        if (!self::isModerator()) {
+            self::sendForbiddenResponse();
+        }
+    }
+    
+    /**
+     * Check if current user is banned
+     * 
+     * @return bool True if user is banned (and ban hasn't expired)
+     */
+    public static function isBanned() {
+        if (!self::isAuthenticated()) {
+            return false;
+        }
+        
+        $userId = self::getCurrentUserId();
+        if (!$userId) {
+            return false;
+        }
+        
+        try {
+            require_once __DIR__ . '/database.php';
+            $db = getDB();
+            
+            $user = $db->selectOne(
+                "SELECT is_banned, ban_expires_at FROM users WHERE user_id = ?",
+                [$userId]
+            );
+            
+            if (!$user || !$user['is_banned']) {
+                return false;
+            }
+            
+            // Check if ban has expired
+            if ($user['ban_expires_at']) {
+                $expiresAt = new DateTime($user['ban_expires_at']);
+                $now = new DateTime();
+                if ($expiresAt < $now) {
+                    // Ban expired, update user record
+                    $db->execute(
+                        "UPDATE users SET is_banned = FALSE, ban_expires_at = NULL WHERE user_id = ?",
+                        [$userId]
+                    );
+                    return false;
+                }
+            }
+            
+            return true;
+        } catch (Exception $e) {
+            error_log("Error checking ban status: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
      * Rate limiting
      */
     public static function checkRateLimit($key, $maxAttempts = 10, $windowSeconds = 300) {

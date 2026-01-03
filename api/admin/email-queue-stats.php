@@ -58,3 +58,4 @@ try {
     error_log('Email queue stats error: ' . $e->getMessage());
     Security::sendErrorResponse('An error occurred while retrieving queue statistics', 500);
 }
+

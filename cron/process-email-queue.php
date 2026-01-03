@@ -198,3 +198,4 @@ try {
     error_log("Email queue processor error: {$errorMessage}");
     exit(1);
 }
+

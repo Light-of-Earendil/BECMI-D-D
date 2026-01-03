@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -35,6 +35,7 @@
                         <li><a href="#" data-view="sessions" class="nav-link">Sessions</a></li>
                         <li><a href="#" data-view="calendar" class="nav-link">Calendar</a></li>
                         <li><a href="#" data-view="hex-maps" class="nav-link">Hex Maps</a></li>
+                        <li><a href="#" data-view="forum" class="nav-link">Forum</a></li>
                     </ul>
                 </nav>
                 <div class="user-menu">
@@ -43,6 +44,12 @@
                         <i class="fas fa-user-circle"></i>
                     </div>
                     <div class="user-dropdown">
+                        <a href="#" id="edit-profile-link">
+                            <i class="fas fa-user-edit"></i> Edit Profile
+                        </a>
+                        <a href="#" id="moderation-panel-link" style="display: none;">
+                            <i class="fas fa-shield-alt"></i> Moderation Panel
+                        </a>
                         <a href="#" id="logout-btn">Logout</a>
                     </div>
                 </div>
@@ -322,6 +329,9 @@
     <script src="js/modules/equipment.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/hex-map-editor.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/hex-map-play.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/forum.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/forum-thread.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/forum-moderation.js?t=<?php echo time(); ?>"></script>
     <script src="js/main.js?t=<?php echo time(); ?>"></script>
 </body>
 </html>

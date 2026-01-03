@@ -32,3 +32,4 @@ CREATE TABLE IF NOT EXISTS email_queue (
 ALTER TABLE email_queue 
 MODIFY COLUMN queue_id INT AUTO_INCREMENT PRIMARY KEY 
 COMMENT 'Email queue for asynchronous email sending';
+

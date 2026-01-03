@@ -23,6 +23,7 @@ This system provides a complete virtual tabletop experience for BECMI D&D campai
 - **Real-Time Updates**: Live HP, XP, and inventory updates across all session participants
 - **Notifications**: Browser push notifications and email reminders
 - **Video Conferencing**: Google Meet integration for remote sessions
+- **Forum**: Community discussion platform with categories, threads, and posts
 
 ### For Dungeon Masters:
 - **Session Management**: Create, schedule, and manage game sessions
@@ -94,6 +95,7 @@ BECMI VTT/
 │   ├── hex-maps/            # Hex map CRUD, tiles, markers, fog of war
 │   ├── realtime/            # Long-polling endpoint
 │   ├── skills/              # General skills system
+│   ├── forum/               # Forum system (categories, threads, posts, moderation, search)
 │   └── user/                # User preferences, search
 │
 ├── app/                      # Application logic
@@ -247,6 +249,18 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 - ✅ DM dashboard video call access
 - ✅ Link generation helper
 
+### Forum System (100% Complete)
+- ✅ Category management (create, edit, delete)
+- ✅ Thread management (create, edit, delete, lock, sticky, move, merge)
+- ✅ Post management (create, edit, delete)
+- ✅ Edit history tracking for posts
+- ✅ Thread subscriptions
+- ✅ Search functionality (threads and posts)
+- ✅ Moderation tools (ban users, moderation queue)
+- ✅ Private categories and threads
+- ✅ User profile editing
+- ✅ BBforums-inspired wood/parchment theme
+
 ### UI/UX (100% Complete)
 - ✅ Professional styling (modular Stylus architecture)
 - ✅ Responsive design
@@ -271,6 +285,8 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 - **[Installation Guide](docs/INSTALLATION.md)** - Detailed setup instructions
 - **[Character Creation System](docs/CHARACTER_CREATION_SYSTEM.md)** - Character creation process
 - **[Hex Maps System](docs/HEX_MAPS_SYSTEM.md)** - Hex map editor documentation
+- **[Forum System](docs/FORUM_SYSTEM.md)** - Complete forum system documentation
+- **[Forum Category Management](docs/FORUM_CATEGORY_MANAGEMENT.md)** - Category management guide
 - **[Email Queue System](docs/EMAIL_QUEUE_SYSTEM.md)** - Email queue documentation
 - **[Function Documentation](docs/FUNCTION_DOCUMENTATION.md)** - Complete API and function reference
 - **[Implementation Status](FINAL_IMPLEMENTATION_STATUS.md)** - Detailed feature status
@@ -308,6 +324,15 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 - Terrain tiles, markers, and fog of war
 - Player movement and visibility
 - Campaign map management
+
+### Forum System
+- Community discussion platform
+- Categories, threads, and posts
+- Advanced moderation tools
+- Search functionality
+- Edit history tracking
+- Thread subscriptions
+- Private forums for moderators
 
 ---
 
@@ -441,3 +466,16 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - Automatic retry mechanism
 - Queue statistics API endpoint
 - Cleanup script for old emails
+
+### Forum System ⭐ NEW
+- Complete forum system with categories, threads, and posts
+- Advanced moderation tools (ban users, moderation queue, category management)
+- Edit history tracking for all post edits
+- Search functionality across threads and posts
+- Thread subscriptions for notifications
+- Private categories and threads (moderator-only)
+- User profile editing (username, email, name)
+- BBforums-inspired wood/parchment theme integration
+- Full CRUD API endpoints (25+ endpoints)
+- Frontend modules: forum.js, forum-thread.js, forum-moderation.js
+- Complete documentation in `docs/FORUM_SYSTEM.md`

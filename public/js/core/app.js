@@ -86,6 +86,9 @@ class BECMIApp {
         this.modules.notifications = new NotificationsModule(this);
         this.modules.hexMapEditor = new HexMapEditorModule(this);
         this.modules.hexMapPlay = new HexMapPlayModule(this);
+        this.modules.forum = new ForumModule(this);
+        this.modules.forumThread = new ForumThreadModule(this);
+        this.modules.forumModeration = new ForumModerationModule(this);
         
         // Initialize all modules
         Object.values(this.modules).forEach(module => {
@@ -216,6 +219,22 @@ class BECMIApp {
         $(document).on('click', '#logout-btn', (e) => {
             e.preventDefault();
             this.logout();
+        });
+        
+        // Edit profile link
+        $(document).on('click', '#edit-profile-link', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            $('.user-dropdown').hide();
+            this.showEditProfileModal();
+        });
+        
+        // Moderation panel link
+        $(document).on('click', '#moderation-panel-link', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            $('.user-dropdown').hide();
+            this.navigateToView('forum-moderation');
         });
         
         // Close dropdowns when clicking outside - but not when modals are open
@@ -427,6 +446,12 @@ class BECMIApp {
                     content = await this.modules.hexMapEditor.renderEditor();
                     this.modules.hexMapEditor.setupEventListeners();
                     break;
+                case 'forum':
+                    content = await this.modules.forum.render();
+                    break;
+                case 'forum-moderation':
+                    content = await this.modules.forumModeration.render();
+                    break;
                 default:
                     content = '<div class="card"><h2>View not found</h2><p>The requested view could not be loaded.</p></div>';
             }
@@ -450,6 +475,27 @@ class BECMIApp {
             $('#user-name').text(this.state.user.username);
             $('#app').addClass('loaded');
             $('.modal').removeClass('show');
+            
+            // Check if user is moderator and show/hide moderation panel link
+            this.checkModeratorStatus();
+        }
+    }
+    
+    /**
+     * Check if user is moderator and show/hide moderation panel link
+     */
+    async checkModeratorStatus() {
+        try {
+            // Try to access moderation queue - if successful, user is moderator
+            const response = await this.modules.apiClient.get('/api/forum/moderation/queue.php');
+            if (response.status === 'success') {
+                $('#moderation-panel-link').show();
+            } else {
+                $('#moderation-panel-link').hide();
+            }
+        } catch (error) {
+            // User is not a moderator or error occurred
+            $('#moderation-panel-link').hide();
         }
     }
     
@@ -459,6 +505,169 @@ class BECMIApp {
     showLoginModal() {
         $('#app').removeClass('loaded');
         $('#login-modal').addClass('show');
+    }
+    
+    /**
+     * Show edit profile modal
+     */
+    async showEditProfileModal() {
+        try {
+            // Load current profile
+            const response = await this.modules.apiClient.get('/api/user/profile.php');
+            
+            if (response.status !== 'success') {
+                throw new Error(response.message || 'Failed to load profile');
+            }
+            
+            const profile = response.data.profile;
+            
+            // Create modal HTML
+            const modalHtml = `
+                <div class="modal show" id="edit-profile-modal" style="display: flex;">
+                    <div class="modal-content" style="max-width: 500px;">
+                        <div class="modal-header">
+                            <h2><i class="fas fa-user-edit"></i> Edit Profile</h2>
+                            <button type="button" class="close" id="close-edit-profile-modal">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="modal__inner">
+                            <form id="edit-profile-form">
+                                <div class="form-group">
+                                    <label for="profile-username">Username *</label>
+                                    <input type="text" id="profile-username" name="username" 
+                                        value="${this.escapeHtml(profile.username || '')}" 
+                                        required maxlength="50">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="profile-email">Email *</label>
+                                    <input type="email" id="profile-email" name="email" 
+                                        value="${this.escapeHtml(profile.email || '')}" 
+                                        required maxlength="100">
+                                </div>
+                                
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="profile-first-name">First Name</label>
+                                        <input type="text" id="profile-first-name" name="first_name" 
+                                            value="${this.escapeHtml(profile.first_name || '')}" 
+                                            maxlength="50">
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label for="profile-last-name">Last Name</label>
+                                        <input type="text" id="profile-last-name" name="last_name" 
+                                            value="${this.escapeHtml(profile.last_name || '')}" 
+                                            maxlength="50">
+                                    </div>
+                                </div>
+                                
+                                <div class="form-actions">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-save"></i> Save Changes
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" id="cancel-edit-profile-modal">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Remove existing modal if any
+            $('#edit-profile-modal').remove();
+            
+            // Add modal to page
+            $('body').append(modalHtml);
+            
+            // Setup event handlers
+            $('#close-edit-profile-modal, #cancel-edit-profile-modal').on('click', () => {
+                $('#edit-profile-modal').remove();
+            });
+            
+            $('#edit-profile-form').on('submit', async (e) => {
+                e.preventDefault();
+                await this.handleProfileUpdate();
+            });
+            
+            // Close on background click
+            $('#edit-profile-modal').on('click', (e) => {
+                if (e.target === e.currentTarget) {
+                    $('#edit-profile-modal').remove();
+                }
+            });
+            
+        } catch (error) {
+            console.error('Failed to show edit profile modal:', error);
+            this.showError('Failed to load profile: ' + error.message);
+        }
+    }
+    
+    /**
+     * Handle profile form submission
+     */
+    async handleProfileUpdate() {
+        try {
+            const username = $('#profile-username').val().trim();
+            const email = $('#profile-email').val().trim();
+            const firstName = $('#profile-first-name').val().trim();
+            const lastName = $('#profile-last-name').val().trim();
+            
+            if (!username) {
+                this.showError('Username is required');
+                return;
+            }
+            
+            if (!email) {
+                this.showError('Email is required');
+                return;
+            }
+            
+            const response = await this.modules.apiClient.put('/api/user/profile.php', {
+                username: username,
+                email: email,
+                first_name: firstName || null,
+                last_name: lastName || null
+            });
+            
+            if (response.status === 'success') {
+                this.showSuccess('Profile updated successfully');
+                
+                // Update user state
+                this.state.user = {
+                    ...this.state.user,
+                    username: response.data.profile.username,
+                    email: response.data.profile.email,
+                    first_name: response.data.profile.first_name,
+                    last_name: response.data.profile.last_name
+                };
+                
+                // Update UI
+                this.updateUserInterface();
+                
+                // Close modal
+                $('#edit-profile-modal').remove();
+            } else {
+                throw new Error(response.message || 'Failed to update profile');
+            }
+            
+        } catch (error) {
+            console.error('Profile update error:', error);
+            this.showError('Failed to update profile: ' + error.message);
+        }
+    }
+    
+    /**
+     * Escape HTML to prevent XSS
+     */
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
     
     /**
