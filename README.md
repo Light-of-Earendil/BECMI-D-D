@@ -358,7 +358,7 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 - Character portrait uploads
 - WebRTC-based video conferencing (alternative to Google Meet)
 
-See [FEJL_OG_MANGLER.md](FEJL_OG_MANGLER.md) for detailed issue tracking.
+See [ISSUES.md](ISSUES.md) for detailed issue tracking.
 
 ---
 
@@ -381,7 +381,7 @@ This project is **open source** with hosting restrictions. See [LICENSE](LICENSE
 ### Getting Help
 - Check the documentation in `/docs/`
 - Review error logs and browser console
-- Check [FEJL_OG_MANGLER.md](FEJL_OG_MANGLER.md) for known issues
+- Check [ISSUES.md](ISSUES.md) for known issues
 - Open an issue on GitHub for bugs or questions
 
 ### Contributing
