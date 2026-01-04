@@ -47,9 +47,9 @@
 
 // Header
 .app-header
-  background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
+  gradient-wood()
   color: var(--text-strong)
-  box-shadow: var(--shadow-wood)
+  shadow-wood()
   position: sticky
   top: 0
   z-index: 100
@@ -63,18 +63,13 @@
   margin: 50px 0
 
 .header-content
-  max-width: 1280px
-  margin: 0 auto
-  padding: 0
-  display: flex
-  align-items: center
-  justify-content: space-between
+  container-base(1280px, 0)
+  flex-between()
   gap: var(--space-6)
   max-height: 60px
 
 .logo
-  display: flex
-  align-items: center
+  flex-row(center, flex-start)
   gap: var(--space-3)
   height: 50px
   padding-top: 10px
@@ -86,50 +81,32 @@
 
   h1,
   .brand
-    font-family: "Cinzel", Georgia, serif
+    heading-base()
     font-size: 1.5rem
     font-weight: 700
     letter-spacing: 0.02em
     color: var(--text-strong)
-    text-shadow: 0 2px 4px rgba(0,0,0,0.5)
+    text-shadow-strong()
 
 .main-nav ul
-  display: flex
-  list-style: none
-  gap: var(--space-2)
-  margin: 0
-  padding: 0
+  nav-base()
 
 .nav-link
-  color: var(--text-soft)
-  text-decoration: none
-  padding: var(--space-2) var(--space-3)
-  border-radius: var(--radius-md)
-  transition: all var(--t-fast) var(--ease)
-  font-weight: 500
-  position: relative
-
-  &:hover
-    background-color: rgba(202, 162, 74, 0.15)
-    color: var(--text-strong)
-    transform: translateY(-1px)
+  nav-link-base()
 
   &.active
-    background: linear-gradient(180deg, var(--parchment-300), var(--parchment-500))
-    color: var(--wood-900)
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.5)
+    nav-link-active()
 
 .user-menu
   position: relative
   cursor: pointer
 
 .user-info
-  display: flex
-  align-items: center
+  flex-row(center, flex-start)
   gap: var(--space-2)
   padding: var(--space-2) var(--space-3)
   border-radius: var(--radius-md)
-  transition: background-color var(--t-fast) var(--ease)
+  transition-color()
 
   &:hover
     background-color: rgba(202, 162, 74, 0.15)
@@ -139,30 +116,10 @@
     color: var(--brass-300)
 
 .user-dropdown
-  position: absolute
-  top: 100%
-  right: 0
-  margin-top: var(--space-2)
-  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
-  color: var(--text-ink)
-  border-radius: var(--radius-md)
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5)
-  padding: var(--space-2)
-  min-width: 150px
-  display: none
-  border: 1px solid rgba(0,0,0,0.3)
-  z-index: 1000
+  dropdown-menu()
 
   a
-    display: block
-    padding: var(--space-2) var(--space-3)
-    color: var(--text-ink)
-    text-decoration: none
-    border-radius: var(--radius-sm)
-    transition: background-color var(--t-fast) var(--ease)
-    display: flex
-    align-items: center
-    gap: var(--space-2)
+    dropdown-item()
 
     i
       width: 16px
@@ -199,12 +156,12 @@
   margin-bottom: var(--space-6)
 
   h2
-    font-family: "Cinzel", Georgia, serif
+    heading-base()
     font-size: 2rem
     font-weight: 700
     color: var(--text-strong)
     margin-bottom: var(--space-2)
-    text-shadow: 0 2px 4px rgba(0,0,0,0.5)
+    text-shadow-strong()
 
   p
     color: var(--text-soft)
@@ -212,28 +169,18 @@
 
 // Footer
 .app-footer
-  background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
+  gradient-wood()
   color: var(--text-soft)
   text-align: center
   padding: var(--space-4)
   margin-top: auto
   border-top: 2px solid var(--wood-900)
-  box-shadow: inset 0 2px 0 var(--bevel-light), 0 -4px 10px rgba(0,0,0,0.3)
+  bevel-inset()
+  shadow-drop(4px, 10px, 0.3)
 
 // Modal System
 .modal
-  position: fixed
-  top: 0
-  left: 0
-  width: 100%
-  height: 100%
-  background-color: rgba(0, 0, 0, 0.6)
-  display: none
-  align-items: center
-  justify-content: center
-  z-index: var(--z-modal)
-  padding: var(--space-4)
-  box-sizing: border-box
+  modal-base()
 
   &.show
     display: flex
@@ -251,19 +198,7 @@
     display: grid
 
 .modal-content
-  background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
-  border-radius: var(--radius-lg)
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2)
-  border: 1px solid rgba(0,0,0,0.6)
-  max-width: 500px
-  width: 90%
-  max-height: 90vh
-  overflow: hidden
-  position: relative
-  z-index: calc(var(--z-modal) + 1)
-  pointer-events: auto
-  display: flex
-  flex-direction: column
+  modal-content()
 
   &.character-creation
     max-width: 800px

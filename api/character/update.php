@@ -54,7 +54,7 @@ try {
     
     // Get existing character
     $existingCharacter = $db->selectOne(
-        "SELECT * FROM characters WHERE character_id = ? AND is_active = 1",
+        "SELECT character_id, user_id, session_id, character_name, class, level, experience_points, current_hp, max_hp, strength, dexterity, constitution, intelligence, wisdom, charisma, armor_class, thac0_melee, thac0_ranged, movement_rate_normal, movement_rate_encounter, encumbrance_status, save_death_ray, save_magic_wand, save_paralysis, save_dragon_breath, save_spells, alignment, age, height, weight, hair_color, eye_color, gold_pieces, silver_pieces, copper_pieces, is_active, created_at, updated_at, gender, portrait_url, personality, background, ability_adjustments, original_strength, original_dexterity, original_constitution, original_intelligence, original_wisdom, original_charisma FROM characters WHERE character_id = ? AND is_active = 1",
         [$characterId]
     );
     
@@ -338,7 +338,7 @@ try {
         
         // Get updated character
         $updatedCharacter = $db->selectOne(
-            "SELECT * FROM characters WHERE character_id = ?",
+            "SELECT character_id, user_id, session_id, character_name, class, level, experience_points, current_hp, max_hp, strength, dexterity, constitution, intelligence, wisdom, charisma, armor_class, thac0_melee, thac0_ranged, movement_rate_normal, movement_rate_encounter, encumbrance_status, save_death_ray, save_magic_wand, save_paralysis, save_dragon_breath, save_spells, alignment, age, height, weight, hair_color, eye_color, gold_pieces, silver_pieces, copper_pieces, is_active, created_at, updated_at, gender, portrait_url, personality, background, ability_adjustments, original_strength, original_dexterity, original_constitution, original_intelligence, original_wisdom, original_charisma FROM characters WHERE character_id = ?",
             [$characterId]
         );
         

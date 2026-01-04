@@ -663,6 +663,7 @@ class SessionManagementModule {
                          this.currentSession.dm_user_id == this.app.state.user.user_id);
             
             // If DM, check if they prefer to go directly to DM Dashboard
+            // This preference is set the first time they click "DM Dashboard" button
             if (isDM) {
                 try {
                     const prefsResponse = await this.apiClient.get('/api/user/notification-preferences.php');
@@ -672,6 +673,8 @@ class SessionManagementModule {
                         console.log('[Session Management] DM has prefer_dm_dashboard enabled, redirecting to DM Dashboard');
                         await this.viewDMDashboard(sessionId);
                         return;
+                    } else {
+                        console.log('[Session Management] DM has not set prefer_dm_dashboard yet, showing normal session view');
                     }
                 } catch (error) {
                     console.warn('[Session Management] Failed to check DM preferences, continuing with normal view:', error);

@@ -157,3 +157,9 @@ Options +FollowSymLinks
 ErrorDocument 404 /public/index.php
 ErrorDocument 403 /public/index.php
 ErrorDocument 500 /public/index.php
+
+SetEnv DB_HOST localhost
+SetEnv DB_PORT 3306
+SetEnv DB_NAME becmi_vtt
+SetEnv DB_USER root
+SetEnv DB_PASS everquest

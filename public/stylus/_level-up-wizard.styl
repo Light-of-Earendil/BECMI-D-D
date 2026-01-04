@@ -1,0 +1,649 @@
+// ==========================================================================
+// Level Up Wizard - Premium BECMI Design
+// ==========================================================================
+
+#levelUpWizardModal
+  .modal-content
+    max-width: 950px
+    background: var(--parchment-200)
+    border: 3px solid var(--wood-700)
+    shadow-drop(8px, 24px, 0.4)
+    overflow: hidden
+    position: relative
+
+    &::before
+      content: ''
+      position: absolute
+      top: 0
+      left: 0
+      right: 0
+      height: 3px
+      background: var(--brass-500)
+      z-index: 10
+
+  .modal-header
+    modal-header()
+
+    .modal-title
+      heading-base()
+      font-size: 2rem
+      font-weight: 700
+      text-on-dark()
+      margin: 0
+      flex-row(center, flex-start)
+      gap: var(--space-4)
+      letter-spacing: 0.02em
+
+      i
+        color: var(--brass-400)
+        font-size: 1.75rem
+
+    .close
+      text-on-dark()
+      opacity: 0.9
+      font-size: 1.5rem
+      transition-all()
+
+      &:hover
+        opacity: 1
+        color: var(--brass-200)
+        transform: scale(1.1)
+
+  .modal-body
+    modal-body()
+    scrollbar-custom()
+
+// Animations - now defined in _mixins.styl
+
+// Wizard Progress Bar
+.wizard-progress
+  margin-bottom: var(--space-7)
+  padding: var(--space-5) var(--space-4)
+  card-light(2px)
+  animation-slide-in(0.4s)
+
+.wizard-steps
+  flex-between()
+  margin-bottom: var(--space-5)
+  position: relative
+  padding: var(--space-3) var(--space-2)
+
+  &::before
+    content: ''
+    position: absolute
+    top: 50%
+    left: 5%
+    right: 5%
+    height: 3px
+    background: var(--wood-600)
+    border-radius: 2px
+    z-index: 0
+
+.wizard-step
+  position: relative
+  z-index: 1
+  flex-column(center, flex-start)
+  gap: var(--space-2)
+  flex: 1
+  max-width: 120px
+
+  .step-number
+    badge-circle(56px, var(--wood-600), var(--wood-700))
+    font-family: "Cinzel", Georgia, serif
+    font-size: 1.5rem
+    font-weight: 700
+    color: var(--text-soft)
+    position: relative
+    z-index: 2
+
+  .step-label
+    font-size: 0.75rem
+    text-on-light()
+    text-align: center
+    font-weight: 600
+    text-transform: uppercase
+    letter-spacing: 0.05em
+
+  &.active
+    .step-number
+      background: var(--brass-500)
+      border-color: var(--brass-600)
+      color: var(--wood-900)
+      shadow-inset(2px, 4px, 0.2)
+      shadow-glow(#9c7c38, 16px, 0.5) // --brass-500
+      transform: scale(1.1)
+
+    .step-label
+      color: var(--brass-600)
+      font-weight: 700
+
+  &.complete
+    .step-number
+      background: var(--parchment-400)
+      border-color: var(--wood-600)
+      color: var(--wood-800)
+
+      i
+        color: var(--wood-800)
+        font-size: 1.1rem
+
+    .step-label
+      color: var(--wood-800)
+
+.wizard-progress-bar
+  height: 6px
+  background: var(--wood-600)
+  border-radius: 3px
+  overflow: hidden
+  shadow-inset(2px, 4px, 0.3)
+
+.wizard-progress-fill
+  height: 100%
+  background: var(--brass-500)
+  border-radius: 3px
+  transition: width 0.6s var(--ease)
+
+// Wizard Content
+.wizard-content
+  min-height: 400px
+
+.wizard-step-content
+  text-align: center
+  padding: var(--space-5)
+
+  .step-icon
+    margin-bottom: var(--space-4)
+
+  i
+    color: var(--brass-500)
+
+  h3
+    font-family: "Cinzel", Georgia, serif
+    font-size: 2rem
+    font-weight: 700
+    text-on-light()
+    margin-bottom: var(--space-5)
+
+// XP Check Step
+.xp-status
+  grid-auto-fit(220px, var(--space-5))
+  margin-bottom: var(--space-6)
+  padding: var(--space-6)
+  card-dark()
+  position: relative
+  animation-slide-in(0.5s)
+
+  > div
+    text-align: center
+    padding: var(--space-3)
+
+    .label
+      display: block
+      font-size: 0.875rem
+      text-on-dark()
+      margin-bottom: var(--space-2)
+      text-transform: uppercase
+      letter-spacing: 0.05em
+      font-weight: 600
+
+    .value
+      display: block
+      value-display(2rem, var(--brass-300))
+
+  .xp-level
+    grid-column: 1 / -1
+    flex-center()
+    gap: var(--space-5)
+    padding: var(--space-5)
+    card-light(3px)
+    position: relative
+    z-index: 1
+    text-on-light()
+    font-weight: 600
+
+    .label
+      text-on-light()
+      font-weight: 700
+      font-size: 1rem
+
+    i
+      text-on-light()
+      font-size: 1.5rem
+
+    .level-badge
+      badge-circle(72px, var(--brass-400), var(--wood-700))
+      font-family: "Cinzel", Georgia, serif
+      font-size: 2.75rem
+      font-weight: 700
+      text-on-light()
+
+    .level-next
+      background: var(--brass-500)
+      shadow-inset(2px, 4px, 0.2)
+      shadow-glow(#9c7c38, 16px, 0.4) // --brass-500
+      transform: scale(1.1)
+
+    i
+      color: var(--brass-500)
+      font-size: 1.5rem
+
+.xp-progress
+  margin: var(--space-6) 0
+  padding: var(--space-4)
+  card-light()
+
+  .xp-progress-bar
+    height: 32px
+    background: var(--wood-600)
+    border-radius: 16px
+    overflow: hidden
+    border: 3px solid var(--wood-700)
+    shadow-inset(2px, 4px, 0.3)
+    margin-bottom: var(--space-4)
+    position: relative
+
+  .xp-progress-fill
+    height: 100%
+    background: var(--brass-500)
+    border-radius: 13px
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1)
+
+    &.ready
+      background: #22c55e
+      shadow-glow(#22c55e, 16px, 0.5)
+
+  .xp-progress-text
+    text-align: center
+    font-weight: 700
+    text-on-light()
+    font-size: 1rem
+
+    i
+      margin-right: var(--space-2)
+      color: inherit
+
+.level-up-benefits
+  margin-top: var(--space-7)
+  padding: var(--space-6)
+  card-light(3px)
+  animation-slide-in(0.6s)
+
+  h4
+    heading-section()
+
+  ul
+    list-unstyled()
+    grid-auto-fit(250px, var(--space-3))
+
+    li
+      padding: var(--space-4)
+      card-dark(2px)
+      flex-row(center, flex-start)
+      gap: var(--space-4)
+      text-on-dark()
+      font-weight: 600
+      transition-all()
+
+      &:hover
+        border-color: var(--brass-500)
+
+      i
+        color: var(--brass-400)
+        font-size: 1.25rem
+        width: 24px
+        text-align: center
+
+// Modal Footer
+.modal-footer
+  modal-footer()
+
+  .btn
+    button-base()
+    font-family: "Cinzel", Georgia, serif
+    font-weight: 600
+    padding: var(--space-3) var(--space-5)
+    border-radius: var(--radius-md)
+    border: 2px solid
+    transition-all()
+
+    i
+      font-size: 1rem
+
+    &.btn-primary
+      button-variant(var(--brass-500), var(--wood-900))
+      border-color: var(--brass-600)
+      shadow-drop(2px, 8px, 0.3)
+
+      &:hover:not(:disabled)
+        button-hover()
+        background: var(--brass-600)
+        transform: translateY(-2px)
+        shadow-drop(4px, 12px, 0.4)
+
+      &:active:not(:disabled)
+        transform: translateY(0)
+
+    &.btn-secondary
+      button-variant(var(--wood-600), var(--text-soft))
+      border-color: var(--wood-700)
+      text-on-dark()
+      shadow-inset(2px, 4px, 0.3)
+
+      &:hover:not(:disabled)
+        button-hover()
+        background: var(--wood-700)
+        transform: translateY(-2px)
+
+      &:disabled
+        button-disabled()
+
+// Responsive
+@media (max-width: 768px)
+  #levelUpWizardModal
+    .modal-content
+      max-width: 95%
+
+    .modal-body
+      padding: var(--space-4)
+      max-height: 60vh
+
+  .wizard-steps
+    flex-wrap: wrap
+    gap: var(--space-2)
+
+    .wizard-step
+      max-width: 80px
+
+      .step-label
+        font-size: 0.65rem
+
+  .xp-status
+    grid-template-columns: 1fr
+
+  .level-up-benefits ul
+    grid-template-columns: 1fr
+
+// HP Roll Step
+.hp-roll-result
+  margin: var(--space-6) 0
+  animation-slide-in(0.5s)
+
+.dice-display
+  flex-column(center, flex-start)
+  gap: var(--space-4)
+  padding: var(--space-6)
+  card-dark()
+  margin-bottom: var(--space-5)
+
+.die-roll
+  flex-column(center, flex-start)
+  gap: var(--space-2)
+
+  i
+    font-size: 4rem
+    color: var(--brass-400)
+
+  .roll-formula
+    font-family: "Cinzel", Georgia, serif
+    font-size: 1.25rem
+    text-on-dark()
+    font-weight: 600
+
+.roll-result
+  flex-column(center, flex-start)
+  gap: var(--space-2)
+  padding: var(--space-4)
+  card-light()
+  min-width: 200px
+
+  .result-label
+    font-size: 0.875rem
+    text-on-light()
+    text-transform: uppercase
+    letter-spacing: 0.05em
+    font-weight: 700
+
+  .result-value
+    value-display(3rem)
+
+.hp-summary
+  margin: var(--space-6) 0
+
+.hp-comparison
+  flex-center()
+  gap: var(--space-6)
+  padding: var(--space-5)
+  card-light(3px)
+
+  > div
+    text-align: center
+    padding: var(--space-4)
+    min-width: 150px
+
+  .hp-label
+    display: block
+    font-size: 0.875rem
+    text-on-light()
+    margin-bottom: var(--space-2)
+    text-transform: uppercase
+    letter-spacing: 0.05em
+    font-weight: 700
+
+  .hp-value
+    display: block
+    value-display(2.5rem, var(--wood-800))
+
+    &.highlight
+      color: var(--brass-500)
+
+  i
+    color: var(--brass-500)
+    font-size: 2rem
+
+.hp-reroll
+  margin-top: var(--space-5)
+  padding: var(--space-4)
+  card-dark(2px)
+  text-align: center
+
+  .help-text
+    text-on-dark()
+    font-size: 0.875rem
+    margin: var(--space-3) 0
+
+  input
+    max-width: 150px
+    margin: 0 auto var(--space-3)
+
+// Class Features Step
+.combat-stats-improvement
+  margin: var(--space-6) 0
+  padding: var(--space-6)
+  card-dark()
+  animation-slide-in(0.5s)
+
+  h4
+    heading-section()
+    text-on-dark()
+
+  text-on-dark()
+
+.stat-comparison-grid
+  grid-auto-fit(200px, var(--space-4))
+  margin-bottom: var(--space-5)
+
+.stat-comparison
+  padding: var(--space-4)
+  card-light()
+  flex-between()
+  gap: var(--space-3)
+
+  .stat-label
+    font-weight: 700
+    text-on-light()
+    font-size: 0.875rem
+
+  .old-value,
+  .new-value
+    value-display()
+
+  .old-value
+    color: var(--wood-900)
+
+  .new-value
+    color: var(--brass-500)
+
+  i
+    color: var(--brass-500)
+    font-size: 1.25rem
+
+  .improvement
+    color: #22c55e
+    margin-left: var(--space-2)
+
+.saves-grid
+  grid-auto-fit(180px, var(--space-3))
+  margin-top: var(--space-4)
+
+.save-comparison
+  padding: var(--space-3)
+  card-light()
+  flex-between()
+  gap: var(--space-2)
+  font-size: 0.875rem
+
+  .save-label
+    font-weight: 600
+    color: var(--wood-800)
+
+  .old-value,
+  .new-value
+    font-family: "VT323", monospace
+    font-weight: 700
+
+  .old-value
+    color: var(--wood-900)
+
+  .new-value
+    color: var(--brass-500)
+
+  .improvement
+    color: #22c55e
+
+// Spells Step
+.new-spell-slots
+  margin: var(--space-6) 0
+  padding: var(--space-5)
+  card-dark()
+
+  h4
+    heading-section()
+    text-on-dark()
+
+.spell-slots-comparison
+  grid-auto-fit(150px, var(--space-3))
+
+.slot-comparison
+  padding: var(--space-3)
+  card-light()
+  text-align: center
+
+  .slot-label
+    display: block
+    font-weight: 600
+    color: var(--wood-800)
+    margin-bottom: var(--space-2)
+    font-size: 0.875rem
+
+  .old-value,
+  .new-value
+    value-display()
+
+  .old-value
+    color: var(--wood-900)
+
+  .new-value
+    color: var(--brass-500)
+
+  .improvement
+    color: #22c55e
+    margin-left: var(--space-2)
+
+.cleric-spell-info
+  padding: var(--space-5)
+  card-light()
+  border-color: var(--brass-500)
+  text-align: center
+
+  p
+    color: var(--wood-800)
+    font-size: 1.125rem
+    margin-bottom: var(--space-2)
+
+    i
+      color: var(--brass-500)
+      margin-right: var(--space-2)
+
+  .help-text
+    text-on-light()
+    font-size: 0.875rem
+    font-style: italic
+    font-weight: 500
+
+// Skills Step
+.skill-selection
+  margin: var(--space-6) 0
+  padding: var(--space-5)
+  card-dark()
+
+  p
+    text-on-dark()
+    font-size: 1.125rem
+    margin-bottom: var(--space-4)
+    text-align: center
+
+// Confirm Step
+.level-up-summary
+  margin: var(--space-6) 0
+  padding: var(--space-6)
+  card-light(3px)
+
+  h4
+    heading-section(1.75rem)
+    padding-bottom: var(--space-3)
+
+.summary-grid
+  grid-auto-fit(200px, var(--space-4))
+  margin-bottom: var(--space-5)
+
+.summary-item
+  padding: var(--space-4)
+  card-dark(2px)
+  flex-row(center, flex-start)
+  gap: var(--space-3)
+  text-on-dark()
+  font-weight: 600
+
+  i
+    color: var(--brass-400)
+    font-size: 1.5rem
+    width: 32px
+    text-align: center
+
+.confirmation-warning
+  margin-top: var(--space-5)
+  padding: var(--space-4)
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.15))
+  border-radius: var(--radius-md)
+  border: 2px solid rgba(239, 68, 68, 0.3)
+  text-align: center
+
+  i
+    color: #ef4444
+    font-size: 1.5rem
+    margin-bottom: var(--space-2)
+
+  p
+    color: var(--wood-800)
+    font-weight: 600
+    margin: 0

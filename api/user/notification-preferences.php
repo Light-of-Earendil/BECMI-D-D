@@ -28,7 +28,7 @@ try {
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         // Get preferences
         $prefs = $db->selectOne(
-            "SELECT * FROM user_notification_preferences WHERE user_id = ?",
+            "SELECT user_id, email_session_reminders, email_session_cancelled, email_xp_awarded, browser_hp_critical, browser_xp_awarded, browser_item_received, browser_session_starting, created_at, updated_at, prefer_dm_dashboard FROM user_notification_preferences WHERE user_id = ?",
             [$userId]
         );
         
@@ -40,7 +40,7 @@ try {
             );
             
             $prefs = $db->selectOne(
-                "SELECT * FROM user_notification_preferences WHERE user_id = ?",
+                "SELECT user_id, email_session_reminders, email_session_cancelled, email_xp_awarded, browser_hp_critical, browser_xp_awarded, browser_item_received, browser_session_starting, created_at, updated_at, prefer_dm_dashboard FROM user_notification_preferences WHERE user_id = ?",
                 [$userId]
             );
         }
@@ -77,9 +77,11 @@ try {
             'prefer_dm_dashboard'
         ];
         
+        // SECURITY: Use explicit whitelist and backticks for field names
         foreach ($allowedFields as $field) {
             if (isset($data[$field])) {
-                $updates[] = "$field = ?";
+                // Use backticks for safety and explicit field validation
+                $updates[] = "`{$field}` = ?";
                 $params[] = (bool) $data[$field];
             }
         }
@@ -98,7 +100,7 @@ try {
         
         // Get updated preferences
         $updatedPrefs = $db->selectOne(
-            "SELECT * FROM user_notification_preferences WHERE user_id = ?",
+            "SELECT user_id, email_session_reminders, email_session_cancelled, email_xp_awarded, browser_hp_critical, browser_xp_awarded, browser_item_received, browser_session_starting, created_at, updated_at, prefer_dm_dashboard FROM user_notification_preferences WHERE user_id = ?",
             [$userId]
         );
         

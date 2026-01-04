@@ -609,13 +609,8 @@ class BECMIRulesEngine {
     private static function applyAbilityScoreAdjustments($baseSaves, $character) {
         $adjustedSaves = $baseSaves;
         
-        // Constitution bonus to all saves
-        $conBonus = self::getConstitutionBonus($character['constitution']);
-        foreach ($adjustedSaves as $key => $value) {
-            $adjustedSaves[$key] = $value - $conBonus;
-        }
-        
-        // Wisdom bonus to spells save
+        // In BECMI, Constitution does NOT affect saving throws - only HP
+        // Only Wisdom affects spells save (Rod/Staff/Spell)
         $wisBonus = self::getWisdomBonus($character['wisdom']);
         $adjustedSaves['spells'] -= $wisBonus;
         
@@ -623,9 +618,11 @@ class BECMIRulesEngine {
     }
     
     /**
-     * Get Constitution bonus
+     * Get Constitution bonus for HP calculations
+     * This is different from general ability modifiers - Constitution HP bonus table
+     * Rules Cyclopedia Chapter 1
      */
-    private static function getConstitutionBonus($constitution) {
+    public static function getConstitutionBonus($constitution) {
         $bonusTable = [
             3 => -2, 4 => -1, 5 => -1, 6 => 0, 7 => 0, 8 => 0, 9 => 0,
             10 => 0, 11 => 0, 12 => 0, 13 => 0, 14 => 0, 15 => 1, 16 => 2,

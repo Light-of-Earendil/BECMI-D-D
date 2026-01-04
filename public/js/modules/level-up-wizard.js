@@ -64,7 +64,7 @@ class LevelUpWizard {
                             <h5 class="modal-title">
                                 <i class="fas fa-level-up-alt"></i> Level Up: ${this.currentCharacter.character_name}
                             </h5>
-                            <button type="button" class="close" data-dismiss="modal">
+                            <button type="button" class="close" id="close-level-up-wizard">
                                 <span>&times;</span>
                             </button>
                         </div>
@@ -84,7 +84,7 @@ class LevelUpWizard {
                                 ${this.currentStep === this.totalSteps ? 'Confirm Level Up' : 'Next'} 
                                 <i class="fas fa-arrow-right"></i>
                             </button>
-                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-secondary" id="cancel-level-up-wizard">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -92,15 +92,20 @@ class LevelUpWizard {
         `);
         
         $('body').append(modal);
-        $('#levelUpWizardModal').modal('show');
+        $('#levelUpWizardModal').addClass('show');
         
         // Setup event handlers
         this.setupWizardHandlers();
         
-        // Cleanup when modal is closed
-        $('#levelUpWizardModal').on('hidden.bs.modal', () => {
-            $('#levelUpWizardModal').remove();
-        });
+        // Close button handlers
+        const closeModal = () => {
+            $('#levelUpWizardModal').removeClass('show');
+            setTimeout(() => $('#levelUpWizardModal').remove(), 300);
+        };
+        
+        $('#close-level-up-wizard, #cancel-level-up-wizard').on('click', closeModal);
+        
+        // DO NOT close on background click - user must explicitly use close/cancel buttons
     }
     
     /**
@@ -154,14 +159,33 @@ class LevelUpWizard {
         const nextLevel = currentLevel + 1;
         const currentXp = character.experience_points;
         
-        const xpThresholds = [
-            0, 0, 2000, 4000, 8000, 16000, 32000, 64000, 120000, 240000,
-            360000, 480000, 600000
-        ];
+        // Use rules engine to get correct XP requirement for this class
+        let xpNeeded = 999999999;
+        if (this.rulesEngine) {
+            const requiredXp = this.rulesEngine.getExperienceForNextLevel(character.class, currentLevel);
+            if (requiredXp !== null) {
+                xpNeeded = requiredXp;
+            }
+        } else {
+            // Fallback: Use correct XP table based on class
+            const xpTables = {
+                'fighter': [0, 2000, 4000, 8000, 16000, 32000, 64000, 125000, 250000, 500000, 750000, 1000000, 1250000, 1500000, 1750000, 2000000, 2250000, 2500000, 2750000, 3000000],
+                'cleric': [0, 1500, 3000, 6000, 12000, 25000, 50000, 100000, 200000, 300000, 400000, 500000, 600000, 700000, 800000, 900000, 1000000, 1100000, 1200000, 1300000, 1400000, 1500000, 1600000, 1700000, 1800000, 1900000, 2000000, 2100000, 2200000, 2300000, 2400000, 2500000, 2600000, 2700000, 2800000, 2900000],
+                'magic_user': [0, 2500, 5000, 10000, 20000, 40000, 80000, 160000, 320000, 640000, 960000, 1280000, 1600000, 1920000, 2240000, 2560000, 2880000, 3200000, 3520000, 3840000],
+                'thief': [0, 1200, 2400, 4800, 9600, 19200, 38400, 76800, 153600, 307200, 460800, 614400, 768000, 921600, 1075200, 1228800, 1382400, 1536000, 1689600, 1843200],
+                'dwarf': [0, 2200, 4400, 8800, 17600, 35200, 70400, 140800, 281600, 563200, 844800, 1126400, 1408000, 1689600, 1971200, 2252800, 2534400, 2816000, 3097600, 3379200],
+                'elf': [0, 4000, 8000, 16000, 32000, 64000, 128000, 256000, 512000, 1024000, 1536000, 2048000, 2560000, 3072000, 3584000, 4096000, 4608000, 5120000, 5632000, 6144000],
+                'halfling': [0, 2000, 4000, 8000, 16000, 32000, 64000, 128000, 256000, 512000, 768000, 1024000, 1280000, 1536000, 1788000, 2048000, 2304000, 2560000, 2816000, 3072000]
+            };
+            
+            const classTable = xpTables[character.class] || xpTables['fighter'];
+            if (classTable && classTable[currentLevel] !== undefined) {
+                xpNeeded = classTable[currentLevel];
+            }
+        }
         
-        const xpNeeded = xpThresholds[nextLevel] || 999999999;
         const hasEnoughXp = currentXp >= xpNeeded;
-        const xpProgress = (currentXp / xpNeeded) * 100;
+        const xpProgress = xpNeeded > 0 ? (currentXp / xpNeeded) * 100 : 0;
         
         return `
             <div class="wizard-step-content">
@@ -217,7 +241,8 @@ class LevelUpWizard {
     renderHPRollStep() {
         const character = this.currentCharacter;
         const hitDice = this.getHitDice(character.class);
-        const conBonus = this.rulesEngine ? this.rulesEngine.getAbilityModifier(character.constitution) : 0;
+        // Use getConstitutionBonus() for HP, not getAbilityModifier() - they have different tables!
+        const conBonus = this.rulesEngine ? this.rulesEngine.getConstitutionBonus(character.constitution) : 0;
         
         // Auto-roll if not already rolled
         if (this.wizardData.new_hp_rolled === null) {
@@ -239,7 +264,7 @@ class LevelUpWizard {
                     <div class="dice-display">
                         <div class="die-roll">
                             <i class="fas fa-dice-d${hitDice.substring(2)}"></i>
-                            <span class="roll-formula">${hitDice} + ${conBonus} (CON)</span>
+                            <span class="roll-formula">${hitDice} + ${conBonus} (CON ${character.constitution})</span>
                         </div>
                         <div class="roll-result">
                             <span class="result-label">HP Gained:</span>
@@ -593,7 +618,8 @@ class LevelUpWizard {
         // HP reroll
         $(document).on('click', '#reroll-hp-btn', () => {
             const hitDice = this.getHitDice(this.currentCharacter.class);
-            const conBonus = this.rulesEngine ? this.rulesEngine.getAbilityModifier(this.currentCharacter.constitution) : 0;
+            // Use getConstitutionBonus() for HP, not getAbilityModifier() - they have different tables!
+            const conBonus = this.rulesEngine ? this.rulesEngine.getConstitutionBonus(this.currentCharacter.constitution) : 0;
             const dieSize = parseInt(hitDice.substring(2));
             const roll = Math.floor(Math.random() * dieSize) + 1;
             this.wizardData.new_hp_rolled = Math.max(1, roll + conBonus);
@@ -640,7 +666,9 @@ class LevelUpWizard {
             const response = await this.apiClient.post('/api/character/level-up.php', this.wizardData);
             
             if (response.status === 'success') {
-                $('#levelUpWizardModal').modal('hide');
+                // Close wizard modal
+                $('#levelUpWizardModal').removeClass('show');
+                setTimeout(() => $('#levelUpWizardModal').remove(), 300);
                 
                 // Show success celebration
                 this.showLevelUpCelebration(response.data);
@@ -678,7 +706,7 @@ class LevelUpWizard {
                             <h3 class="character-name">${this.currentCharacter.character_name}</h3>
                             <p class="level-display">Level ${data.old_level} <i class="fas fa-arrow-right"></i> Level ${data.new_level}</p>
                             <p class="hp-display">+${data.hp_gained} HP</p>
-                            <button class="btn btn-lg btn-primary" data-dismiss="modal">
+                            <button class="btn btn-lg btn-primary" id="close-celebration-modal">
                                 <i class="fas fa-check"></i> Awesome!
                             </button>
                         </div>
@@ -688,10 +716,21 @@ class LevelUpWizard {
         `);
         
         $('body').append(modal);
-        $('#levelUpCelebration').modal('show');
+        $('#levelUpCelebration').addClass('show');
         
-        $('#levelUpCelebration').on('hidden.bs.modal', () => {
-            $('#levelUpCelebration').remove();
+        // Close button handler
+        const closeCelebration = () => {
+            $('#levelUpCelebration').removeClass('show');
+            setTimeout(() => $('#levelUpCelebration').remove(), 300);
+        };
+        
+        $('#close-celebration-modal').on('click', closeCelebration);
+        
+        // Close on background click (but not on content click)
+        $('#levelUpCelebration').on('click', (e) => {
+            if (e.target === e.currentTarget) {
+                closeCelebration();
+            }
         });
     }
     

@@ -110,6 +110,7 @@ try {
     $updates = [];
     $params = [];
     
+    // SECURITY: Only allow whitelisted fields (map_name, is_active)
     // Update map name if provided
     if (isset($data['map_name'])) {
         $mapName = trim($data['map_name']);
@@ -119,7 +120,8 @@ try {
         if (strlen($mapName) > 100) {
             Security::sendValidationErrorResponse(['map_name' => 'Map name must be 100 characters or less']);
         }
-        $updates[] = "map_name = ?";
+        // Use backticks for safety
+        $updates[] = "`map_name` = ?";
         $params[] = $mapName;
     }
     
@@ -131,7 +133,7 @@ try {
             // Set all other maps in session to inactive
             try {
                 $db->execute(
-                    "UPDATE session_maps SET is_active = FALSE WHERE session_id = ?",
+                    "UPDATE session_maps SET `is_active` = FALSE WHERE session_id = ?",
                     [$map['session_id']]
                 );
             } catch (Exception $updateError) {
@@ -181,7 +183,8 @@ try {
             }
         }
         
-        $updates[] = "is_active = ?";
+        // Use backticks for safety
+        $updates[] = "`is_active` = ?";
         $params[] = $isActive ? 1 : 0;
     }
     

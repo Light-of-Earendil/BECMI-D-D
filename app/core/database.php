@@ -45,11 +45,11 @@ class Database {
         } else {
             // Fallback configuration
             $this->config = [
-                'host' => $_ENV['DB_HOST'] ?? 'localhost',
-                'port' => $_ENV['DB_PORT'] ?? '3306',
-                'database' => $_ENV['DB_NAME'] ?? 'becmi_vtt',
-                'username' => $_ENV['DB_USER'] ?? 'root',
-                'password' => $_ENV['DB_PASS'] ?? '',
+                'host' => getenv('DB_HOST') ?: 'localhost',
+                'port' => getenv('DB_PORT') ?: '3306',
+                'database' => getenv('DB_NAME') ?: 'becmi_vtt',
+                'username' => getenv('DB_USER') ?: 'root',
+                'password' => getenv('DB_PASS') ?: '',
                 'charset' => 'utf8mb4',
                 'options' => [
                     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
@@ -195,9 +195,16 @@ class Database {
     
     /**
      * Begin a transaction
+     * 
+     * @return bool True on success
+     * @throws Exception If transaction fails to start
      */
     public function beginTransaction() {
-        return $this->connection->beginTransaction();
+        if (!$this->connection->beginTransaction()) {
+            error_log("DATABASE ERROR: Failed to start transaction");
+            throw new Exception("Failed to start transaction");
+        }
+        return true;
     }
     
     /**

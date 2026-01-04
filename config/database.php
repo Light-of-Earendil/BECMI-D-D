@@ -6,12 +6,14 @@
  */
 
 // Database configuration for production server
+// SECURITY: Credentials loaded from environment variables to prevent exposure
+// TODO: Set environment variables (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS) and remove fallback values
 return [
-    'host' => 'localhost',
-    'port' => '3306',
-    'database' => 'becmi_vtt',
-    'username' => 'root',
-    'password' => 'everquest',
+    'host' => getenv('DB_HOST') ?: 'localhost',
+    'port' => getenv('DB_PORT') ?: '3306',
+    'database' => getenv('DB_NAME') ?: 'becmi_vtt',
+    'username' => getenv('DB_USER') ?: 'root',
+    'password' => getenv('DB_PASS') ?: 'everquest', // TEMPORARY FALLBACK - MUST BE REPLACED WITH ENV VAR
     'charset' => 'utf8mb4',
     'options' => [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, 

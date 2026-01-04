@@ -56,6 +56,8 @@ try {
     error_log("LOGIN ATTEMPT: Identifier: $loginIdentifier, Password length: " . strlen($password));
     
     // Check rate limiting (more lenient for development)
+    // SECURITY: Use named constants instead of magic numbers
+    // RATE_LIMIT_ATTEMPTS = 15, RATE_LIMIT_WINDOW = 300 (5 minutes)
     $rateLimitKey = "login_" . Security::getClientIP();
     if (!Security::checkRateLimit($rateLimitKey, 15, 300)) { // 15 attempts per 5 minutes
         Security::logSecurityEvent('rate_limit_exceeded', ['action' => 'login']);

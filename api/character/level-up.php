@@ -8,12 +8,64 @@
  * @return JSON Success/error response with updated character data
  */
 
-require_once '../../app/core/database.php';
-require_once '../../app/core/security.php';
-require_once '../../app/services/becmi-rules.php';
+// Enable error logging but disable display
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
+error_reporting(E_ALL);
+
+// Register error handler to catch fatal errors
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error !== NULL && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        // Clear any output
+        if (ob_get_level()) {
+            ob_clean();
+        }
+        
+        // Send JSON error response
+        header('Content-Type: application/json');
+        http_response_code(500);
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Fatal PHP error: ' . $error['message'],
+            'file' => $error['file'],
+            'line' => $error['line'],
+            'code' => 'FATAL_ERROR'
+        ]);
+        exit;
+    }
+});
+
+// Start output buffering to prevent any output before JSON
+if (!ob_get_level()) {
+    ob_start();
+}
+
+try {
+    require_once '../../app/core/database.php';
+    require_once '../../app/core/security.php';
+    require_once '../../app/services/becmi-rules.php';
+} catch (Exception $e) {
+    if (ob_get_level()) {
+        ob_clean();
+    }
+    header('Content-Type: application/json');
+    http_response_code(500);
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Failed to load required files: ' . $e->getMessage(),
+        'code' => 'LOAD_ERROR'
+    ]);
+    exit;
+}
 
 // Initialize security
 Security::init();
+
+// Clear any output that might have been generated
+if (ob_get_level()) {
+    ob_clean();
+}
 
 // Set content type
 header('Content-Type: application/json');
@@ -35,10 +87,14 @@ try {
     }
     
     // Validate required fields
-    $required = ['character_id'];
-    $validation = Security::validateRequired($data, $required);
-    if (!$validation['valid']) {
-        Security::sendValidationErrorResponse($validation['errors']);
+    $errors = [];
+    
+    if (empty($data['character_id'])) {
+        $errors['character_id'] = 'Character ID is required';
+    }
+    
+    if (!empty($errors)) {
+        Security::sendValidationErrorResponse($errors);
     }
     
     $characterId = (int) $data['character_id'];
@@ -90,6 +146,13 @@ try {
         Security::sendErrorResponse("Character needs $requiredXp XP to reach level $nextLevel (currently has $currentXp)", 400);
     }
     
+    // Get XP requirement for the new level (minimum XP for nextLevel)
+    // This is the XP needed to reach nextLevel from (nextLevel - 1)
+    $xpForNewLevel = BECMIRulesEngine::getExperienceForNextLevel($character['class'], $nextLevel - 1);
+    
+    // If character has more XP than required for new level, cap it at the minimum for new level
+    $newXp = ($xpForNewLevel !== null && $currentXp > $xpForNewLevel) ? $xpForNewLevel : $currentXp;
+    
     // Begin transaction
     $db->execute("START TRANSACTION");
     
@@ -97,11 +160,12 @@ try {
         // Calculate new HP
         if ($newHpRolled === null) {
             // Auto-roll HP based on class
-            $hitDice = BECMIRules::getClassHitDice($character['class']);
-            $conBonus = BECMIRules::getAbilityModifier($character['constitution']);
+            $hitDieSize = BECMIRulesEngine::getHitDieForClass($character['class']);
+            // Use getConstitutionBonus() for HP, not getAbilityModifier() - they have different tables!
+            $conBonus = BECMIRulesEngine::getConstitutionBonus($character['constitution']);
             
             // Roll HP (minimum 1)
-            $hpRoll = rand(1, (int)substr($hitDice, 2)); // Extract die size from "1d8" -> 8
+            $hpRoll = rand(1, $hitDieSize);
             $newHpGained = max(1, $hpRoll + $conBonus);
         } else {
             $newHpGained = max(1, $newHpRolled);
@@ -122,6 +186,7 @@ try {
         $db->execute(
             "UPDATE characters
              SET level = ?,
+                 experience_points = ?,
                  max_hp = ?,
                  current_hp = ?,
                  thac0_melee = ?,
@@ -134,6 +199,7 @@ try {
              WHERE character_id = ?",
             [
                 $nextLevel,
+                $newXp,
                 $newMaxHp,
                 $newCurrentHp,
                 $newThac0, // Only one THAC0
@@ -147,7 +213,66 @@ try {
             ]
         );
         
-        // Add new spells to spellbook (if provided)
+        // For clerics: automatically add all cleric spells for levels they can now cast
+        // Clerics automatically know all spells of levels they can cast (Rules Cyclopedia)
+        if ($character['class'] === 'cleric') {
+            $clericSpellSlots = BECMIRulesEngine::getClericSpellSlots($nextLevel);
+            $oldClericSpellSlots = BECMIRulesEngine::getClericSpellSlots($currentLevel);
+            
+            // Get all spell levels the cleric can now cast (array is 0-indexed: 0=level1, 1=level2, etc.)
+            $spellLevelsToAdd = [];
+            foreach ($clericSpellSlots as $arrayIndex => $slots) {
+                $spellLevel = $arrayIndex + 1; // Convert 0-indexed to actual spell level (1-7)
+                if ($slots > 0) {
+                    $spellLevelsToAdd[] = $spellLevel;
+                }
+            }
+            
+            // Get old spell levels to see what's new
+            $oldSpellLevels = [];
+            foreach ($oldClericSpellSlots as $arrayIndex => $slots) {
+                $spellLevel = $arrayIndex + 1; // Convert 0-indexed to actual spell level (1-7)
+                if ($slots > 0) {
+                    $oldSpellLevels[] = $spellLevel;
+                }
+            }
+            
+            // Find new spell levels (levels they can cast now but couldn't before)
+            $newSpellLevels = array_diff($spellLevelsToAdd, $oldSpellLevels);
+            
+            // Add all cleric spells for new spell levels
+            if (!empty($newSpellLevels)) {
+                foreach ($newSpellLevels as $spellLevel) {
+                    $clericSpells = $db->select(
+                        "SELECT spell_id, spell_name, spell_level, spell_type
+                         FROM spells
+                         WHERE spell_type = 'cleric' AND spell_level = ?",
+                        [$spellLevel]
+                    );
+                    
+                    foreach ($clericSpells as $spell) {
+                        // Add to spellbook (INSERT IGNORE prevents duplicates)
+                        $db->execute(
+                            "INSERT IGNORE INTO character_spells 
+                             (character_id, spell_id, spell_name, spell_level, spell_type, 
+                              memorized_count, max_memorized, is_memorized, times_cast_today)
+                             VALUES (?, ?, ?, ?, ?, 0, 0, FALSE, 0)",
+                            [
+                                $characterId,
+                                $spell['spell_id'],
+                                $spell['spell_name'],
+                                $spell['spell_level'],
+                                $spell['spell_type']
+                            ]
+                        );
+                    }
+                }
+                
+                error_log("Automatically added cleric spells for character {$characterId} leveling to {$nextLevel}");
+            }
+        }
+        
+        // Add new spells to spellbook (if provided - for magic-users, elves, etc.)
         foreach ($newSpells as $spellId) {
             $spellId = (int) $spellId;
             
@@ -242,7 +367,7 @@ try {
                 $userId,
                 (string) $currentLevel,
                 (string) $nextLevel,
-                "Leveled up to $nextLevel. HP gained: $newHpGained. $reason"
+                "Leveled up to $nextLevel. HP gained: $newHpGained."
             ]
         );
         
@@ -250,7 +375,7 @@ try {
         
         // Get updated character
         $updatedCharacter = $db->selectOne(
-            "SELECT * FROM characters WHERE character_id = ?",
+            "SELECT character_id, user_id, session_id, character_name, class, level, experience_points, current_hp, max_hp, strength, dexterity, constitution, intelligence, wisdom, charisma, armor_class, thac0_melee, thac0_ranged, movement_rate_normal, movement_rate_encounter, encumbrance_status, save_death_ray, save_magic_wand, save_paralysis, save_dragon_breath, save_spells, alignment, age, height, weight, hair_color, eye_color, gold_pieces, silver_pieces, copper_pieces, is_active, created_at, updated_at, gender, portrait_url, personality, background, ability_adjustments, original_strength, original_dexterity, original_constitution, original_intelligence, original_wisdom, original_charisma FROM characters WHERE character_id = ?",
             [$characterId]
         );
         
@@ -258,6 +383,8 @@ try {
             'character_id' => $characterId,
             'old_level' => $currentLevel,
             'new_level' => $nextLevel,
+            'old_xp' => $currentXp,
+            'new_xp' => $newXp,
             'hp_gained' => $newHpGained,
             'new_max_hp' => $newMaxHp,
             'new_current_hp' => $newCurrentHp,

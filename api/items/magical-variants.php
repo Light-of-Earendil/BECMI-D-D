@@ -106,7 +106,7 @@ try {
     $items = $db->select($query, $params);
     
     // Also get the base item for reference
-    $baseItemQuery = "SELECT * FROM items WHERE item_id = ?";
+    $baseItemQuery = "SELECT item_id, name, description, weight_cn, cost_gp, item_type, item_category, size_category, damage_die, damage_type, weapon_type, range_short, range_medium, range_long, hands_required, ammunition_type, ammunition_capacity, can_be_thrown, ac_bonus, armor_type, is_magical, requires_proficiency, stackable, magical_bonus, magical_properties, base_item_id, charges, special_properties, class_restrictions, image_url, creature_type, capacity_cn, movement_rate, created_at, updated_at FROM items WHERE item_id = ?";
     $baseItem = $db->selectOne($baseItemQuery, [$params[0]]);
     
     // Transform for frontend

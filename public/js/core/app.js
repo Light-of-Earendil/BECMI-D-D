@@ -307,6 +307,12 @@ class BECMIApp {
                     return;
                 }
                 
+                // CRITICAL: Never close level-up wizard modal on background click - user could lose progress!
+                if (e.currentTarget.id === 'levelUpWizardModal') {
+                    console.log('Preventing level-up wizard modal close on background click - CRITICAL: user must use close button');
+                    return;
+                }
+                
                 // Only close if clicking on the modal background itself
                 console.log('Closing modal:', e.currentTarget.id);
                 $(e.currentTarget).removeClass('show');

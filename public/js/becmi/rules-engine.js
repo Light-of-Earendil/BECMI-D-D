@@ -436,13 +436,8 @@ class BECMIRulesEngine {
     applyAbilityScoreAdjustments(baseSaves, character) {
         const adjustedSaves = { ...baseSaves };
         
-        // Constitution bonus to all saves
-        const conBonus = this.getConstitutionBonus(character.constitution);
-        Object.keys(adjustedSaves).forEach(key => {
-            adjustedSaves[key] -= conBonus;
-        });
-        
-        // Wisdom bonus to spells save
+        // In BECMI, Constitution does NOT affect saving throws - only HP
+        // Only Wisdom affects spells save (Rod/Staff/Spell)
         const wisBonus = this.getWisdomBonus(character.wisdom);
         adjustedSaves.spells -= wisBonus;
         
