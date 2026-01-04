@@ -15,6 +15,7 @@ class RealtimeClient {
         this.pollTimeout = null;
         this.eventHandlers = {};
         this.isConnected = false;
+        this.pollTimeoutMs = 5000; // Reduced from 10 to 5 seconds
         
         console.log(`Real-time client initialized for session ${sessionId}`);
     }
@@ -67,7 +68,7 @@ class RealtimeClient {
             console.log(`Polling for events (last_event_id: ${this.lastEventId})...`);
             
             const response = await fetch(
-                `/api/realtime/poll.php?session_id=${this.sessionId}&last_event_id=${this.lastEventId}&timeout=25`,
+                `/api/realtime/poll.php?session_id=${this.sessionId}&last_event_id=${this.lastEventId}&timeout=5`,
                 {
                     method: 'GET',
                     headers: {
@@ -87,16 +88,33 @@ class RealtimeClient {
                 const events = data.data.events || [];
                 const onlineUsers = data.data.online_users || [];
                 
-                console.log(`Received ${events.length} event(s), ${onlineUsers.length} user(s) online`);
+                console.log(`[RealtimeClient] Received ${events.length} event(s), ${onlineUsers.length} user(s) online`);
                 
                 // Process events
                 if (events.length > 0) {
+                    console.log(`[RealtimeClient] Processing ${events.length} events:`, events.map(e => e.event_type));
                     this.processEvents(events);
-                    this.lastEventId = data.data.last_event_id;
+                    // Update lastEventId to the highest event ID we received
+                    const maxEventId = Math.max(...events.map(e => e.event_id), this.lastEventId);
+                    this.lastEventId = maxEventId;
+                    console.log(`[RealtimeClient] Updated lastEventId to: ${this.lastEventId}`);
+                } else {
+                    // Even if no events, update lastEventId from server response
+                    if (data.data.last_event_id && data.data.last_event_id > this.lastEventId) {
+                        this.lastEventId = data.data.last_event_id;
+                        console.log(`[RealtimeClient] Updated lastEventId to: ${this.lastEventId} (no new events)`);
+                    }
                 }
                 
                 // Update online users display
                 this.trigger('online_users_update', { users: onlineUsers, count: onlineUsers.length });
+                
+                // Always update lastEventId from server response (even if no events)
+                // This ensures we don't miss events if server returns a higher last_event_id
+                if (data.data.last_event_id !== undefined && data.data.last_event_id > this.lastEventId) {
+                    this.lastEventId = data.data.last_event_id;
+                    console.log(`[RealtimeClient] Updated lastEventId to: ${this.lastEventId} (from server response)`);
+                }
                 
                 // Reset error count on successful poll
                 this.errorCount = 0;
@@ -133,7 +151,7 @@ class RealtimeClient {
      */
     processEvents(events) {
         events.forEach(event => {
-            console.log(`Processing event: ${event.event_type}`, event.event_data);
+            console.log(`[RealtimeClient] Processing event: ${event.event_type}`, event.event_data);
             
             // Trigger event-specific handlers
             this.trigger(event.event_type, event.event_data);

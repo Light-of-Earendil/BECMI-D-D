@@ -258,8 +258,23 @@
   max-width: 500px
   width: 90%
   max-height: 90vh
-  overflow-y: auto
+  overflow: hidden
   position: relative
+  z-index: calc(var(--z-modal) + 1)
+  pointer-events: auto
+  display: flex
+  flex-direction: column
+
+  &.character-creation
+    max-width: 800px
+
+  &.character-edit
+    max-width: 700px
+    left: 50%
+    transform: translateX(-50%)
+
+  &.session-creation
+    max-width: 600px
 
   &.character-creation
     max-width: 800px
@@ -275,6 +290,10 @@
 .modal-header
   padding: var(--space-6) var(--space-6) var(--space-4)
   border-bottom: 2px solid var(--wood-900)
+  display: flex
+  justify-content: space-between
+  align-items: flex-start
+  position: relative
 
   h2
     font-family: "Cinzel", Georgia, serif
@@ -282,9 +301,231 @@
     font-size: 1.75rem
     margin-bottom: var(--space-2)
     text-shadow: 0 2px 4px rgba(0,0,0,0.5)
+    flex: 1
 
   p
     color: var(--text-soft)
+
+.modal-close
+  position: absolute
+  top: var(--space-4)
+  right: var(--space-4)
+  background: transparent
+  border: none
+  color: var(--text-strong)
+  font-size: 1.5rem
+  cursor: pointer
+  padding: var(--space-1)
+  width: 32px
+  height: 32px
+  display: flex
+  align-items: center
+  justify-content: center
+  border-radius: var(--radius-sm)
+  transition: all var(--t-fast) var(--ease)
+
+  &:hover
+    background: rgba(255, 255, 255, 0.1)
+    color: var(--text-strong)
+
+  i
+    font-size: 1.25rem
+
+.modal-body
+  padding: var(--space-6)
+  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+  color: var(--wood-900)
+  max-height: 60vh
+  overflow-y: auto
+
+.modal-footer
+  padding: var(--space-4) var(--space-6) var(--space-6)
+  border-top: 2px solid var(--wood-900)
+  display: flex
+  justify-content: flex-end
+  gap: var(--space-2)
+
+// ==========================================================================
+// Item Details Modal Styling
+// ==========================================================================
+
+.item-details-container
+  color: var(--wood-900)
+
+.item-header
+  display: flex
+  gap: var(--space-4)
+  margin-bottom: var(--space-4)
+  padding-bottom: var(--space-4)
+  border-bottom: 2px solid var(--brass-500)
+
+.item-image-container-large
+  position: relative
+  width: 200px
+  min-height: 200px
+  flex-shrink: 0
+  display: flex
+  align-items: center
+  justify-content: center
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+  border-radius: var(--radius-md)
+  border: 2px solid var(--wood-600)
+  overflow: hidden
+
+.item-image-large
+  width: 100%
+  height: 100%
+  min-height: 200px
+  display: flex
+  align-items: center
+  justify-content: center
+  background: linear-gradient(180deg, var(--wood-200), var(--wood-300))
+
+  img
+    max-width: 100%
+    max-height: 100%
+    object-fit: contain
+    padding: var(--space-2)
+
+.item-icon-large
+  width: 120px
+  height: 120px
+  background: linear-gradient(180deg, var(--brass-300), var(--brass-500))
+  border-radius: var(--radius-md)
+  display: flex
+  align-items: center
+  justify-content: center
+  // Remove border when inside container to avoid double border
+  border: none
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3)
+  position: absolute
+  top: 50%
+  left: 50%
+  transform: translate(-50%, -50%)
+
+  i
+    color: var(--wood-900)
+    font-size: 3rem
+
+  &.magical-item
+    border-color: var(--brass-700)
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 0 20px rgba(202, 162, 74, 0.5)
+
+.item-info
+  flex: 1
+
+  h4
+    font-family: "Cinzel", Georgia, serif
+    color: var(--wood-900)
+    font-size: 1.5rem
+    font-weight: 600
+    margin-bottom: var(--space-2)
+
+  .item-type
+    font-family: "VT323", monospace
+    color: var(--wood-700)
+    font-size: 0.875rem
+    font-weight: 600
+    text-transform: capitalize
+
+.item-description-full
+  margin-top: var(--space-4)
+  padding-top: var(--space-4)
+  border-top: 2px solid var(--brass-500)
+
+  h6
+    font-family: "Cinzel", Georgia, serif
+    color: var(--wood-900)
+    font-size: 1rem
+    font-weight: 600
+    margin-bottom: var(--space-2)
+
+  .item-description
+    font-family: 'Lora', Georgia, 'Times New Roman', serif
+    color: var(--wood-800)
+    font-size: 0.9375rem
+    line-height: 1.6
+    margin: 0
+
+.item-properties
+  margin-top: var(--space-4)
+
+.properties-grid
+  display: grid
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))
+  gap: var(--space-3)
+
+.property
+  display: flex
+  flex-direction: column
+  gap: var(--space-1)
+  padding: var(--space-2)
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+  border: 1px solid rgba(0, 0, 0, 0.1)
+  border-radius: var(--radius-sm)
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3)
+
+  label
+    font-family: "Cinzel", Georgia, serif
+    color: var(--wood-800)
+    font-size: 0.75rem
+    font-weight: 600
+    text-transform: uppercase
+    letter-spacing: 0.5px
+
+  span
+    font-family: "VT323", monospace
+    color: var(--wood-900)
+    font-size: 1rem
+    font-weight: 700
+
+    &.unidentified
+      color: var(--red-500)
+      font-weight: 700
+
+    &.attunement-attuned
+      color: var(--green-crt-dim)
+      font-weight: 700
+
+    &.attunement-cursed
+      color: var(--red-500)
+      font-weight: 700
+
+.item-special-properties,
+.item-magical-properties,
+.item-notes,
+.item-variants
+  margin-top: var(--space-4)
+  padding-top: var(--space-4)
+  border-top: 2px solid var(--brass-500)
+
+  h6
+    font-family: "Cinzel", Georgia, serif
+    color: var(--wood-900)
+    font-size: 1rem
+    font-weight: 600
+    margin-bottom: var(--space-2)
+
+  pre
+    font-family: "VT323", monospace
+    color: var(--wood-900)
+    font-size: 0.875rem
+    background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+    padding: var(--space-2)
+    border-radius: var(--radius-sm)
+    border: 1px solid rgba(0, 0, 0, 0.1)
+    overflow-x: auto
+
+  p
+    font-family: 'Lora', Georgia, 'Times New Roman', serif
+    color: var(--wood-800)
+    font-size: 0.9375rem
+    line-height: 1.6
+    margin: 0
+
+    strong
+      color: var(--wood-900)
+      font-weight: 600
 
 .modal__inner
   margin: var(--space-4) var(--space-6)
@@ -297,6 +538,31 @@
   max-width: 90vw
   max-height: 90vh
   overflow-y: auto
+  
+  // Ensure file inputs are clickable
+  input[type="file"]
+    position: relative
+    z-index: 10
+    pointer-events: auto
+    cursor: pointer
+    opacity: 1
+    width: 100%
+    padding: var(--space-2)
+    background: linear-gradient(180deg, var(--parchment-100), var(--parchment-200))
+    border: 2px solid var(--wood-600)
+    border-radius: var(--radius-sm)
+    font-family: "Lora", Georgia, serif
+    font-size: 1rem
+    color: var(--wood-900)
+    
+    &:hover
+      border-color: var(--brass-500)
+      background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+    
+    &:focus
+      outline: none
+      border-color: var(--brass-500)
+      box-shadow: 0 0 0 3px rgba(202, 162, 74, 0.3)
 
 .modal-overlay
   position: fixed
@@ -325,6 +591,51 @@
   input
     background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
     color: var(--text-ink)
+
+  // Password input with visibility toggle
+  .password-input-wrapper
+    position: relative
+    display: flex
+    align-items: center
+
+    input[type="password"],
+    input[type="text"]
+      padding-right: 45px
+      width: 100%
+
+    .password-toggle-btn
+      position: absolute
+      right: 8px
+      top: 50%
+      transform: translateY(-50%)
+      background: transparent
+      border: none
+      cursor: pointer
+      padding: var(--space-2)
+      color: var(--wood-700)
+      display: flex
+      align-items: center
+      justify-content: center
+      width: 32px
+      height: 32px
+      border-radius: var(--radius-sm)
+      transition: all var(--t-fast) var(--ease)
+      z-index: 1
+
+      &:hover
+        background: rgba(0, 0, 0, 0.05)
+        color: var(--wood-900)
+
+      &:active
+        transform: translateY(-50%) scale(0.95)
+
+      &:focus-visible
+        outline: 2px solid var(--brass-500)
+        outline-offset: 2px
+
+      i
+        font-size: 1rem
+        pointer-events: none
 
 // Tabs System
 .tabs

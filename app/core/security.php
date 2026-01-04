@@ -13,6 +13,16 @@ class Security {
      * Initialize security settings
      */
     public static function init() {
+        // CRITICAL: If session is already active, don't try to start it again
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            // Session already active - just get CSRF token
+            if (!isset($_SESSION['csrf_token'])) {
+                $_SESSION['csrf_token'] = self::generateCSRFToken();
+            }
+            self::$csrfToken = $_SESSION['csrf_token'];
+            return;
+        }
+        
         // Set secure session options BEFORE starting session
         if (session_status() === PHP_SESSION_NONE) {
             // CRITICAL: Check if headers are already sent - if so, we CANNOT start a session
@@ -27,86 +37,55 @@ class Security {
                 ob_start();
             }
             
-            // Check if there's already a session cookie - if so, try to use it WITHOUT changing cookie params
+            // CRITICAL: Set session timeout and locking options to prevent hangs
+            ini_set('session.gc_maxlifetime', 1800);
+            ini_set('session.cookie_lifetime', 0); // Until browser closes
+            ini_set('session.use_strict_mode', 1);
+            ini_set('session.use_cookies', 1);
+            ini_set('session.use_only_cookies', 1);
+            
+            // Set session save handler timeout (if using file-based sessions)
+            // This prevents infinite hangs if session file is locked
+            ini_set('max_execution_time', 30); // 30 second max execution time
+            
+            // Check if there's already a session cookie
             $hasExistingSession = isset($_COOKIE[session_name()]) && !empty($_COOKIE[session_name()]);
             
             if ($hasExistingSession) {
-                // There's an existing session cookie - try to restore it WITHOUT changing cookie params
-                // This is critical: if we change cookie params, session_start() will fail to restore the session
                 $sessionId = $_COOKIE[session_name()];
-                
-                // #region agent log
-                $logData = [
-                    'location' => 'security.php:26',
-                    'message' => 'Attempting to restore existing session',
-                    'data' => [
-                        'session_id_from_cookie' => $sessionId,
-                        'has_output' => ob_get_level() > 0 ? ob_get_length() : 0,
-                        'headers_sent' => headers_sent($file, $line) ? ['file' => $file, 'line' => $line] : false
-                    ],
-                    'timestamp' => round(microtime(true) * 1000),
-                    'sessionId' => 'debug-session',
-                    'runId' => 'run1',
-                    'hypothesisId' => 'E'
-                ];
-                $logPath = dirname(dirname(__DIR__)) . DIRECTORY_SEPARATOR . '.cursor' . DIRECTORY_SEPARATOR . 'debug.log';
-                $logDir = dirname($logPath);
-                if (!is_dir($logDir)) { @mkdir($logDir, 0755, true); }
-                @file_put_contents($logPath, json_encode($logData) . "\n", FILE_APPEND);
-                // #endregion
-                
                 session_id($sessionId);
                 
-                // Try to start session with existing cookie params (don't change them)
-                $sessionStarted = @session_start();
+                // Try to start session with timeout - use read_and_close if we only need to read
+                // This prevents long locks
+                $sessionStarted = @session_start(['read_and_close' => false]);
                 
-                // #region agent log
-                $logData = [
-                    'location' => 'security.php:47',
-                    'message' => 'After session_start() attempt',
-                    'data' => [
-                        'session_start_returned' => $sessionStarted,
-                        'session_status' => session_status(),
-                        'session_id' => session_id() ?: 'NO SESSION',
-                        'has_user_id' => isset($_SESSION['user_id']),
-                        'user_id' => isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'NOT SET'
-                    ],
-                    'timestamp' => round(microtime(true) * 1000),
-                    'sessionId' => 'debug-session',
-                    'runId' => 'run1',
-                    'hypothesisId' => 'E'
-                ];
-                @file_put_contents($logPath, json_encode($logData) . "\n", FILE_APPEND);
-                // #endregion
-                
-                // If session started successfully and has user_id, we're done
-                if (session_status() === PHP_SESSION_ACTIVE && isset($_SESSION['user_id'])) {
-                    // Session restored successfully - update CSRF token if needed
-                    if (!isset($_SESSION['csrf_token'])) {
-                        $_SESSION['csrf_token'] = self::generateCSRFToken();
+                // If session started successfully, check if it has user_id
+                if (session_status() === PHP_SESSION_ACTIVE) {
+                    if (isset($_SESSION['user_id'])) {
+                        // Session restored successfully - update CSRF token if needed
+                        if (!isset($_SESSION['csrf_token'])) {
+                            $_SESSION['csrf_token'] = self::generateCSRFToken();
+                        }
+                        self::$csrfToken = $_SESSION['csrf_token'];
+                        return;
                     }
-                    self::$csrfToken = $_SESSION['csrf_token'];
-                    return;
                 }
                 
-                // Session didn't start or doesn't have user_id - close it and start fresh
+                // Session didn't start or doesn't have user_id - close it
                 if (session_status() === PHP_SESSION_ACTIVE) {
-                    session_write_close();
+                    @session_write_close();
                 }
             }
             
-            // No existing session or restore failed - set up new session with proper cookie params
-            // Set session cookie parameters to ensure cookies are sent with cross-origin requests
-            // SameSite=None requires Secure flag (HTTPS)
+            // No existing session or restore failed - set up new session
             $isSecure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
-            $sameSite = $isSecure ? 'None' : 'Lax'; // None requires Secure, Lax is safer for non-HTTPS
+            $sameSite = $isSecure ? 'None' : 'Lax';
             
-            // Get current cookie parameters
             $cookieParams = session_get_cookie_params();
             
-            // Set cookie parameters BEFORE session_start (must be called before)
+            // Set cookie parameters BEFORE session_start
             session_set_cookie_params([
-                'lifetime' => $cookieParams['lifetime'] ?: 0, // 0 = until browser closes
+                'lifetime' => $cookieParams['lifetime'] ?: 0,
                 'path' => $cookieParams['path'] ?: '/',
                 'domain' => $cookieParams['domain'] ?: '',
                 'secure' => $isSecure,
@@ -117,42 +96,19 @@ class Security {
             // Also set via ini_set for compatibility
             ini_set('session.cookie_httponly', 1);
             ini_set('session.cookie_secure', $isSecure ? 1 : 0);
-            ini_set('session.use_strict_mode', 1);
             ini_set('session.cookie_samesite', $sameSite);
             
-            // Start session
+            // Start session - use @ to suppress warnings if it fails
             @session_start();
-            
-            // #region agent log
-            $logData = [
-                'location' => 'security.php:27',
-                'message' => 'After session_start()',
-                'data' => [
-                    'session_id' => session_id() ?: 'NO SESSION',
-                    'session_status' => session_status(),
-                    'cookie_params' => session_get_cookie_params(),
-                    'user_id_in_session' => isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'NOT SET',
-                    'session_keys' => isset($_SESSION) ? array_keys($_SESSION) : [],
-                    'cookie_header' => isset($_SERVER['HTTP_COOKIE']) ? substr($_SERVER['HTTP_COOKIE'], 0, 200) : 'NOT SET'
-                ],
-                'timestamp' => round(microtime(true) * 1000),
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'C'
-            ];
-            $logPath = dirname(dirname(__DIR__)) . DIRECTORY_SEPARATOR . '.cursor' . DIRECTORY_SEPARATOR . 'debug.log';
-            $logDir = dirname($logPath);
-            if (!is_dir($logDir)) { @mkdir($logDir, 0755, true); }
-            @file_put_contents($logPath, json_encode($logData) . "\n", FILE_APPEND);
-            // #endregion
         }
         
         // Generate CSRF token if not exists
-        if (!isset($_SESSION['csrf_token'])) {
-            $_SESSION['csrf_token'] = self::generateCSRFToken();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            if (!isset($_SESSION['csrf_token'])) {
+                $_SESSION['csrf_token'] = self::generateCSRFToken();
+            }
+            self::$csrfToken = $_SESSION['csrf_token'];
         }
-        
-        self::$csrfToken = $_SESSION['csrf_token'];
     }
     
     /**
@@ -247,66 +203,6 @@ class Security {
         }
         
         return $data;
-    }
-    
-    /**
-     * Sanitize HTML content for forum posts
-     * Allows safe HTML tags and attributes
-     */
-    public static function sanitizeForumHtml($html) {
-        if (empty($html)) {
-            return '';
-        }
-        
-        // Remove null bytes
-        $html = str_replace("\0", '', $html);
-        
-        // Allowed HTML tags
-        $allowedTags = '<p><br><strong><b><em><i><u><ul><ol><li><h1><h2><h3><h4><h5><h6><pre><code><a><blockquote>';
-        
-        // Strip disallowed tags
-        $html = strip_tags($html, $allowedTags);
-        
-        // Clean up attributes - only allow href and target on links
-        $html = preg_replace_callback('/<a\s+([^>]*)>/i', function($matches) {
-            $attrs = $matches[1];
-            $href = '';
-            $target = '';
-            
-            // Extract href
-            if (preg_match('/href=["\']([^"\']*)["\']/i', $attrs, $hrefMatch)) {
-                $url = $hrefMatch[1];
-                // Validate URL
-                if (filter_var($url, FILTER_VALIDATE_URL) || preg_match('/^\/|^#/', $url)) {
-                    $href = 'href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '"';
-                }
-            }
-            
-            // Extract target if present
-            if (preg_match('/target=["\']([^"\']*)["\']/i', $attrs, $targetMatch)) {
-                $targetValue = strtolower($targetMatch[1]);
-                if (in_array($targetValue, ['_blank', '_self', '_parent', '_top'])) {
-                    $target = 'target="' . htmlspecialchars($targetValue, ENT_QUOTES, 'UTF-8') . '" rel="noopener"';
-                }
-            } else if ($href) {
-                // If href exists but no target, add target="_blank" for external links
-                if (preg_match('/^https?:\/\//', $href)) {
-                    $target = 'target="_blank" rel="noopener"';
-                }
-            }
-            
-            $result = '<a';
-            if ($href) $result .= ' ' . $href;
-            if ($target) $result .= ' ' . $target;
-            $result .= '>';
-            
-            return $result;
-        }, $html);
-        
-        // Remove any remaining attributes from other tags
-        $html = preg_replace('/<(?!a\s)([a-z]+)\s+[^>]*>/i', '<$1>', $html);
-        
-        return trim($html);
     }
     
     /**
@@ -414,25 +310,6 @@ class Security {
     public static function isAuthenticated() {
         $result = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
         
-        // #region agent log
-        $logData = [
-            'location' => 'security.php:254',
-            'message' => 'isAuthenticated() check',
-            'data' => [
-                'result' => $result,
-                'has_user_id_key' => isset($_SESSION['user_id']),
-                'user_id_value' => isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'NOT SET',
-                'user_id_empty' => isset($_SESSION['user_id']) ? empty($_SESSION['user_id']) : 'N/A',
-                'session_id' => session_id() ?: 'NO SESSION',
-                'session_keys' => isset($_SESSION) ? array_keys($_SESSION) : []
-            ],
-            'timestamp' => round(microtime(true) * 1000),
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'D'
-        ];
-        file_put_contents('M:\\rpg\\BECMI VTT\\.cursor\\debug.log', json_encode($logData) . "\n", FILE_APPEND);
-        // #endregion
         
         return $result;
     }
@@ -448,6 +325,11 @@ class Security {
      * Require authentication
      */
     public static function requireAuth() {
+        // CRITICAL: Ensure session is initialized before checking auth
+        if (session_status() === PHP_SESSION_NONE) {
+            self::init();
+        }
+        
         if (!self::isAuthenticated()) {
             self::sendUnauthorizedResponse();
         }
@@ -627,11 +509,58 @@ class Security {
     }
     
     /**
+     * Safely clear all output buffers, handling zlib compression
+     * 
+     * When zlib output compression is enabled, ob_end_clean() may fail.
+     * This method handles that gracefully by suppressing errors and
+     * attempting to disable compression if possible.
+     */
+    private static function clearOutputBuffers() {
+        // Try to disable zlib output compression if it's enabled
+        // This prevents errors when trying to clean compressed buffers
+        // Note: This may not work if zlib is enabled at server level (php.ini/.htaccess),
+        // but we try anyway to handle cases where it's enabled per-script
+        $zlibEnabled = ini_get('zlib.output_compression');
+        if ($zlibEnabled) {
+            // Try to disable it - this may fail if set at server level
+            @ini_set('zlib.output_compression', 'Off');
+        }
+        
+        // Clear all output buffers safely
+        // Use @ to suppress errors when zlib compression makes buffers un-cleanable
+        // The error "Failed to discard buffer of zlib output compression" is expected
+        // when zlib is active and we can't disable it
+        while (ob_get_level() > 0) {
+            // Suppress the specific error about zlib compression
+            $result = @ob_end_clean();
+            // If cleaning failed and buffer level didn't decrease, break to avoid infinite loop
+            if (!$result && ob_get_level() > 0) {
+                // Try one more time, then break
+                @ob_end_clean();
+                break;
+            }
+        }
+        
+        // Final cleanup attempt - try to clean any remaining buffer content
+        // (but not the buffer itself, as that might be compressed)
+        if (ob_get_level() > 0) {
+            @ob_clean();
+        }
+    }
+    
+    /**
      * Send unauthorized response
      */
     public static function sendUnauthorizedResponse() {
+        // CRITICAL: Close session before sending response to release lock
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
+        
+        self::clearOutputBuffers();
+        
         http_response_code(401);
-        header('Content-Type: application/json');
+        header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
             'status' => 'error',
             'message' => 'Authentication required',
@@ -644,8 +573,15 @@ class Security {
      * Send forbidden response
      */
     public static function sendForbiddenResponse() {
+        // CRITICAL: Close session before sending response to release lock
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
+        
+        self::clearOutputBuffers();
+        
         http_response_code(403);
-        header('Content-Type: application/json');
+        header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
             'status' => 'error',
             'message' => 'Access forbidden',
@@ -658,8 +594,15 @@ class Security {
      * Send validation error response
      */
     public static function sendValidationErrorResponse($errors) {
+        // CRITICAL: Close session before sending response to release lock
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
+        
+        self::clearOutputBuffers();
+        
         http_response_code(422);
-        header('Content-Type: application/json');
+        header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
             'status' => 'error',
             'message' => 'Validation failed',
@@ -673,10 +616,14 @@ class Security {
      * Send success response
      */
     public static function sendSuccessResponse($data = null, $message = 'Success') {
-        // Clear any output buffers first
-        while (ob_get_level()) {
-            ob_end_clean();
+        // CRITICAL: Close session before sending response to release lock
+        // This prevents session locks from blocking other requests
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
         }
+        
+        // Clear output buffer before sending JSON
+        self::clearOutputBuffers();
         
         http_response_code(200);
         header('Content-Type: application/json; charset=utf-8');
@@ -690,18 +637,41 @@ class Security {
             $response['data'] = $data;
         }
         
-        // Add CSRF token to response if available
+        // Add CSRF token to response if available (from static variable, not session)
         try {
-            $csrfToken = self::getCSRFToken();
+            $csrfToken = self::$csrfToken;
             if ($csrfToken !== null && $csrfToken !== '') {
                 $response['csrf_token'] = $csrfToken;
             }
         } catch (Exception $e) {
             // If CSRF token generation fails, log it but don't break the response
-            error_log("WARNING: Failed to add CSRF token to success response: " . $e->getMessage());
+            @error_log("WARNING: Failed to add CSRF token to success response: " . $e->getMessage());
         }
         
-        echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        // Final cleanup - ensure no output before JSON
+        self::clearOutputBuffers();
+        
+        // Encode JSON with error handling
+        $json = json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false) {
+            // If JSON encoding fails, log error and send error response
+            $jsonError = json_last_error_msg();
+            @error_log("JSON encoding error in sendSuccessResponse: " . $jsonError);
+            @error_log("Response data that failed to encode: " . print_r($response, true));
+            
+            // Clear output buffer again
+            self::clearOutputBuffers();
+            
+            http_response_code(500);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'status' => 'error',
+                'message' => 'Failed to encode response: ' . $jsonError,
+                'code' => 'ENCODING_ERROR'
+            ]);
+        } else {
+            echo $json;
+        }
         exit;
     }
     
@@ -709,18 +679,26 @@ class Security {
      * Send error response
      */
     public static function sendErrorResponse($message = 'An error occurred', $code = 500) {
-        // Clear any output buffers first
-        while (ob_get_level()) {
-            ob_end_clean();
+        // CRITICAL: Close session before sending response to release lock
+        // This prevents session locks from blocking other requests
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
         }
         
+        // Clear output buffer before sending JSON
+        self::clearOutputBuffers();
+
         http_response_code($code);
         header('Content-Type: application/json; charset=utf-8');
+        
+        // Ensure no output before JSON
+        self::clearOutputBuffers();
+        
         echo json_encode([
             'status' => 'error',
             'message' => $message,
             'code' => 'ERROR'
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        ]);
         exit;
     }
     
@@ -829,5 +807,6 @@ class Security {
     }
 }
 
-// Initialize security
-Security::init();
+// Don't auto-initialize security - let each endpoint initialize it explicitly
+// This prevents double initialization and session lock issues
+// Security::init();

@@ -53,7 +53,7 @@ try {
     
     $categoryId = (int) $data['category_id'];
     $threadTitle = trim($data['thread_title']);
-    $postContent = Security::sanitizeForumHtml(trim($data['post_content']));
+    $postContent = trim($data['post_content']);
     $isPrivate = isset($data['is_private']) && $data['is_private'] && $isModerator;
     
     // Check if category exists and user has access
@@ -111,26 +111,6 @@ try {
              WHERE category_id = ?",
             [$postId, $categoryId]
         );
-        
-        // Handle attachments if provided
-        if (!empty($data['attachment_ids']) && is_array($data['attachment_ids'])) {
-            foreach ($data['attachment_ids'] as $attachmentData) {
-                if (isset($attachmentData['file_path'])) {
-                    $db->insert(
-                        "INSERT INTO forum_post_attachments 
-                         (post_id, file_path, file_name, file_size, mime_type, uploaded_at)
-                         VALUES (?, ?, ?, ?, ?, NOW())",
-                        [
-                            $postId,
-                            $attachmentData['file_path'],
-                            $attachmentData['file_name'] ?? basename($attachmentData['file_path']),
-                            $attachmentData['file_size'] ?? 0,
-                            $attachmentData['mime_type'] ?? 'image/jpeg'
-                        ]
-                    );
-                }
-            }
-        }
         
         // Commit transaction
         $db->commit();

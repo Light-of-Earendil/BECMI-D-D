@@ -91,13 +91,25 @@ try {
         Security::sendValidationErrorResponse(['session_id' => 'Cannot start a cancelled session']);
     }
     
-    // Check if session time has passed
+    // Check if session time has passed (allow DM to start early, but log it)
     $sessionDateTime = new DateTime($session['session_datetime']);
     $now = new DateTime();
     
     if ($sessionDateTime > $now) {
-        Security::sendValidationErrorResponse([
-            'session_id' => 'Cannot start session before scheduled time (' . $sessionDateTime->format('Y-m-d H:i:s') . ')'
+        // DM can start early, but we log it for tracking
+        $timeDiff = $now->diff($sessionDateTime);
+        $hoursEarly = $timeDiff->days * 24 + $timeDiff->h + ($timeDiff->i / 60);
+        
+        error_log("EARLY SESSION START: User {$userId} started session {$sessionId} ({$hoursEarly} hours early). Scheduled: {$sessionDateTime->format('Y-m-d H:i:s')}, Started: {$now->format('Y-m-d H:i:s')}");
+        
+        // Log security event for early start
+        Security::logSecurityEvent('session_started_early', [
+            'session_id' => $sessionId,
+            'session_title' => $session['session_title'],
+            'dm_user_id' => $userId,
+            'scheduled_time' => $sessionDateTime->format('Y-m-d H:i:s'),
+            'actual_start_time' => $now->format('Y-m-d H:i:s'),
+            'hours_early' => round($hoursEarly, 2)
         ]);
     }
     

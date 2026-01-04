@@ -103,8 +103,7 @@ try {
             'created_at' => $post['created_at'],
             'updated_at' => $post['updated_at'],
             'can_edit' => $post['author_user_id'] == $userId || $isModerator,
-            'can_delete' => $post['author_user_id'] == $userId || $isModerator,
-            'attachments' => [] // Will be loaded separately
+            'can_delete' => $post['author_user_id'] == $userId || $isModerator
         ];
     }, $posts);
     

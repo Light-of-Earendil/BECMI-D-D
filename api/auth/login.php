@@ -8,11 +8,22 @@
 require_once '../../app/core/database.php';
 require_once '../../app/core/security.php';
 
+// Disable output compression to avoid encoding issues
+if (function_exists('apache_setenv')) {
+    @apache_setenv('no-gzip', 1);
+}
+@ini_set('zlib.output_compression', 0);
+
+// Clear any output buffers (suppress errors for zlib compression)
+while (ob_get_level()) {
+    @ob_end_clean();
+}
+
 // Initialize security (required for CSRF token)
 Security::init();
 
 // Set content type
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 
 try {
     // Only allow POST requests
@@ -127,17 +138,36 @@ try {
     $_SESSION['session_id'] = $sessionId;
     $_SESSION['csrf_token'] = $csrfToken;
     
-    // Log successful login
+    // CRITICAL: Write session data before sending response
+    // Don't close session yet - let PHP handle it automatically after response is sent
+    // This ensures the session cookie is properly set
+    session_write_close();
+    
+    // Log successful login (after session is written)
     Security::logSecurityEvent('login_success', ['username' => $user['username'], 'identifier' => $loginIdentifier]);
     
-    // Return success response
-    Security::sendSuccessResponse([
-        'user_id' => $user['user_id'],
-        'username' => $user['username'],
-        'email' => $user['email'],
-        'session_id' => $sessionId,
+    // Clear output buffer
+    while (ob_get_level()) {
+        ob_end_clean();
+    }
+    
+    // Send response manually (don't use sendSuccessResponse as it closes session again)
+    http_response_code(200);
+    header('Content-Type: application/json; charset=utf-8');
+    
+    echo json_encode([
+        'status' => 'success',
+        'message' => 'Login successful',
+        'data' => [
+            'user_id' => $user['user_id'],
+            'username' => $user['username'],
+            'email' => $user['email'],
+            'session_id' => $sessionId,
+            'csrf_token' => $csrfToken
+        ],
         'csrf_token' => $csrfToken
-    ], 'Login successful');
+    ]);
+    exit;
     
 } catch (Exception $e) {
     error_log("Login error: " . $e->getMessage());

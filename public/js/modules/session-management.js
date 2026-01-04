@@ -9,6 +9,8 @@ class SessionManagementModule {
         this.app = app;
         this.apiClient = app.modules.apiClient;
         this.currentSession = null;
+        this.isLoadingDashboard = false;
+        this.lastDashboardLoad = null;
         
         console.log('Session Management Module initialized');
     }
@@ -145,11 +147,27 @@ class SessionManagementModule {
                     <p>${session.session_description || 'No description provided.'}</p>
                 </div>
                 
+                ${session.invitation_status === 'invited' ? `
+                    <div class="invitation-notice" style="background: rgba(59, 130, 246, 0.1); border-left: 3px solid #3b82f6; padding: 0.5rem; margin: 0.5rem 0; border-radius: 4px;">
+                        <i class="fas fa-envelope-open" style="margin-right: 0.5rem;"></i>
+                        <span>You've been invited to join this session</span>
+                    </div>
+                ` : ''}
+                
                 <div class="session-actions">
-                    <button class="btn btn-sm btn-primary"data-action="view-session"data-session-id="${session.session_id}">
-                        <i class="fas fa-eye"></i>
-                        View
-                    </button>
+                    ${session.invitation_status === 'invited' ? `
+                        <button class="btn btn-sm btn-success" data-action="accept-invitation" data-session-id="${session.session_id}">
+                            <i class="fas fa-check"></i> Accept
+                        </button>
+                        <button class="btn btn-sm btn-danger" data-action="decline-invitation" data-session-id="${session.session_id}">
+                            <i class="fas fa-times"></i> Decline
+                        </button>
+                    ` : `
+                        <button class="btn btn-sm btn-primary"data-action="view-session"data-session-id="${session.session_id}">
+                            <i class="fas fa-eye"></i>
+                            View
+                        </button>
+                    `}
                     ${session.is_dm ? `
                         <button class="btn btn-sm btn-secondary"data-action="edit-session"data-session-id="${session.session_id}">
                             <i class="fas fa-edit"></i>
@@ -469,6 +487,9 @@ class SessionManagementModule {
                     // Reload available characters and players list
                     await this.loadAvailableCharacters(sessionId);
                     await this.loadAndRenderPlayers(sessionId);
+                    
+                    // Load and display the assigned character
+                    await this.loadAndDisplayPlayerCharacter(characterId, sessionId);
                 } else {
                     this.app.showError(response.message || 'Failed to assign character');
                 }
@@ -636,6 +657,27 @@ class SessionManagementModule {
         try {
             await this.loadSession(sessionId);
             
+            // Check if user is DM for this session
+            const isDM = this.currentSession.is_dm || 
+                        (this.currentSession.dm_user_id && 
+                         this.currentSession.dm_user_id == this.app.state.user.user_id);
+            
+            // If DM, check if they prefer to go directly to DM Dashboard
+            if (isDM) {
+                try {
+                    const prefsResponse = await this.apiClient.get('/api/user/notification-preferences.php');
+                    if (prefsResponse.status === 'success' && 
+                        prefsResponse.data.preferences && 
+                        prefsResponse.data.preferences.prefer_dm_dashboard) {
+                        console.log('[Session Management] DM has prefer_dm_dashboard enabled, redirecting to DM Dashboard');
+                        await this.viewDMDashboard(sessionId);
+                        return;
+                    }
+                } catch (error) {
+                    console.warn('[Session Management] Failed to check DM preferences, continuing with normal view:', error);
+                }
+            }
+            
             // Render session details view
             const content = await this.renderSessionDetails(this.currentSession);
             $('#content-area').html(content);
@@ -646,6 +688,27 @@ class SessionManagementModule {
             
             // Load players list
             this.loadAndRenderPlayers(sessionId);
+            
+            // Initialize map scratch-pad for players
+            setTimeout(async () => {
+                if (this.app.modules.sessionMapScratchpad) {
+                    console.log('[Session Management] Initializing map scratch-pad for player, session:', sessionId);
+                    const mapContent = await this.app.modules.sessionMapScratchpad.renderMapView(sessionId);
+                    $('#session-map-scratchpad-container').html(mapContent);
+                    this.app.modules.sessionMapScratchpad.setupToolbarEvents();
+                    
+                    // Initialize canvas after HTML is in DOM
+                    // Note: initializeCanvas() will call startRealtimeUpdates() automatically
+                    if (this.app.modules.sessionMapScratchpad.currentMapId) {
+                        setTimeout(() => {
+                            console.log('[Session Management] Initializing canvas for player...');
+                            this.app.modules.sessionMapScratchpad.initializeCanvas();
+                        }, 100);
+                    } else {
+                        console.warn('[Session Management] No currentMapId, canvas will not initialize');
+                    }
+                }
+            }, 200);
             
         } catch (error) {
             console.error('Failed to view session:', error);
@@ -791,6 +854,11 @@ class SessionManagementModule {
                         </div>
                     ` : ''}
                     
+                    <div class="map-scratchpad-section">
+                        <h3><i class="fas fa-map"></i> Map Scratch-Pad</h3>
+                        <div id="session-map-scratchpad-container"></div>
+                    </div>
+                    
                     <div class="session-info">
                         <h3>Session Information</h3>
                         <div class="info-grid">
@@ -824,6 +892,12 @@ class SessionManagementModule {
                         <p>${session.session_description || 'No description provided.'}</p>
                     </div>
                     
+                    ${!session.is_dm ? `
+                        <div class="your-character-section" id="your-character-section" style="display: none;">
+                            <h3><i class="fas fa-user"></i> Your Character</h3>
+                            <div id="session-character-sheet-container"></div>
+                        </div>
+                    ` : ''}
                     <div class="session-players">
                         <div class="players-header">
                             <h3>Players</h3>
@@ -1112,15 +1186,50 @@ class SessionManagementModule {
             const response = await this.apiClient.get('/api/character/list.php');
             
             if (response.status === 'success' && response.data.characters) {
+                // Check if user already has a character assigned to this session
+                const sessionIdNum = parseInt(sessionId);
+                const hasCharacterInSession = response.data.characters.some(char => {
+                    const charSessionId = char.session_id ? parseInt(char.session_id) : null;
+                    return charSessionId === sessionIdNum;
+                });
+                
+                // Get the assign-character-section container
+                const assignSection = $('#assign-character-section');
+                const container = $('#available-characters-list');
+                
+                if (!container.length) {
+                    return; // Not on session details view
+                }
+                
+                // If user already has a character assigned to this session, hide assignment section and show character section
+                if (hasCharacterInSession) {
+                    console.log('[Session Management] User already has character assigned to session, hiding assignment section');
+                    if (assignSection.length) {
+                        assignSection.hide();
+                    }
+                    
+                    // Find and display the assigned character
+                    const assignedCharacter = response.data.characters.find(char => {
+                        const charSessionId = char.session_id ? parseInt(char.session_id) : null;
+                        return charSessionId === sessionIdNum;
+                    });
+                    
+                    if (assignedCharacter) {
+                        await this.loadAndDisplayPlayerCharacter(assignedCharacter.character_id, sessionId);
+                    }
+                    
+                    return;
+                }
+                
+                // Show the section if it was hidden
+                if (assignSection.length) {
+                    assignSection.show();
+                }
+                
                 // Filter to only show unassigned characters or characters not in this session
                 const availableCharacters = response.data.characters.filter(char => 
                     !char.session_id || char.session_id !== sessionId
                 );
-                
-                const container = $('#available-characters-list');
-                if (!container.length) {
-                    return; // Not on session details view
-                }
                 
                 if (availableCharacters.length === 0) {
                     container.html('<p class="text-muted">You have no available characters to assign. Create a character first!</p>');
@@ -1155,6 +1264,49 @@ class SessionManagementModule {
             const container = $('#available-characters-list');
             if (container.length) {
                 container.html('<p class="error-text">Failed to load your characters</p>');
+            }
+        }
+    }
+    
+    /**
+     * Load and display player's assigned character in session view
+     * Renders the FULL character sheet directly (no summary, no button)
+     * 
+     * @param {number} characterId - ID of assigned character
+     * @param {number} sessionId - ID of session
+     */
+    async loadAndDisplayPlayerCharacter(characterId, sessionId) {
+        try {
+            const characterSection = $('#your-character-section');
+            const sheetContainer = $('#session-character-sheet-container');
+            
+            if (!characterSection.length || !sheetContainer.length) {
+                return; // Not on session details view
+            }
+            
+            // Show the character section
+            characterSection.show();
+            
+            // Directly render the FULL character sheet using the reusable method
+            if (this.app.modules.characterSheet) {
+                await this.app.modules.characterSheet.renderCharacterSheetIntoContainer(
+                    characterId,
+                    '#session-character-sheet-container',
+                    {
+                        showEditButton: true,
+                        showBackButton: false
+                    }
+                );
+            } else {
+                console.error('Character sheet module not available');
+                sheetContainer.html('<p class="error-text">Character sheet module not available</p>');
+            }
+            
+        } catch (error) {
+            console.error('Failed to load player character:', error);
+            const sheetContainer = $('#session-character-sheet-container');
+            if (sheetContainer.length) {
+                sheetContainer.html('<p class="error-text">Failed to load your character</p>');
             }
         }
     }
@@ -1462,9 +1614,41 @@ class SessionManagementModule {
      * @param {number} sessionId - ID of session
      */
     async viewDMDashboard(sessionId) {
+        // Prevent multiple simultaneous calls
+        if (this.isLoadingDashboard) {
+            console.log('Dashboard already loading, skipping duplicate call');
+            return;
+        }
+        
+        // Debounce: Don't reload if we just loaded this dashboard (< 500ms ago)
+        const now = Date.now();
+        if (this.lastDashboardLoad && 
+            this.lastDashboardLoad.sessionId === sessionId && 
+            (now - this.lastDashboardLoad.timestamp) < 500) {
+            console.log('Dashboard recently loaded, skipping duplicate call');
+            return;
+        }
+        
         try {
-            console.log('=== DM DASHBOARD DEBUG ===');
-            console.log('Loading dashboard for session:', sessionId);
+            this.isLoadingDashboard = true;
+            this.lastDashboardLoad = { sessionId, timestamp: now };
+            
+            // Save preference that DM wants to use DM Dashboard (first time they click it)
+            try {
+                const prefsResponse = await this.apiClient.get('/api/user/notification-preferences.php');
+                if (prefsResponse.status === 'success' && 
+                    prefsResponse.data.preferences && 
+                    !prefsResponse.data.preferences.prefer_dm_dashboard) {
+                    // First time clicking DM Dashboard - save preference
+                    console.log('[Session Management] First time DM Dashboard access, saving preference');
+                    await this.apiClient.post('/api/user/notification-preferences.php', {
+                        prefer_dm_dashboard: true
+                    });
+                }
+            } catch (error) {
+                console.warn('[Session Management] Failed to save DM dashboard preference:', error);
+                // Continue anyway - don't block dashboard loading
+            }
             
             const dashboardData = await this.loadDMDashboard(sessionId);
             
@@ -1481,19 +1665,38 @@ class SessionManagementModule {
             
             // Render DM dashboard view
             const dashboardHTML = this.renderDMDashboard(dashboardData, initiativeData);
-            console.log('Dashboard HTML length:', dashboardHTML.length);
-            console.log('Target element exists:', $('#content-area').length > 0);
             
             $('#content-area').html(dashboardHTML);
-            console.log('Dashboard HTML inserted into DOM');
-            console.log('=== DM DASHBOARD DEBUG END ===');
             
             // Store current session ID for initiative updates
             this.currentSession = { session_id: sessionId };
             
+            // Initialize map scratch-pad IMMEDIATELY (don't wait for setTimeout)
+            if (this.app.modules.sessionMapScratchpad) {
+                // Set DM status from dashboard data (avoid duplicate API call)
+                this.app.modules.sessionMapScratchpad.isDM = true;
+                this.app.modules.sessionMapScratchpad.userId = this.app.state.user.user_id;
+                
+                const mapContent = await this.app.modules.sessionMapScratchpad.renderMapView(sessionId);
+                $('#map-scratchpad-container').html(mapContent);
+                this.app.modules.sessionMapScratchpad.setupToolbarEvents();
+                
+                // Canvas will be initialized when map data loads (in loadMapData)
+            }
+            
+            // Start real-time client AFTER map scratch-pad is initialized (to avoid blocking)
+            setTimeout(() => {
+                if (this.app.modules.dmDashboard) {
+                    console.log('Starting real-time client for DM Dashboard...');
+                    this.app.modules.dmDashboard.startRealtimeClient(sessionId);
+                }
+            }, 100);
+            
         } catch (error) {
             console.error('Failed to load DM dashboard:', error);
             this.app.showError('Failed to load DM dashboard: ' + error.message);
+        } finally {
+            this.isLoadingDashboard = false;
         }
     }
     
@@ -1610,6 +1813,11 @@ class SessionManagementModule {
                             </button>
                         </div>
                     ` : players.map(player => this.renderDMPlayerCard(player, session.session_id)).join('')}
+                </div>
+                
+                <div class="map-scratchpad-section">
+                    <h2><i class="fas fa-map"></i> Map Scratch-Pad</h2>
+                    <div id="map-scratchpad-container"></div>
                 </div>
             </div>
         `;

@@ -72,7 +72,8 @@ try {
             armor_type,
             is_magical,
             requires_proficiency,
-            stackable
+            stackable,
+            image_url
         FROM items
         WHERE is_magical = 1
     ";
@@ -147,6 +148,9 @@ try {
             'special_properties' => $item['special_properties'] ? json_decode($item['special_properties'], true) : null,
             'class_restrictions' => $item['class_restrictions'] ? json_decode($item['class_restrictions'], true) : null,
             
+            // Image
+            'image_url' => $item['image_url'],
+            
             // Creature/vehicle properties
             'creature_type' => $item['creature_type'],
             'capacity_cn' => $item['capacity_cn'] ? (int)$item['capacity_cn'] : null,
@@ -202,6 +206,9 @@ try {
             'creature_type' => $baseItem['creature_type'],
             'capacity_cn' => $baseItem['capacity_cn'] ? (int)$baseItem['capacity_cn'] : null,
             'movement_rate' => $baseItem['movement_rate'] ? (int)$baseItem['movement_rate'] : null,
+            
+            // Image
+            'image_url' => $baseItem['image_url'],
             
             // Item properties
             'requires_proficiency' => (bool)$baseItem['requires_proficiency'],

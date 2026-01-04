@@ -8,8 +8,22 @@
 require_once '../../app/core/database.php';
 require_once '../../app/core/security.php';
 
+// Disable output compression
+if (function_exists('apache_setenv')) {
+    @apache_setenv('no-gzip', 1);
+}
+@ini_set('zlib.output_compression', 0);
+
+// Clear any output buffers (suppress errors for zlib compression)
+while (ob_get_level()) {
+    @ob_end_clean();
+}
+
+// Initialize security (REQUIRED to start session)
+Security::init();
+
 // Set content type
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 
 try {
     // Only allow GET requests
@@ -26,22 +40,54 @@ try {
     // Get database connection
     $db = getDB();
     
-    // Get user's characters (including unassigned ones)
-    $characters = $db->select(
-        "SELECT c.character_id, c.character_name, c.class, c.level, c.current_hp, c.max_hp,
-                c.strength, c.dexterity, c.constitution, c.intelligence, c.wisdom, c.charisma,
-                c.alignment, c.gender, c.portrait_url, c.created_at, c.updated_at,
-                gs.session_title, gs.session_datetime, gs.status as session_status,
-                u.username as dm_username
-         FROM characters c 
-         LEFT JOIN game_sessions gs ON c.session_id = gs.session_id 
-         LEFT JOIN users u ON gs.dm_user_id = u.user_id 
-         WHERE c.user_id = ? AND c.is_active = 1 
-         ORDER BY c.created_at DESC",
-        [$userId]
-    );
+    // Check if session_id parameter is provided (for DM to see all characters in session)
+    $sessionId = isset($_GET['session_id']) ? (int) $_GET['session_id'] : null;
+    $isDM = false;
     
-    // Only show user's own characters (removed query for other players' characters)
+    if ($sessionId && $sessionId > 0) {
+        // Verify user is DM of this session
+        $session = $db->selectOne(
+            "SELECT dm_user_id FROM game_sessions WHERE session_id = ?",
+            [$sessionId]
+        );
+        
+        if ($session && $session['dm_user_id'] == $userId) {
+            $isDM = true;
+        }
+    }
+    
+    // If DM and session_id provided, get ALL characters for that session
+    if ($isDM) {
+        $characters = $db->select(
+            "SELECT c.character_id, c.character_name, c.class, c.level, c.current_hp, c.max_hp,
+                    c.strength, c.dexterity, c.constitution, c.intelligence, c.wisdom, c.charisma,
+                    c.alignment, c.gender, c.portrait_url, c.session_id, c.created_at, c.updated_at,
+                    gs.session_title, gs.session_datetime, gs.status as session_status,
+                    u.username as dm_username
+             FROM characters c 
+             LEFT JOIN game_sessions gs ON c.session_id = gs.session_id 
+             LEFT JOIN users u ON gs.dm_user_id = u.user_id 
+             WHERE c.session_id = ? AND c.is_active = 1 
+             ORDER BY c.character_name ASC",
+            [$sessionId]
+        );
+    } else {
+        // Get user's own characters (including unassigned ones)
+        $characters = $db->select(
+            "SELECT c.character_id, c.character_name, c.class, c.level, c.current_hp, c.max_hp,
+                    c.strength, c.dexterity, c.constitution, c.intelligence, c.wisdom, c.charisma,
+                    c.alignment, c.gender, c.portrait_url, c.session_id, c.created_at, c.updated_at,
+                    gs.session_title, gs.session_datetime, gs.status as session_status,
+                    u.username as dm_username
+             FROM characters c 
+             LEFT JOIN game_sessions gs ON c.session_id = gs.session_id 
+             LEFT JOIN users u ON gs.dm_user_id = u.user_id 
+             WHERE c.user_id = ? AND c.is_active = 1 
+             ORDER BY c.created_at DESC",
+            [$userId]
+        );
+    }
+    
     $allCharacters = $characters;
     
     // Add calculated fields for each character

@@ -54,11 +54,22 @@
 require_once '../../app/core/database.php';
 require_once '../../app/core/security.php';
 
-// Initialize security
+// Disable output compression
+if (function_exists('apache_setenv')) {
+    @apache_setenv('no-gzip', 1);
+}
+@ini_set('zlib.output_compression', 0);
+
+// Clear any output buffers (suppress errors for zlib compression)
+while (ob_get_level()) {
+    @ob_end_clean();
+}
+
+// Initialize security (REQUIRED to start session)
 Security::init();
 
 // Set content type
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 
 try {
     // Only allow GET requests
@@ -112,50 +123,108 @@ try {
         [$sessionId]
     );
     
-    // For each player, get their characters in this session
+    // Get ALL characters for this session in one query (optimization)
+    $allCharactersRaw = $db->select(
+        "SELECT character_id, user_id, character_name, class, level, experience_points,
+                current_hp, max_hp, 
+                strength, dexterity, constitution, intelligence, wisdom, charisma,
+                armor_class, thac0_melee, thac0_ranged,
+                movement_rate_normal, movement_rate_encounter, encumbrance_status,
+                save_death_ray, save_magic_wand, save_paralysis, save_dragon_breath, save_spells,
+                alignment, age, height, weight, hair_color, eye_color,
+                gold_pieces, silver_pieces, copper_pieces,
+                created_at, updated_at
+         FROM characters
+         WHERE session_id = ? AND is_active = 1
+         ORDER BY user_id, character_name ASC",
+        [$sessionId]
+    );
+    
+    // Get all character IDs for batch queries
+    $characterIds = array_column($allCharactersRaw, 'character_id');
+    
+    // Batch load all inventories
+    $allInventories = [];
+    if (!empty($characterIds)) {
+        $placeholders = implode(',', array_fill(0, count($characterIds), '?'));
+        $inventoryData = $db->select(
+            "SELECT ci.character_id, ci.*, i.name, i.description, i.weight_cn, i.cost_gp, i.item_type, 
+                    i.damage_die, i.damage_type, i.ac_bonus, i.weapon_type, i.range_short, i.range_long
+             FROM character_inventory ci 
+             JOIN items i ON ci.item_id = i.item_id 
+             WHERE ci.character_id IN ($placeholders)
+             ORDER BY ci.character_id, ci.is_equipped DESC, i.item_type, i.name",
+            $characterIds
+        );
+        // Group by character_id
+        foreach ($inventoryData as $inv) {
+            $allInventories[$inv['character_id']][] = $inv;
+        }
+    }
+    
+    // Batch load all skills
+    $allSkills = [];
+    if (!empty($characterIds)) {
+        $placeholders = implode(',', array_fill(0, count($characterIds), '?'));
+        $skillsData = $db->select(
+            "SELECT character_id, skill_name, bonus, learned_at_level, notes 
+             FROM character_skills 
+             WHERE character_id IN ($placeholders)
+             ORDER BY character_id, skill_name",
+            $characterIds
+        );
+        // Group by character_id
+        foreach ($skillsData as $skill) {
+            $allSkills[$skill['character_id']][] = $skill;
+        }
+    }
+    
+    // Batch load all spells
+    $allSpells = [];
+    if (!empty($characterIds)) {
+        $placeholders = implode(',', array_fill(0, count($characterIds), '?'));
+        $spellsData = $db->select(
+            "SELECT cs.character_id, cs.spell_id, cs.spell_name, cs.spell_level, cs.spell_type,
+                    cs.is_memorized, cs.times_cast_today,
+                    s.range_text, s.duration_text
+             FROM character_spells cs
+             JOIN spells s ON cs.spell_id = s.spell_id
+             WHERE cs.character_id IN ($placeholders)
+             ORDER BY cs.character_id, cs.spell_level, cs.spell_name",
+            $characterIds
+        );
+        // Group by character_id
+        foreach ($spellsData as $spell) {
+            $allSpells[$spell['character_id']][] = $spell;
+        }
+    }
+    
+    // Load BECMI rules engine once
+    require_once '../../app/services/becmi-rules.php';
+    
+    // Group characters by player
+    $charactersByPlayer = [];
+    foreach ($allCharactersRaw as $char) {
+        $charactersByPlayer[$char['user_id']][] = $char;
+    }
+    
+    // For each player, format their characters
     $playerData = [];
     $allCharacters = [];
     
     foreach ($players as $player) {
         $playerId = (int) $player['user_id'];
-        
-        // Get characters for this player in this session
-        $characters = $db->select(
-            "SELECT character_id, character_name, class, level, experience_points,
-                    current_hp, max_hp, 
-                    strength, dexterity, constitution, intelligence, wisdom, charisma,
-                    armor_class, thac0_melee, thac0_ranged,
-                    movement_rate_normal, movement_rate_encounter, encumbrance_status,
-                    save_death_ray, save_magic_wand, save_paralysis, save_dragon_breath, save_spells,
-                    alignment, age, height, weight, hair_color, eye_color,
-                    gold_pieces, silver_pieces, copper_pieces,
-                    created_at, updated_at
-             FROM characters
-             WHERE user_id = ? AND session_id = ? AND is_active = 1
-             ORDER BY character_name ASC",
-            [$playerId, $sessionId]
-        );
-        
-        // Note: Abilities are already included in the SELECT above (strength, dexterity, etc.)
+        $characters = $charactersByPlayer[$playerId] ?? [];
         
         // Format character data
-        $formattedCharacters = array_map(function($char) use ($db) {
-            require_once '../../app/services/becmi-rules.php';
+        $formattedCharacters = array_map(function($char) use ($allInventories, $allSkills, $allSpells) {
             
             $hpPercentage = $char['max_hp'] > 0 
                 ? ($char['current_hp'] / $char['max_hp']) * 100 
                 : 0;
             
-            // Get character inventory for AC calculation
-            $inventory = $db->select(
-                "SELECT ci.*, i.name, i.description, i.weight_cn, i.cost_gp, i.item_type, 
-                        i.damage_die, i.damage_type, i.ac_bonus, i.weapon_type, i.range_short, i.range_long
-                 FROM character_inventory ci 
-                 JOIN items i ON ci.item_id = i.item_id 
-                 WHERE ci.character_id = ? 
-                 ORDER BY ci.is_equipped DESC, i.item_type, i.name",
-                [$char['character_id']]
-            );
+            // Get character inventory from batch-loaded data
+            $inventory = $allInventories[$char['character_id']] ?? [];
             
             // Recalculate THAC0 correctly (only base value)
             $thac0Data = BECMIRulesEngine::calculateTHAC0($char);
@@ -166,16 +235,10 @@ try {
             // Get XP needed for next level
             $xpForNextLevel = BECMIRulesEngine::getExperienceForNextLevel($char['class'], $char['level']);
             
-            // Get character skills
-            $skills = $db->select(
-                "SELECT skill_name, bonus, learned_at_level, notes 
-                 FROM character_skills 
-                 WHERE character_id = ? 
-                 ORDER BY skill_name",
-                [$char['character_id']]
-            );
+            // Get character skills from batch-loaded data
+            $skills = $allSkills[$char['character_id']] ?? [];
             
-            // Get character spells (if spellcasting class)
+            // Get character spells from batch-loaded data (if spellcasting class)
             $spells = [];
             $spellsByLevel = [];
             $memorizedByLevel = [];
@@ -189,16 +252,7 @@ try {
                 $spellSlots = BECMIRulesEngine::getSpellSlots($char['class'], $char['level']);
                 $spellSlotsByLevel = $spellSlots; // Already in the correct format
                 
-                $spellData = $db->select(
-                    "SELECT cs.spell_id, cs.spell_name, cs.spell_level, cs.spell_type,
-                            cs.is_memorized, cs.times_cast_today,
-                            s.range_text, s.duration_text
-                     FROM character_spells cs
-                     JOIN spells s ON cs.spell_id = s.spell_id
-                     WHERE cs.character_id = ?
-                     ORDER BY cs.spell_level, cs.spell_name",
-                    [$char['character_id']]
-                );
+                $spellData = $allSpells[$char['character_id']] ?? [];
                 
                 foreach ($spellData as $spell) {
                     $spellLevel = (int) $spell['spell_level'];

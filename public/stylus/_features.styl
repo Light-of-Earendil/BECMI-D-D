@@ -500,6 +500,35 @@
   position: relative
   z-index: 1
 
+.saving-throw
+  display: flex
+  justify-content: space-between
+  align-items: center
+  padding: var(--space-2)
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+  border: 1px solid rgba(0, 0, 0, 0.1)
+  border-radius: var(--radius-sm)
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3)
+
+.save-info
+  display: flex
+  flex-direction: column
+  gap: var(--space-1)
+  flex: 1
+
+.save-name
+  font-family: "Cinzel", Georgia, serif
+  color: var(--wood-900)
+  font-size: 0.9375rem
+  font-weight: 600
+  line-height: 1.3
+
+.save-value
+  font-family: "VT323", monospace
+  color: var(--wood-700)
+  font-size: 0.875rem
+  font-weight: 600
+
 .equipment-list
   display: flex
   flex-wrap: wrap
@@ -508,21 +537,478 @@
 input.hp-input
   width: 100px
 
+// ==========================================================================
+// Weapon Masteries Styling
+// ==========================================================================
+
+.weapon-masteries
+  position: relative
+  z-index: 1
+
+.masteries-list
+  display: flex
+  flex-direction: column
+  gap: var(--space-3)
+  position: relative
+  z-index: 1
+
+.mastery-item
+  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+  border: 1px solid rgba(0, 0, 0, 0.2)
+  border-radius: var(--radius-sm)
+  padding: var(--space-4)
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2)
+  display: flex
+  flex-direction: column
+  gap: var(--space-2)
+
 .mastery-weapon
-  color: var(--text-ink)
+  display: flex
+  align-items: center
+  gap: var(--space-2)
+  margin-bottom: var(--space-1)
 
-.equipment-list .equipment-item
-  width: calc(50% - 10px)
+  i
+    color: var(--brass-600)
+    font-size: 1rem
 
-.item-details
-  color: var(--text-ink)
+.weapon-name
+  font-family: "Cinzel", Georgia, serif
+  color: var(--wood-900)
+  font-size: 1rem
+  font-weight: 600
+  line-height: 1.3
+
+.weapon-damage
+  font-family: "VT323", monospace
+  color: var(--wood-800)
+  font-size: 0.875rem
+  font-weight: 700
+  margin-left: var(--space-2)
+
+.mastery-rank
+  margin-bottom: var(--space-1)
+
+.rank-badge
+  display: inline-block
+  padding: var(--space-1) var(--space-2)
+  background: linear-gradient(180deg, var(--brass-300), var(--brass-500))
+  border: 1px solid var(--brass-600)
+  border-radius: var(--radius-sm)
+  color: var(--wood-900)
+  font-size: 0.75rem
+  font-weight: 700
+  text-transform: capitalize
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3)
+  letter-spacing: 0.5px
+
+  &.basic
+    background: linear-gradient(180deg, var(--parchment-400), var(--parchment-600))
+    border-color: var(--parchment-700)
+    color: var(--wood-800)
+
+  &.skilled
+    background: linear-gradient(180deg, var(--brass-300), var(--brass-500))
+    border-color: var(--brass-600)
+
+  &.expert
+    background: linear-gradient(180deg, var(--brass-400), var(--brass-600))
+    border-color: var(--brass-700)
+
+  &.master
+    background: linear-gradient(180deg, var(--brass-500), var(--brass-700))
+    border-color: var(--brass-800)
+
+  &.grand_master
+    background: linear-gradient(180deg, var(--brass-600), var(--brass-800))
+    border-color: var(--wood-900)
+    color: var(--text-strong)
+
+.mastery-bonuses
+  display: flex
+  flex-wrap: wrap
+  gap: var(--space-2)
+  margin-top: var(--space-1)
+
+.bonus-badge
+  display: inline-flex
+  align-items: center
+  gap: var(--space-1)
+  padding: var(--space-1) var(--space-2)
+  background: linear-gradient(180deg, var(--parchment-300), var(--parchment-500))
+  border: 1px solid var(--parchment-600)
+  border-radius: var(--radius-sm)
+  color: var(--wood-900)
+  font-size: 0.75rem
+  font-weight: 600
+  font-family: "VT323", monospace
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3)
+
+  i
+    color: var(--brass-600)
+    font-size: 0.75rem
+
+.mastery-level
+  margin-top: var(--space-1)
+  padding-top: var(--space-1)
+  border-top: 1px solid rgba(0, 0, 0, 0.1)
+
+  small
+    color: var(--wood-700)
+    font-size: 0.75rem
+    font-style: italic
+
+// ==========================================================================
+// General Skills Styling
+// ==========================================================================
+
+.general-skills
+  position: relative
+  z-index: 1
+
+.skills-list
+  display: flex
+  flex-direction: column
+  gap: var(--space-4)
+
+.skill-group
+  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+  border: 1px solid rgba(0, 0, 0, 0.2)
+  border-radius: var(--radius-sm)
+  padding: var(--space-4)
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2)
+
+.skill-ability-header
+  font-family: "Cinzel", Georgia, serif
+  color: var(--wood-900)
+  font-size: 1rem
+  font-weight: 600
+  margin-bottom: var(--space-3)
+  padding-bottom: var(--space-2)
+  border-bottom: 2px solid var(--brass-500)
+  display: flex
+  align-items: center
+  gap: var(--space-2)
+
+  i
+    color: var(--brass-600)
+    font-size: 1rem
+
+.skill-items
+  display: flex
+  flex-direction: column
+  gap: var(--space-2)
+
+.skill-item
+  display: flex
+  justify-content: space-between
+  align-items: center
+  gap: var(--space-2)
+
+.skill-actions
+  display: flex
+  align-items: center
+  gap: var(--space-2)
+  align-items: center
+  padding: var(--space-2)
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+  border: 1px solid rgba(0, 0, 0, 0.1)
+  border-radius: var(--radius-sm)
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3)
+
+.skill-info
+  display: flex
+  flex-direction: column
+  gap: var(--space-1)
+  flex: 1
+
+.skill-name
+  font-family: "Cinzel", Georgia, serif
+  color: var(--wood-900)
+  font-size: 0.9375rem
+  font-weight: 600
+  line-height: 1.3
+
+.skill-ability-score
+  font-family: "VT323", monospace
+  color: var(--wood-700)
+  font-size: 0.875rem
+  font-weight: 600
+
+// ==========================================================================
+// Equipment & Inventory Styling
+// ==========================================================================
 
 .equipment-summary
-  color: var(--text-dim)
-  margin: 50px 0
+  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+  border: 1px solid rgba(0, 0, 0, 0.2)
+  border-radius: var(--radius-sm)
+  padding: var(--space-4)
+  margin-bottom: var(--space-4)
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2)
 
-.equipment-section h4
-  margin: 30px 0 10px
+.encumbrance-bar
+  margin-bottom: var(--space-3)
+
+.encumbrance-label
+  display: flex
+  align-items: center
+  gap: var(--space-2)
+  margin-bottom: var(--space-2)
+  font-family: "Cinzel", Georgia, serif
+  color: var(--wood-900)
+  font-size: 0.9375rem
+  font-weight: 600
+
+  i
+    color: var(--brass-600)
+    font-size: 1rem
+
+  span
+    color: var(--wood-900)
+
+.encumbrance-bar-track
+  height: 20px
+  background: linear-gradient(180deg, var(--wood-700), var(--wood-900))
+  border-radius: var(--radius-full)
+  overflow: hidden
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.3)
+  border: 1px solid rgba(0, 0, 0, 0.3)
+
+.encumbrance-bar-fill
+  height: 100%
+  background: linear-gradient(90deg, var(--brass-400), var(--brass-600))
+  transition: width var(--t-med) var(--ease)
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3)
+
+  .encumbrance-bar.unencumbered &
+    background: linear-gradient(90deg, var(--green-crt-dim), var(--green-crt))
+
+  .encumbrance-bar.lightly_encumbered &
+    background: linear-gradient(90deg, var(--brass-400), var(--brass-600))
+
+  .encumbrance-bar.heavily_encumbered &
+    background: linear-gradient(90deg, var(--brass-500), var(--brass-700))
+
+  .encumbrance-bar.severely_encumbered &
+    background: linear-gradient(90deg, #d86c5d, #b33a2b)
+
+  .encumbrance-bar.overloaded &
+    background: linear-gradient(90deg, #b33a2b, #8b2d1f)
+
+.movement-rates
+  display: flex
+  flex-wrap: wrap
+  gap: var(--space-3)
+  margin-top: var(--space-3)
+
+.movement-rate-item
+  display: flex
+  align-items: center
+  gap: var(--space-2)
+  padding: var(--space-2) var(--space-3)
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+  border: 1px solid rgba(0, 0, 0, 0.1)
+  border-radius: var(--radius-sm)
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3)
+
+  i
+    color: var(--brass-600)
+    font-size: 1rem
+
+  span
+    font-family: "VT323", monospace
+    color: var(--wood-900)
+    font-size: 0.875rem
+    font-weight: 700
+
+.equipment-section
+  margin-bottom: var(--space-4)
+
+  h4
+    font-family: "Cinzel", Georgia, serif
+    color: var(--text-strong)
+    font-size: 1.125rem
+    font-weight: 600
+    margin: 0 0 var(--space-3) 0
+    padding-bottom: var(--space-2)
+    border-bottom: 2px solid var(--brass-500)
+    display: flex
+    align-items: center
+    gap: var(--space-2)
+
+    i
+      color: var(--brass-600)
+      font-size: 1rem
+
+.equipment-list
+  display: flex
+  flex-wrap: wrap
+  gap: var(--space-3)
+
+  .equipment-item
+    background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+    border: 1px solid rgba(0, 0, 0, 0.2)
+    border-radius: var(--radius-sm)
+    padding: var(--space-3)
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2)
+    width: calc(50% - var(--space-3))
+    display: flex
+    flex-direction: column
+    gap: var(--space-2)
+    position: relative
+
+    &.equipped
+      border-color: var(--brass-500)
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2), 0 0 8px rgba(202, 162, 74, 0.3)
+
+    &.magical-item
+      border-color: var(--brass-600)
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2), 0 0 12px rgba(202, 162, 74, 0.5)
+
+.item-details
+  flex: 1
+  display: flex
+  flex-direction: column
+  gap: var(--space-2)
+
+.item-name
+  display: flex
+  align-items: center
+  gap: var(--space-2)
+  flex-wrap: wrap
+
+.item-name-text
+  font-family: "Cinzel", Georgia, serif
+  color: var(--wood-900)
+  font-size: 1rem
+  font-weight: 600
+  line-height: 1.3
+
+.item-quantity
+  font-family: "VT323", monospace
+  color: var(--wood-700)
+  font-size: 0.875rem
+  font-weight: 700
+  background: linear-gradient(180deg, var(--parchment-300), var(--parchment-500))
+  padding: var(--space-1) var(--space-2)
+  border-radius: var(--radius-sm)
+  border: 1px solid var(--parchment-600)
+
+.item-stats
+  display: flex
+  flex-wrap: wrap
+  gap: var(--space-2)
+
+.stat-badge
+  display: inline-flex
+  align-items: center
+  gap: var(--space-1)
+  padding: var(--space-1) var(--space-2)
+  background: linear-gradient(180deg, var(--parchment-300), var(--parchment-500))
+  border: 1px solid var(--parchment-600)
+  border-radius: var(--radius-sm)
+  color: var(--wood-900)
+  font-size: 0.75rem
+  font-weight: 600
+  font-family: "VT323", monospace
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3)
+
+  i
+    color: var(--brass-600)
+    font-size: 0.75rem
+
+  small
+    color: var(--wood-700)
+    font-size: 0.7rem
+
+  &.damage
+    background: linear-gradient(180deg, var(--brass-300), var(--brass-500))
+    border-color: var(--brass-600)
+    position: relative
+
+.damage-roll-btn
+  margin-left: var(--space-1)
+  padding: var(--space-1)
+  background: linear-gradient(180deg, var(--brass-400), var(--brass-600))
+  border: 1px solid var(--brass-700)
+  border-radius: var(--radius-xs)
+  color: var(--wood-900)
+  cursor: pointer
+  transition: all var(--t-fast) var(--ease)
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3)
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  min-width: 20px
+  height: 20px
+
+  &:hover
+    background: linear-gradient(180deg, var(--brass-500), var(--brass-700))
+    transform: scale(1.1)
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)
+
+  &:active
+    transform: scale(0.95)
+
+  i
+    font-size: 0.7rem
+    color: var(--wood-900)
+
+  &.ac
+    background: linear-gradient(180deg, var(--parchment-300), var(--parchment-500))
+    border-color: var(--parchment-600)
+
+  &.weight
+    background: linear-gradient(180deg, var(--wood-200), var(--wood-300))
+    border-color: var(--wood-400)
+
+.item-description
+  font-family: 'Lora', Georgia, 'Times New Roman', serif
+  color: var(--wood-800)
+  font-size: 0.8125rem
+  line-height: 1.5
+  margin-top: var(--space-1)
+  padding-top: var(--space-2)
+  border-top: 1px solid rgba(0, 0, 0, 0.1)
+
+.item-description-full
+  margin-top: var(--space-3)
+  padding-top: var(--space-3)
+  border-top: 2px solid var(--brass-500)
+
+  h6
+    font-family: "Cinzel", Georgia, serif
+    color: var(--wood-900)
+    font-size: 0.875rem
+    font-weight: 600
+    margin-bottom: var(--space-2)
+
+  .item-description
+    margin-top: 0
+    padding-top: 0
+    border-top: none
+
+.item-notes
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-200))
+  border: 1px solid var(--parchment-600)
+  border-radius: var(--radius-sm)
+  padding: var(--space-1) var(--space-2)
+  font-family: 'Lora', Georgia, 'Times New Roman', serif
+  color: var(--wood-800)
+  font-size: 0.75rem
+  font-style: italic
+
+  i
+    color: var(--brass-600)
+    margin-right: var(--space-1)
+
+.item-actions
+  display: flex
+  gap: var(--space-2)
+  margin-top: var(--space-2)
+  padding-top: var(--space-2)
+  border-top: 1px solid rgba(0, 0, 0, 0.1)
 
 .save-item
   background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
@@ -576,6 +1062,34 @@ input.hp-input
   object-fit: cover
   position: relative
   z-index: 1
+
+.character-portrait-img
+  width: 100%
+  height: 100%
+  object-fit: cover
+  border-radius: var(--radius-md)
+
+.ability-scores-container
+  display: flex
+  gap: var(--space-6)
+  align-items: flex-start
+
+.character-portrait-section
+  flex-shrink: 0
+
+.character-portrait-section .character-portrait
+  width: 150px
+  height: 150px
+
+// Responsive: Stack portrait and ability scores on smaller screens
+@media (max-width: 768px)
+  .ability-scores-container
+    flex-direction: column
+    align-items: center
+
+  .character-portrait-section .character-portrait
+    width: 120px
+    height: 120px
 
 .character-info
   flex: 1
@@ -2466,7 +2980,7 @@ input.hp-input
 
   h1
     font-family: "Cinzel", Georgia, serif
-    font-size: 2.5rem
+    font-size: 1.8rem
     color: var(--text-strong)
     margin: 0 0 var(--space-3) 0
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3)
@@ -3646,6 +4160,158 @@ textarea:focus-visible
   clip: rect(0, 0, 0, 0)
   white-space: nowrap
   border-width: 0
+
+// ==========================================================================
+// Session Map Scratch-Pad Styles
+// ==========================================================================
+
+.session-map-scratchpad
+  display: flex
+  flex-direction: column
+  background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
+  border-radius: var(--radius-md)
+  box-shadow: var(--shadow-wood)
+  padding: var(--space-4)
+  margin: var(--space-4) 0
+
+.map-header
+  display: flex
+  justify-content: space-between
+  align-items: center
+  margin-bottom: var(--space-4)
+  padding-bottom: var(--space-3)
+  border-bottom: 2px solid var(--wood-900)
+
+  h2
+    margin: 0
+    font-size: 1.5rem
+    color: var(--text-strong)
+
+.map-toolbar
+  display: flex
+  gap: var(--space-2)
+  align-items: center
+  margin-bottom: var(--space-4)
+  display: flex
+  gap: var(--space-2)
+  align-items: center
+
+  select
+    min-width: 200px
+
+button#upload-map-btn
+  min-width: 160px
+
+.map-tools
+  display: flex
+  gap: var(--space-4)
+  flex-wrap: wrap
+  padding: var(--space-3)
+  background: rgba(0, 0, 0, 0.2)
+  border-radius: var(--radius-sm)
+  margin-bottom: var(--space-4)
+  align-items: flex-end
+
+.tool-group
+  display: flex
+  flex-direction: column
+  gap: var(--space-1)
+
+  label
+    font-size: 0.85rem
+    color: var(--text-soft)
+    margin-bottom: var(--space-1)
+
+  input[type="color"]
+    width: 50px
+    height: 35px
+    border: 2px solid var(--wood-900)
+    border-radius: var(--radius-sm)
+    cursor: pointer
+
+  input[type="range"]
+    width: 100px
+
+  #brush-size-display
+    font-size: 0.85rem
+    color: var(--text-soft)
+    text-align: center
+
+.map-container
+  position: relative
+  width: 100%
+  min-height: 500px
+  // Height will be set dynamically by JavaScript to match canvas height
+  background: #1a1a1a
+  border-radius: var(--radius-sm)
+  border: 2px solid var(--wood-900)
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.5)
+
+.canvas-wrapper
+  position: relative
+  width: 100%
+  min-height: 500px
+  display: block
+
+#map-background-canvas,
+#map-drawing-canvas,
+#map-token-canvas
+  position: absolute
+  top: 0
+  left: 0
+  display: block
+  cursor: crosshair
+
+#map-background-canvas
+  z-index: 1
+  pointer-events: none
+
+#map-drawing-canvas
+  z-index: 2
+  pointer-events: auto
+
+#map-token-canvas
+  z-index: 3
+  pointer-events: auto
+
+  &.drawing-mode
+    pointer-events: none
+
+  &.token-mode
+    cursor: pointer
+    pointer-events: auto
+
+  &.dragging
+    cursor: grabbing
+
+.map-scratchpad-section
+  margin: var(--space-6) 0
+  padding: var(--space-4)
+  background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
+  border-radius: var(--radius-md)
+  box-shadow: var(--shadow-wood)
+
+  h3
+    margin-bottom: var(--space-4)
+    color: var(--text-strong)
+
+.empty-state
+  display: flex
+  flex-direction: column
+  align-items: center
+  justify-content: center
+  min-height: 400px
+  color: var(--text-soft)
+  text-align: center
+
+  i
+    font-size: 4rem
+    margin-bottom: var(--space-4)
+    opacity: 0.5
+
+  p
+    font-size: 1.1rem
+    margin: var(--space-2) 0
 
 // ==========================================================================
 // Print Styles

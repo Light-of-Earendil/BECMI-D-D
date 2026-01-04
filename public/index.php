@@ -156,7 +156,12 @@
                     </div>
                     <div class="form-group">
                         <label for="password">Password:</label>
-                        <input type="password" id="password" name="password" required>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="password" name="password" required>
+                            <button type="button" class="password-toggle-btn" aria-label="Show password">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="form-actions">
                         <button type="submit" class="btn btn-primary">Login</button>
@@ -189,11 +194,21 @@
                     </div>
                     <div class="form-group">
                         <label for="reg-password">Password:</label>
-                        <input type="password" id="reg-password" name="password" required>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="reg-password" name="password" required>
+                            <button type="button" class="password-toggle-btn" aria-label="Show password">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="reg-confirm-password">Confirm Password:</label>
-                        <input type="password" id="reg-confirm-password" name="confirm_password" required>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="reg-confirm-password" name="confirm_password" required>
+                            <button type="button" class="password-toggle-btn" aria-label="Show password">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="form-actions">
                         <button type="submit" class="btn btn-primary">Register</button>
@@ -330,9 +345,9 @@
     <script src="js/modules/hex-map-editor.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/hex-map-play.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/forum.js?t=<?php echo time(); ?>"></script>
-    <script src="js/modules/forum-text-editor.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/forum-thread.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/forum-moderation.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/session-map-scratchpad.js?t=<?php echo time(); ?>"></script>
     <script src="js/main.js?t=<?php echo time(); ?>"></script>
 </body>
 </html>

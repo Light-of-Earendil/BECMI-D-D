@@ -32,11 +32,22 @@
 require_once '../../app/core/database.php';
 require_once '../../app/core/security.php';
 
-// Initialize security
+// Disable output compression
+if (function_exists('apache_setenv')) {
+    @apache_setenv('no-gzip', 1);
+}
+@ini_set('zlib.output_compression', 0);
+
+// Clear any output buffers
+while (ob_get_level()) {
+    @ob_end_clean();
+}
+
+// Initialize security (REQUIRED to start session)
 Security::init();
 
 // Set content type
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 
 try {
     // Only allow GET requests

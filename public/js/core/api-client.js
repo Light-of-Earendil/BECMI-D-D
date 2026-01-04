@@ -194,31 +194,64 @@ class APIClient {
                 try {
                     result = JSON.parse(responseText);
                 } catch (jsonError) {
-                    // Log full error for debugging
+                    // Log FULL response text for debugging - CRITICAL for finding PHP errors
                     console.error('========================================');
-                    console.error('[API Client] JSON parse error - Full response:');
+                    console.error('[API Client] JSON parse error - FULL RESPONSE TEXT:');
                     console.error('========================================');
-                    console.error(responseText);
+                    console.error('COMPLETE RESPONSE:', responseText);
                     console.error('========================================');
                     console.error('Response length:', responseText.length);
                     console.error('Response status:', response.status);
                     console.error('Response statusText:', response.statusText);
+                    console.error('First 500 chars:', responseText.substring(0, 500));
+                    console.error('Last 500 chars:', responseText.substring(Math.max(0, responseText.length - 500)));
                     console.error('========================================');
                     
-                    // Extract error message from HTML if possible
+                    // Extract PHP error message - try multiple patterns
                     let errorMsg = jsonError.message;
-                    if (responseText.includes('<b>')) {
-                        // Try to extract PHP error message
-                        const match = responseText.match(/<b>(.*?)<\/b>/);
-                        if (match && match[1]) {
-                            errorMsg = `PHP Error: ${match[1]}`;
+                    let phpError = null;
+                    let phpFile = null;
+                    let phpLine = null;
+                    
+                    // Pattern 1: Fatal error: message in file.php on line X
+                    const fatalPattern1 = /(Fatal error|Parse error|Warning|Notice|Deprecated):\s*(.+?)\s+in\s+(.+?\.php)\s+on\s+line\s+(\d+)/i;
+                    const match1 = responseText.match(fatalPattern1);
+                    if (match1) {
+                        phpError = match1[2].trim();
+                        phpFile = match1[3].trim();
+                        phpLine = match1[4].trim();
+                        errorMsg = `PHP ${match1[1]}: ${phpError} in ${phpFile} on line ${phpLine}`;
+                    } else {
+                        // Pattern 2: Fatal error: message in /path/to/file.php:X
+                        const fatalPattern2 = /(Fatal error|Parse error|Warning|Notice|Deprecated):\s*(.+?)\s+in\s+(.+?\.php):(\d+)/i;
+                        const match2 = responseText.match(fatalPattern2);
+                        if (match2) {
+                            phpError = match2[2].trim();
+                            phpFile = match2[3].trim();
+                            phpLine = match2[4].trim();
+                            errorMsg = `PHP ${match2[1]}: ${phpError} in ${phpFile}:${phpLine}`;
+                        } else {
+                            // Pattern 3: <b>Fatal error</b>: message in file.php on line X
+                            const fatalPattern3 = /<b>(Fatal error|Parse error|Warning|Notice|Deprecated)<\/b>:\s*(.+?)\s+in\s+(.+?\.php)\s+on\s+line\s+(\d+)/i;
+                            const match3 = responseText.match(fatalPattern3);
+                            if (match3) {
+                                phpError = match3[2].trim();
+                                phpFile = match3[3].trim();
+                                phpLine = match3[4].trim();
+                                errorMsg = `PHP ${match3[1]}: ${phpError} in ${phpFile} on line ${phpLine}`;
+                            }
                         }
-                    } else if (responseText.includes('Fatal error') || responseText.includes('Parse error') || responseText.includes('Warning')) {
-                        // Try to extract PHP error from various formats
-                        const fatalMatch = responseText.match(/(Fatal error|Parse error|Warning|Notice):\s*(.*?)(?:in\s+.*?\.php|$)/i);
-                        if (fatalMatch && fatalMatch[2]) {
-                            errorMsg = `PHP Error: ${fatalMatch[2].trim()}`;
-                        }
+                    }
+                    
+                    // Log extracted PHP error details
+                    if (phpError) {
+                        console.error('========================================');
+                        console.error('EXTRACTED PHP ERROR DETAILS:');
+                        console.error('Error Type:', phpError ? 'Found' : 'Not found');
+                        console.error('Error Message:', phpError);
+                        console.error('File:', phpFile);
+                        console.error('Line:', phpLine);
+                        console.error('========================================');
                     }
                     
                     throw new Error(`Invalid JSON response: ${errorMsg}. Response starts with: ${responseText.substring(0, 200)}`);

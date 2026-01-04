@@ -67,7 +67,7 @@ try {
                 i.size_category, i.hands_required, i.ammunition_type, i.ammunition_capacity,
                 i.special_properties, i.can_be_thrown, i.class_restrictions,
                 i.magical_bonus, i.magical_properties, i.base_item_id, i.charges,
-                i.creature_type, i.capacity_cn, i.movement_rate
+                i.creature_type, i.capacity_cn, i.movement_rate, i.image_url
          FROM character_inventory ci
          INNER JOIN items i ON ci.item_id = i.item_id
          WHERE ci.character_id = ?
@@ -138,6 +138,9 @@ try {
             'creature_type' => $item['creature_type'],
             'capacity_cn' => (int) $item['capacity_cn'],
             'movement_rate' => (int) $item['movement_rate'],
+            
+            // Image
+            'image_url' => $item['image_url'],
             
             // Legacy properties
             'requires_proficiency' => (bool) $item['requires_proficiency']

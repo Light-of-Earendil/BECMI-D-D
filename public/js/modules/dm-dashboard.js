@@ -124,6 +124,11 @@ class DMDashboardModule {
                         data.players.map(player => this.renderPlayerSection(player)).join('')
                     }
                 </div>
+                
+                <div class="map-scratchpad-section">
+                    <h2><i class="fas fa-map"></i> Map Scratch-Pad</h2>
+                    <div id="map-scratchpad-container"></div>
+                </div>
             </div>`;
         } catch (error) {
             console.error('Dashboard render error:', error);
@@ -133,6 +138,29 @@ class DMDashboardModule {
                 <button class="btn btn-primary" onclick="window.location.reload()">Retry</button>
             </div>`;
         }
+    }
+    
+    /**
+     * Setup dashboard event handlers and initialize map scratch-pad
+     */
+    async setupDashboardEvents(sessionId) {
+        // Initialize map scratch-pad after dashboard is rendered
+        setTimeout(async () => {
+            if (this.app.modules.sessionMapScratchpad) {
+                const mapContent = await this.app.modules.sessionMapScratchpad.renderMapView(sessionId);
+                $('#map-scratchpad-container').html(mapContent);
+                
+                // Setup map scratch-pad event handlers
+                this.app.modules.sessionMapScratchpad.setupToolbarEvents();
+                
+                // Initialize canvas after HTML is in DOM
+                if (this.app.modules.sessionMapScratchpad.currentMapId) {
+                    setTimeout(() => {
+                        this.app.modules.sessionMapScratchpad.initializeCanvas();
+                    }, 100);
+                }
+            }
+        }, 200);
     }
     
     /**
@@ -345,14 +373,13 @@ class DMDashboardModule {
         }
         
         this.autoRefreshInterval = setInterval(async () => {
-            // Only refresh if we're still on DM dashboard view
-            if (this.currentSessionId) {
+            // Only refresh if we're still on DM dashboard view and not already loading
+            if (this.currentSessionId && 
+                this.app.modules.sessionManagement && 
+                !this.app.modules.sessionManagement.isLoadingDashboard) {
                 try {
-                    console.log('Auto-refreshing dashboard...');
                     // Use SessionManagementModule to refresh the dashboard
-                    if (this.app.modules.sessionManagement) {
-                        await this.app.modules.sessionManagement.viewDMDashboard(this.currentSessionId);
-                    }
+                    await this.app.modules.sessionManagement.viewDMDashboard(this.currentSessionId);
                 } catch (error) {
                     console.error('Auto-refresh failed:', error);
                 }

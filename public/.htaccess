@@ -140,6 +140,6 @@ Options +FollowSymLinks
 # ERROR PAGES
 # ============================================
 
-ErrorDocument 404 /public/index.html
-ErrorDocument 403 /public/index.html
-ErrorDocument 500 /public/index.html
+ErrorDocument 404 /public/index.php
+ErrorDocument 403 /public/index.php
+ErrorDocument 500 /public/index.php

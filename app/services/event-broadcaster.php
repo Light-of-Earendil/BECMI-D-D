@@ -74,7 +74,31 @@ class EventBroadcaster {
      * @since 1.0.0
      */
     public function broadcastEvent($sessionId, $eventType, $eventData, $createdByUserId = null) {
+        // CRITICAL: Ensure no output is sent during broadcast
+        $outputStarted = ob_get_level() > 0;
+        if ($outputStarted) {
+            // Clear any existing output buffers with safety counter to prevent infinite loops
+            $maxIterations = 100; // Safety limit
+            $iterations = 0;
+            while (ob_get_level() > 0 && $iterations < $maxIterations) {
+                ob_end_clean();
+                $iterations++;
+            }
+            // If we hit the limit, log a warning but continue
+            if ($iterations >= $maxIterations && ob_get_level() > 0) {
+                @error_log("EventBroadcaster::broadcastEvent: Warning - Output buffer cleanup hit safety limit. Remaining levels: " . ob_get_level());
+            }
+        }
+        
         try {
+            $eventDataJson = json_encode($eventData);
+            if ($eventDataJson === false) {
+                @error_log("EventBroadcaster::broadcastEvent: JSON encode failed: " . json_last_error_msg());
+                return false;
+            }
+            
+            @error_log("EventBroadcaster::broadcastEvent: session_id=$sessionId, event_type=$eventType, event_data_length=" . strlen($eventDataJson));
+            
             // Insert event into session_events table
             $this->db->execute(
                 "INSERT INTO session_events 
@@ -83,15 +107,30 @@ class EventBroadcaster {
                 [
                     $sessionId,
                     $eventType,
-                    json_encode($eventData),
+                    $eventDataJson,
                     $createdByUserId
                 ]
             );
             
+            $eventId = $this->db->lastInsertId();
+            @error_log("EventBroadcaster::broadcastEvent: Event inserted with ID: $eventId");
+            
+            // CRITICAL: Clear any output that might have been generated
+            if (ob_get_level() > 0) {
+                ob_clean();
+            }
+            
             return true;
             
         } catch (Exception $e) {
-            error_log("Event broadcast error: " . $e->getMessage());
+            @error_log("Event broadcast error: " . $e->getMessage());
+            @error_log("Event broadcast error trace: " . $e->getTraceAsString());
+            
+            // CRITICAL: Clear any output from error
+            if (ob_get_level() > 0) {
+                ob_clean();
+            }
+            
             return false;
         }
     }
@@ -129,6 +168,7 @@ class EventBroadcaster {
      */
     public function getEvents($sessionId, $lastEventId = 0) {
         try {
+            error_log("EventBroadcaster::getEvents: session_id=$sessionId, lastEventId=$lastEventId");
             $events = $this->db->select(
                 "SELECT event_id, event_type, event_data, created_at
                  FROM session_events
@@ -137,16 +177,21 @@ class EventBroadcaster {
                  LIMIT 50",
                 [$sessionId, $lastEventId]
             );
+            error_log("EventBroadcaster::getEvents: Found " . count($events) . " events");
             
             // Decode JSON event_data for each event
-            return array_map(function($event) {
+            $formattedEvents = array_map(function($event) {
+                $decodedData = json_decode($event['event_data'], true);
+                @error_log("EventBroadcaster::getEvents: Returning event_id={$event['event_id']}, event_type={$event['event_type']}, data_keys=" . (is_array($decodedData) ? implode(',', array_keys($decodedData)) : 'not_array'));
                 return [
                     'event_id' => (int) $event['event_id'],
                     'event_type' => $event['event_type'],
-                    'event_data' => json_decode($event['event_data'], true),
+                    'event_data' => $decodedData,
                     'created_at' => $event['created_at']
                 ];
             }, $events);
+            
+            return $formattedEvents;
             
         } catch (Exception $e) {
             error_log("Get events error: " . $e->getMessage());
@@ -320,5 +365,4 @@ function broadcastEvent($sessionId, $eventType, $eventData, $userId = null) {
     $broadcaster = new EventBroadcaster();
     return $broadcaster->broadcastEvent($sessionId, $eventType, $eventData, $userId);
 }
-?>
 

@@ -53,7 +53,8 @@ try {
                 'browser_hp_critical' => (bool) $prefs['browser_hp_critical'],
                 'browser_xp_awarded' => (bool) $prefs['browser_xp_awarded'],
                 'browser_item_received' => (bool) $prefs['browser_item_received'],
-                'browser_session_starting' => (bool) $prefs['browser_session_starting']
+                'browser_session_starting' => (bool) $prefs['browser_session_starting'],
+                'prefer_dm_dashboard' => (bool) ($prefs['prefer_dm_dashboard'] ?? false)
             ]
         ], 'Notification preferences retrieved');
         
@@ -72,7 +73,8 @@ try {
             'browser_hp_critical',
             'browser_xp_awarded',
             'browser_item_received',
-            'browser_session_starting'
+            'browser_session_starting',
+            'prefer_dm_dashboard'
         ];
         
         foreach ($allowedFields as $field) {
@@ -108,7 +110,8 @@ try {
                 'browser_hp_critical' => (bool) $updatedPrefs['browser_hp_critical'],
                 'browser_xp_awarded' => (bool) $updatedPrefs['browser_xp_awarded'],
                 'browser_item_received' => (bool) $updatedPrefs['browser_item_received'],
-                'browser_session_starting' => (bool) $updatedPrefs['browser_session_starting']
+                'browser_session_starting' => (bool) $updatedPrefs['browser_session_starting'],
+                'prefer_dm_dashboard' => (bool) ($updatedPrefs['prefer_dm_dashboard'] ?? false)
             ]
         ], 'Notification preferences updated');
         

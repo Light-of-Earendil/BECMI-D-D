@@ -8,10 +8,28 @@
  * @return JSON Array of all items
  */
 
+// Start output buffering immediately to catch any stray output
+ob_start();
+
 require_once __DIR__ . '/../../app/core/database.php';
 require_once __DIR__ . '/../../app/core/security.php';
 
-header('Content-Type: application/json');
+// Disable output compression
+if (function_exists('apache_setenv')) {
+    @apache_setenv('no-gzip', 1);
+}
+@ini_set('zlib.output_compression', 0);
+
+// Clear any output buffers (including the one we just started)
+while (ob_get_level()) {
+    ob_end_clean();
+}
+
+// Initialize security (but don't require authentication for public items list)
+Security::init();
+
+// Set headers after clearing buffers
+header('Content-Type: application/json; charset=utf-8');
 
 // Only allow GET requests
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -180,6 +198,11 @@ try {
         ];
     }, $items);
     
+    // Clear any output that might have been generated
+    while (ob_get_level()) {
+        ob_end_clean();
+    }
+    
     http_response_code(200);
     echo json_encode([
         'status' => 'success',
@@ -188,13 +211,20 @@ try {
             'count' => count($formattedItems)
         ]
     ]);
+    exit;
     
 } catch (Exception $e) {
+    // Clear any output that might have been generated
+    while (ob_get_level()) {
+        ob_end_clean();
+    }
+    
     error_log("Error fetching items: " . $e->getMessage());
     http_response_code(500);
     echo json_encode([
         'status' => 'error',
         'message' => 'Failed to fetch items'
     ]);
+    exit;
 }
 

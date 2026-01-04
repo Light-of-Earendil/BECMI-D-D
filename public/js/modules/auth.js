@@ -1,4 +1,4 @@
-﻿/**
+/**
  * BECMI D&D Character Manager - Authentication Module
  * 
  * Handles user authentication, registration, && session management.
@@ -441,6 +441,50 @@ class AuthModule {
     }
     
     /**
+     * Setup password visibility toggle buttons
+     */
+    setupPasswordVisibilityToggles() {
+        const self = this;
+        
+        // Handle click on password toggle buttons
+        $(document).off('click', '.password-toggle-btn').on('click', '.password-toggle-btn', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const button = $(this);
+            const icon = button.find('i');
+            const input = button.closest('.password-input-wrapper').find('input');
+            
+            if (input.length === 0) {
+                console.warn('Password toggle: Input field not found');
+                return;
+            }
+            
+            // Toggle input type between password and text
+            const currentType = input.attr('type');
+            const newType = currentType === 'password' ? 'text' : 'password';
+            input.attr('type', newType);
+            
+            // Toggle icon between eye and eye-slash
+            if (newType === 'text') {
+                icon.removeClass('fa-eye').addClass('fa-eye-slash');
+                button.attr('aria-label', 'Hide password');
+            } else {
+                icon.removeClass('fa-eye-slash').addClass('fa-eye');
+                button.attr('aria-label', 'Show password');
+            }
+            
+            console.log('Password visibility toggled:', {
+                inputId: input.attr('id'),
+                newType: newType,
+                buttonFound: button.length > 0
+            });
+        });
+        
+        console.log('Password visibility toggles initialized');
+    }
+    
+    /**
      * Setup form validation
      */
     setupFormValidation() {
@@ -622,6 +666,9 @@ class AuthModule {
 
         // Setup form validation
         this.setupFormValidation();
+        
+        // Setup password visibility toggles
+        this.setupPasswordVisibilityToggles();
 
         // Auth form event bindings
         $(document).off("click", "#show-register").on("click", "#show-register", function(e) {

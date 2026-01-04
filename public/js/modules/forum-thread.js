@@ -13,9 +13,6 @@ class ForumThreadModule {
         this.thread = null;
         this.posts = [];
         this.isModerator = false;
-        this.replyEditor = null;
-        this.createThreadEditor = null;
-        this.editPostEditor = null;
         
         console.log('Forum Thread Module initialized');
     }
@@ -63,12 +60,6 @@ class ForumThreadModule {
             
             // Setup event handlers for this view
             this.setupThreadEventHandlers();
-            
-            // Initialize text editor for reply section
-            this.initReplyEditor();
-            
-            // Load attachments for posts
-            await this.loadPostAttachments();
             
         } catch (error) {
             console.error('Failed to load thread:', error);
@@ -148,7 +139,8 @@ class ForumThreadModule {
                 <h3><i class="fas fa-reply"></i> Post a Reply</h3>
                 <form id="post-reply-form">
                     <div class="form-group">
-                        <div id="post-content-editor"></div>
+                        <textarea id="post-content" name="post_content" rows="8" 
+                            placeholder="Write your reply here..." required></textarea>
                     </div>
                     <div class="form-actions">
                         <button type="submit" class="btn btn-primary">
@@ -204,12 +196,6 @@ class ForumThreadModule {
                 <div class="post-content">
                     ${this.formatPostContent(post.post_content)}
                 </div>
-                <div class="forum-post-attachments" data-post-id="${post.post_id}" style="display: none;">
-                    <div class="attachments-loading">
-                        <i class="fas fa-spinner fa-spin"></i> Loading attachments...
-                    </div>
-                    <div class="attachments-list"></div>
-                </div>
                 <div class="post-actions">
                     ${post.can_edit ? `
                         <button class="btn btn-sm btn-secondary edit-post-btn" data-post-id="${post.post_id}">
@@ -232,33 +218,24 @@ class ForumThreadModule {
     }
     
     /**
-     * Format post content (HTML or plain text)
+     * Format post content (basic formatting, can be enhanced with markdown later)
      */
     formatPostContent(content) {
         if (!content) return '';
         
-        // Check if content contains HTML tags
-        const hasHtml = /<[a-z][\s\S]*>/i.test(content);
+        // Escape HTML first
+        let formatted = this.escapeHtml(content);
         
-        if (hasHtml) {
-            // Content is already HTML (from editor)
-            // Return as-is (it's already sanitized on the server)
-            return content;
-        } else {
-            // Plain text - convert to HTML
-            let formatted = this.escapeHtml(content);
-            
-            // Convert line breaks to <br>
-            formatted = formatted.replace(/\n/g, '<br>');
-            
-            // Convert URLs to links (basic regex)
-            formatted = formatted.replace(
-                /(https?:\/\/[^\s]+)/g,
-                '<a href="$1" target="_blank" rel="noopener">$1</a>'
-            );
-            
-            return formatted;
-        }
+        // Convert line breaks to <br>
+        formatted = formatted.replace(/\n/g, '<br>');
+        
+        // Convert URLs to links (basic regex)
+        formatted = formatted.replace(
+            /(https?:\/\/[^\s]+)/g,
+            '<a href="$1" target="_blank" rel="noopener">$1</a>'
+        );
+        
+        return formatted;
     }
     
     /**
@@ -365,7 +342,9 @@ class ForumThreadModule {
                                 
                                 <div class="form-group">
                                     <label for="thread-post-content">First Post Content *</label>
-                                    <div id="thread-post-content-editor"></div>
+                                    <textarea id="thread-post-content" name="post_content" 
+                                        rows="10" required 
+                                        placeholder="Write your post content here..."></textarea>
                                 </div>
                                 
                                 ${isModerator ? `
@@ -404,7 +383,6 @@ class ForumThreadModule {
             // Setup event handlers
             $('#close-create-thread-modal, #cancel-create-thread-modal').on('click', () => {
                 $('#create-thread-modal').remove();
-                this.createThreadEditor = null;
             });
             
             $('#create-thread-form').on('submit', async (e) => {
@@ -416,44 +394,12 @@ class ForumThreadModule {
             $('#create-thread-modal').on('click', (e) => {
                 if (e.target === e.currentTarget) {
                     $('#create-thread-modal').remove();
-                    this.createThreadEditor = null;
                 }
             });
-            
-            // Initialize editor after modal is added to DOM
-            setTimeout(() => {
-                this.initCreateThreadEditor();
-            }, 100);
             
         } catch (error) {
             console.error('Failed to show create thread modal:', error);
             this.app.showError('Failed to load category information: ' + error.message);
-        }
-    }
-    
-    /**
-     * Initialize create thread editor
-     */
-    initCreateThreadEditor() {
-        if (!window.ForumTextEditor) {
-            console.error('ForumTextEditor not loaded');
-            return;
-        }
-        
-        const editorContainer = document.getElementById('thread-post-content-editor');
-        if (!editorContainer) return;
-        
-        if (this.createThreadEditor) {
-            this.createThreadEditor.clear();
-        } else {
-            this.createThreadEditor = new ForumTextEditor('thread-post-content-editor', {
-                placeholder: 'Write your post content here...',
-                minHeight: '200px',
-                maxHeight: '500px',
-                onImageUpload: async (file) => {
-                    return await this.uploadImage(file);
-                }
-            });
         }
     }
     
@@ -463,13 +409,7 @@ class ForumThreadModule {
     async handleCreateThread(categoryId) {
         try {
             const threadTitle = $('#thread-title').val().trim();
-            
-            if (!this.createThreadEditor) {
-                this.app.showError('Editor not initialized');
-                return;
-            }
-            
-            const postContent = this.createThreadEditor.getContent().trim();
+            const postContent = $('#thread-post-content').val().trim();
             const isPrivate = $('#thread-is-private').is(':checked');
             
             if (!threadTitle) {
@@ -487,27 +427,16 @@ class ForumThreadModule {
                 return;
             }
             
-            // Get uploaded images
-            const uploadedImages = this.createThreadEditor.getUploadedImages();
-            const attachmentIds = uploadedImages.map(img => ({
-                file_path: img.file_path,
-                file_name: img.file_name,
-                file_size: img.file_size || 0,
-                mime_type: img.mime_type || 'image/jpeg'
-            }));
-            
             const response = await this.apiClient.post('/api/forum/threads/create.php', {
                 category_id: categoryId,
                 thread_title: threadTitle,
                 post_content: postContent,
-                is_private: isPrivate,
-                attachment_ids: attachmentIds.length > 0 ? attachmentIds : undefined
+                is_private: isPrivate
             });
             
             if (response.status === 'success') {
                 this.app.showSuccess('Thread created successfully');
                 $('#create-thread-modal').remove();
-                this.createThreadEditor = null;
                 
                 // Load the newly created thread
                 await this.loadThread(response.data.thread_id);
@@ -579,174 +508,25 @@ class ForumThreadModule {
     }
     
     /**
-     * Initialize reply editor
-     */
-    initReplyEditor() {
-        if (!window.ForumTextEditor) {
-            console.error('ForumTextEditor not loaded');
-            return;
-        }
-        
-        const editorContainer = document.getElementById('post-content-editor');
-        if (!editorContainer) return;
-        
-        if (this.replyEditor) {
-            this.replyEditor.clear();
-        } else {
-            this.replyEditor = new ForumTextEditor('post-content-editor', {
-                placeholder: 'Write your reply here...',
-                minHeight: '200px',
-                maxHeight: '500px',
-                onImageUpload: async (file) => {
-                    return await this.uploadImage(file);
-                }
-            });
-        }
-    }
-    
-    /**
-     * Upload image
-     */
-    async uploadImage(file) {
-        try {
-            // Validate file size before upload (5MB max)
-            const maxSize = 5 * 1024 * 1024; // 5MB
-            if (file.size > maxSize) {
-                throw new Error(`File too large. Maximum size is 5MB. Your file is ${(file.size / 1024 / 1024).toFixed(2)}MB`);
-            }
-            
-            console.log('Uploading image:', {
-                name: file.name,
-                size: file.size,
-                type: file.type,
-                sizeMB: (file.size / 1024 / 1024).toFixed(2) + 'MB'
-            });
-            
-            // Use FormData for multipart upload
-            const formData = new FormData();
-            formData.append('image', file);
-            
-            const xhr = new XMLHttpRequest();
-            // Build URL directly to avoid double /api/ prefix
-            const endpoint = '/api/forum/posts/upload-image.php';
-            const url = this.apiClient.baseURL + endpoint;
-            
-            console.log('Upload URL:', url);
-            
-            return new Promise((resolve, reject) => {
-                xhr.addEventListener('load', () => {
-                    console.log('Upload response:', {
-                        status: xhr.status,
-                        statusText: xhr.statusText,
-                        responseText: xhr.responseText.substring(0, 500)
-                    });
-                    
-                    if (xhr.status >= 200 && xhr.status < 300) {
-                        try {
-                            const response = JSON.parse(xhr.responseText);
-                            if (response.status === 'success') {
-                                console.log('Upload successful:', response.data);
-                                resolve({
-                                    success: true,
-                                    file_path: response.data.file_path,
-                                    file_name: response.data.file_name,
-                                    file_size: response.data.file_size,
-                                    mime_type: response.data.mime_type
-                                });
-                            } else {
-                                const errorMsg = response.message || 'Upload failed';
-                                console.error('Upload failed:', errorMsg);
-                                reject(new Error(errorMsg));
-                            }
-                        } catch (error) {
-                            console.error('JSON parse error:', error, xhr.responseText);
-                            reject(new Error('Invalid JSON response: ' + xhr.responseText.substring(0, 200)));
-                        }
-                    } else {
-                        let errorMsg = `HTTP ${xhr.status}: ${xhr.statusText}`;
-                        try {
-                            const errorResponse = JSON.parse(xhr.responseText);
-                            if (errorResponse.message) {
-                                errorMsg = errorResponse.message;
-                            }
-                        } catch (e) {
-                            // Not JSON, use status text
-                        }
-                        console.error('Upload HTTP error:', errorMsg, xhr.responseText);
-                        reject(new Error(errorMsg));
-                    }
-                });
-                
-                xhr.addEventListener('error', (e) => {
-                    console.error('XHR upload error:', e);
-                    console.error('Response status:', xhr.status);
-                    console.error('Response text:', xhr.responseText);
-                    reject(new Error('Network error during upload. Check console for details.'));
-                });
-                
-                xhr.addEventListener('abort', () => {
-                    reject(new Error('Upload was aborted'));
-                });
-                
-                xhr.open('POST', url);
-                
-                // Don't set Content-Type header - let browser set it with boundary for multipart/form-data
-                // Add auth headers
-                const authToken = localStorage.getItem('auth_token');
-                if (authToken) {
-                    xhr.setRequestHeader('Authorization', `Bearer ${authToken}`);
-                }
-                
-                // Set timeout
-                xhr.timeout = 60000; // 60 seconds for large files
-                
-                xhr.addEventListener('timeout', () => {
-                    reject(new Error('Upload timeout - file may be too large or connection too slow'));
-                });
-                
-                xhr.send(formData);
-            });
-        } catch (error) {
-            console.error('Image upload error:', error);
-            throw error;
-        }
-    }
-    
-    /**
      * Handle post reply
      */
     async handlePostReply() {
         try {
-            if (!this.replyEditor) {
-                this.app.showError('Editor not initialized');
-                return;
-            }
-            
-            const content = this.replyEditor.getContent().trim();
+            const content = $('#post-content').val().trim();
             
             if (!content) {
                 this.app.showError('Post content cannot be empty');
                 return;
             }
             
-            // Get uploaded images
-            const uploadedImages = this.replyEditor.getUploadedImages();
-            const attachmentIds = uploadedImages.map(img => ({
-                file_path: img.file_path,
-                file_name: img.file_name,
-                file_size: img.file_size || 0,
-                mime_type: img.mime_type || 'image/jpeg'
-            }));
-            
             const response = await this.apiClient.post('/api/forum/posts/create.php', {
                 thread_id: this.currentThreadId,
-                post_content: content,
-                attachment_ids: attachmentIds.length > 0 ? attachmentIds : undefined
+                post_content: content
             });
             
             if (response.status === 'success') {
                 this.app.showSuccess('Post created successfully');
-                this.replyEditor.clear();
+                $('#post-content').val('');
                 // Reload thread to show new post
                 await this.loadThread(this.currentThreadId, this.currentPage);
             } else {
@@ -827,7 +607,9 @@ class ForumThreadModule {
                                 
                                 <div class="form-group">
                                     <label for="edit-post-content">Post Content *</label>
-                                    <div id="edit-post-content-editor"></div>
+                                    <textarea id="edit-post-content" name="post_content" 
+                                        rows="12" required 
+                                        placeholder="Enter post content...">${this.escapeHtml(post.post_content)}</textarea>
                                 </div>
                                 
                                 <div class="form-group">
@@ -861,7 +643,6 @@ class ForumThreadModule {
             // Setup event handlers
             $('#close-edit-post-modal, #cancel-edit-post-modal').on('click', () => {
                 $('#edit-post-modal').remove();
-                this.editPostEditor = null;
             });
             
             $('#edit-post-form').on('submit', async (e) => {
@@ -873,14 +654,8 @@ class ForumThreadModule {
             $('#edit-post-modal').on('click', (e) => {
                 if (e.target === e.currentTarget) {
                     $('#edit-post-modal').remove();
-                    this.editPostEditor = null;
                 }
             });
-            
-            // Initialize editor after modal is added to DOM
-            setTimeout(() => {
-                this.initEditPostEditor(post.post_content);
-            }, 100);
             
         } catch (error) {
             console.error('Failed to show edit post modal:', error);
@@ -889,43 +664,11 @@ class ForumThreadModule {
     }
     
     /**
-     * Initialize edit post editor
-     */
-    initEditPostEditor(content) {
-        if (!window.ForumTextEditor) {
-            console.error('ForumTextEditor not loaded');
-            return;
-        }
-        
-        const editorContainer = document.getElementById('edit-post-content-editor');
-        if (!editorContainer) return;
-        
-        if (this.editPostEditor) {
-            this.editPostEditor.setContent(content || '');
-        } else {
-            this.editPostEditor = new ForumTextEditor('edit-post-content-editor', {
-                placeholder: 'Enter post content...',
-                minHeight: '200px',
-                maxHeight: '500px',
-                onImageUpload: async (file) => {
-                    return await this.uploadImage(file);
-                }
-            });
-            this.editPostEditor.setContent(content || '');
-        }
-    }
-    
-    /**
      * Handle edit post form submission
      */
     async handleEditPost(postId) {
         try {
-            if (!this.editPostEditor) {
-                this.app.showError('Editor not initialized');
-                return;
-            }
-            
-            const postContent = this.editPostEditor.getContent().trim();
+            const postContent = $('#edit-post-content').val().trim();
             const editReason = $('#edit-post-reason').val().trim() || null;
             
             if (!postContent) {
@@ -942,7 +685,6 @@ class ForumThreadModule {
             if (response.status === 'success') {
                 this.app.showSuccess('Post updated successfully');
                 $('#edit-post-modal').remove();
-                this.editPostEditor = null;
                 
                 // Reload thread to show updated post
                 await this.loadThread(this.currentThreadId, this.currentPage);
@@ -1299,134 +1041,6 @@ class ForumThreadModule {
         if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
         
         return date.toLocaleDateString();
-    }
-    
-    /**
-     * Load attachments for all posts
-     */
-    async loadPostAttachments() {
-        const attachmentContainers = document.querySelectorAll('.forum-post-attachments');
-        
-        for (const container of attachmentContainers) {
-            const postId = container.dataset.postId;
-            if (!postId) continue;
-            
-            try {
-                const response = await this.apiClient.get('/api/forum/posts/attachments.php', {
-                    post_id: postId
-                });
-                
-                if (response.status === 'success' && response.data && response.data.length > 0) {
-                    container.style.display = 'block';
-                    this.renderAttachments(container, response.data);
-                } else {
-                    container.style.display = 'none';
-                }
-            } catch (error) {
-                console.error('Failed to load attachments for post', postId, error);
-                container.style.display = 'none';
-            }
-        }
-    }
-    
-    /**
-     * Render attachments
-     */
-    renderAttachments(container, attachments) {
-        const listContainer = container.querySelector('.attachments-list');
-        if (!listContainer) return;
-        
-        const loading = container.querySelector('.attachments-loading');
-        if (loading) loading.style.display = 'none';
-        
-        const attachmentsHTML = attachments.map(att => {
-            const isImage = att.mime_type && att.mime_type.startsWith('image/');
-            
-            if (isImage) {
-                return `
-                    <div class="forum-attachment-item">
-                        <a href="/${att.file_path}" target="_blank" class="attachment-link" data-lightbox="post-${container.dataset.postId}">
-                            <img src="/${att.file_path}" alt="${this.escapeHtml(att.file_name)}" class="attachment-thumbnail">
-                        </a>
-                        <div class="attachment-info">
-                            <span class="attachment-name">${this.escapeHtml(att.file_name)}</span>
-                            <span class="attachment-size">${this.formatFileSize(att.file_size)}</span>
-                        </div>
-                    </div>
-                `;
-            } else {
-                return `
-                    <div class="forum-attachment-item">
-                        <a href="/${att.file_path}" target="_blank" class="attachment-link">
-                            <i class="fas fa-file"></i>
-                            <span class="attachment-name">${this.escapeHtml(att.file_name)}</span>
-                            <span class="attachment-size">${this.formatFileSize(att.file_size)}</span>
-                        </a>
-                    </div>
-                `;
-            }
-        }).join('');
-        
-        listContainer.innerHTML = attachmentsHTML;
-        
-        // Setup lightbox for images
-        this.setupImageLightbox(container);
-    }
-    
-    /**
-     * Setup image lightbox
-     */
-    setupImageLightbox(container) {
-        const images = container.querySelectorAll('.attachment-link[data-lightbox]');
-        images.forEach(link => {
-            link.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.showImageLightbox(link.href);
-            });
-        });
-    }
-    
-    /**
-     * Show image lightbox
-     */
-    showImageLightbox(imageUrl) {
-        const lightbox = document.createElement('div');
-        lightbox.className = 'forum-image-lightbox';
-        lightbox.innerHTML = `
-            <div class="lightbox-backdrop"></div>
-            <div class="lightbox-content">
-                <button class="lightbox-close" type="button">
-                    <i class="fas fa-times"></i>
-                </button>
-                <img src="${this.escapeHtml(imageUrl)}" alt="Full size image">
-            </div>
-        `;
-        
-        document.body.appendChild(lightbox);
-        
-        const closeBtn = lightbox.querySelector('.lightbox-close');
-        const backdrop = lightbox.querySelector('.lightbox-backdrop');
-        
-        const close = () => {
-            lightbox.remove();
-        };
-        
-        closeBtn.addEventListener('click', close);
-        backdrop.addEventListener('click', close);
-        lightbox.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') close();
-        });
-    }
-    
-    /**
-     * Format file size
-     */
-    formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
     }
     
     /**

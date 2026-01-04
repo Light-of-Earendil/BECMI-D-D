@@ -4,6 +4,28 @@
  * This file initializes the application and sets up global event handlers.
  */
 
+// Override console methods globally to add timestamps
+(function() {
+    const originalLog = console.log;
+    const originalError = console.error;
+    const originalWarn = console.warn;
+    const originalInfo = console.info;
+    const originalDebug = console.debug;
+    
+    const addTimestamp = (originalFn) => {
+        return function(...args) {
+            const timestamp = new Date().toISOString();
+            originalFn.apply(console, [`[${timestamp}]`, ...args]);
+        };
+    };
+    
+    console.log = addTimestamp(originalLog);
+    console.error = addTimestamp(originalError);
+    console.warn = addTimestamp(originalWarn);
+    console.info = addTimestamp(originalInfo);
+    console.debug = addTimestamp(originalDebug);
+})();
+
 // Wait for DOM to be ready
 $(document).ready(() => {
     console.log('BECMI D&D Character Manager - Starting application...');
@@ -285,4 +307,122 @@ window.BECMIConstants = {
         { value: 'severely_encumbered', label: 'Severely Encumbered', color: 'error'},
         { value: 'overloaded', label: 'Overloaded', color: 'error'}
     ]
+};
+
+/**
+ * Roll a skill check (1d20 vs ability score)
+ * Per BECMI Rules Cyclopedia: Roll 1d20, if roll <= ability score, success. Roll of 20 always fails.
+ * 
+ * @param {string} skillName - Name of the skill
+ * @param {number} abilityScore - The ability score to roll against
+ * @param {number} abilityModifier - The ability modifier (added to the roll)
+ */
+window.rollSkillCheck = function(skillName, abilityScore, abilityModifier) {
+    console.log(`Rolling skill check for ${skillName} (Ability: ${abilityScore}, Modifier: ${abilityModifier})`);
+    
+    // Roll 1d20
+    const roll = Math.floor(Math.random() * 20) + 1;
+    
+    // Add ability modifier to the roll
+    const modifiedRoll = roll + abilityModifier;
+    
+    // Per BECMI rules: Roll of 20 always fails, no matter how high the ability score
+    let success = false;
+    let message = '';
+    
+    if (roll === 20) {
+        success = false;
+        message = `Rolled a natural 20 - automatic failure!`;
+    } else if (modifiedRoll <= abilityScore) {
+        success = true;
+        message = `Success! Rolled ${roll}${abilityModifier !== 0 ? ` + ${abilityModifier} = ${modifiedRoll}` : ''} (needed ≤ ${abilityScore})`;
+    } else {
+        success = false;
+        message = `Failure! Rolled ${roll}${abilityModifier !== 0 ? ` + ${abilityModifier} = ${modifiedRoll}` : ''} (needed ≤ ${abilityScore})`;
+    }
+    
+    // Show result notification
+    const resultText = `${skillName} Check: ${message}`;
+    
+    if (window.becmiApp && window.becmiApp.modules && window.becmiApp.modules.notifications) {
+        window.becmiApp.modules.notifications.show(
+            resultText,
+            success ? 'success' : 'error',
+            5000
+        );
+    } else {
+        // Fallback to alert if notifications not available
+        alert(resultText);
+    }
+    
+    // Log to console
+    console.log(`Skill Check Result: ${resultText}`);
+    
+    return {
+        skillName: skillName,
+        roll: roll,
+        abilityModifier: abilityModifier,
+        modifiedRoll: modifiedRoll,
+        abilityScore: abilityScore,
+        success: success,
+        message: message
+    };
+};
+
+/**
+ * Roll a saving throw
+ * @param {string} saveName - Name of the saving throw (e.g., "Death Ray")
+ * @param {number} saveValue - Target value to roll against (roll must be >= this value to succeed)
+ * @param {string} saveKey - Key identifier for the save type (e.g., "death_ray")
+ */
+window.rollSavingThrow = function(saveName, saveValue, saveKey) {
+    console.log(`Rolling saving throw for ${saveName} (Target: ${saveValue})`);
+    
+    // Roll 1d20
+    const roll = Math.floor(Math.random() * 20) + 1;
+    
+    // Per BECMI rules: Roll must be >= save value to succeed
+    // Natural 20 always succeeds, natural 1 always fails
+    let success = false;
+    let message = '';
+    
+    if (roll === 20) {
+        success = true;
+        message = `Rolled a natural 20 - automatic success!`;
+    } else if (roll === 1) {
+        success = false;
+        message = `Rolled a natural 1 - automatic failure!`;
+    } else if (roll >= saveValue) {
+        success = true;
+        message = `Success! Rolled ${roll} (needed ≥ ${saveValue})`;
+    } else {
+        success = false;
+        message = `Failure! Rolled ${roll} (needed ≥ ${saveValue})`;
+    }
+    
+    // Show result notification
+    const resultText = `${saveName} Save: ${message}`;
+    
+    if (window.becmiApp && window.becmiApp.modules && window.becmiApp.modules.notifications) {
+        window.becmiApp.modules.notifications.show(
+            resultText,
+            success ? 'success' : 'error',
+            5000
+        );
+    } else {
+        // Fallback to alert if notifications not available
+        alert(resultText);
+    }
+    
+    // Log to console
+    console.log(`Saving Throw Result: ${resultText}`);
+    
+    return {
+        saveName: saveName,
+        saveKey: saveKey,
+        roll: roll,
+        saveValue: saveValue,
+        success: success,
+        message: message
+    };
 };

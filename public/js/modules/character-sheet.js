@@ -15,6 +15,19 @@ class CharacterSheetModule {
     }
     
     /**
+     * Escape HTML to prevent XSS
+     * 
+     * @param {string} text - Text to escape
+     * @returns {string} Escaped text
+     */
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    /**
      * Load a character by ID
      */
     async loadCharacter(characterId) {
@@ -305,11 +318,6 @@ class CharacterSheetModule {
             
             const html = `<div class="character-sheet-container">
                     <div class="character-sheet-header">
-                        ${character.portrait_url ? `
-                        <div class="character-portrait">
-                            <img src="${character.portrait_url}" alt="${character.character_name}" class="character-portrait-img">
-                        </div>
-                        ` : ''}
                         <div>
                             <h1>${character.character_name}</h1>
                             <div class="character-basic-info">
@@ -352,13 +360,118 @@ class CharacterSheetModule {
     }
     
     /**
+     * Render character sheet into a specific container (reusable method)
+     * 
+     * @param {number} characterId - ID of character to render
+     * @param {string} targetSelector - CSS selector for target container
+     * @param {object} options - Optional configuration
+     * @param {boolean} options.showEditButton - Show edit button (default: true)
+     * @param {boolean} options.showBackButton - Show back button (default: false)
+     * @param {function} options.onBack - Callback for back button click
+     * @returns {Promise<void>}
+     */
+    async renderCharacterSheetIntoContainer(characterId, targetSelector, options = {}) {
+        const {
+            showEditButton = true,
+            showBackButton = false,
+            onBack = null
+        } = options;
+        
+        try {
+            const $target = $(targetSelector);
+            if (!$target.length) {
+                throw new Error(`Target container not found: ${targetSelector}`);
+            }
+            
+            // Show loading state
+            $target.html('<div class="loading-spinner"><i class="fas fa-dice-d20 fa-spin"></i><p>Loading character sheet...</p></div>');
+            
+            // Load character data and inventory in parallel for faster loading
+            const [character, inventory] = await Promise.all([
+                this.loadCharacter(characterId),
+                this.loadInventory(characterId)
+            ]);
+            
+            const html = `<div class="character-sheet-container">
+                    <div class="character-sheet-header">
+                        <div>
+                            <h1>${character.character_name}</h1>
+                            <div class="character-basic-info">
+                                <span>Level ${character.level} ${character.class}</span>
+                                ${character.gender ? `<span>${character.gender.charAt(0).toUpperCase() + character.gender.slice(1)}</span>` : ''}
+                                <span>${character.alignment}</span>
+                            </div>
+                        </div>
+                        <div class="character-actions">
+                            ${showBackButton && onBack ? `
+                                <button class="btn btn-secondary" id="character-sheet-back-btn">
+                                    <i class="fas fa-arrow-left"></i> Back
+                                </button>
+                            ` : ''}
+                            ${showEditButton ? `
+                                <button class="btn btn-primary" data-action="edit-character" data-character-id="${character.character_id}">
+                                    <i class="fas fa-edit"></i> Edit Character
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="character-sheet">
+                        ${this.renderCharacterSheetContent(character)}
+                    </div>
+                </div>
+            `;
+            
+            // Render HTML
+            $target.html(html);
+            
+            // Setup back button handler if needed
+            if (showBackButton && onBack) {
+                $('#character-sheet-back-btn').on('click', (e) => {
+                    e.preventDefault();
+                    onBack();
+                });
+            }
+            
+            // Load weapon masteries, skills, and spells asynchronously after render
+            setTimeout(async () => {
+                await this.loadAndRenderWeaponMasteries(characterId);
+                await this.loadAndRenderSkills(characterId);
+                await this.loadAndRenderSpells(characterId);
+                
+                // Update XP display after DOM is rendered
+                if (this.currentCharacter && this.currentCharacter.xpProgression) {
+                    this.updateXPDisplay(characterId);
+                }
+            }, 100);
+            
+        } catch (error) {
+            console.error('Character sheet render error:', error);
+            const $target = $(targetSelector);
+            if ($target.length) {
+                $target.html('<div class="card"><h2>Error</h2><p>Failed to load character sheet.</p></div>');
+            }
+            throw error;
+        }
+    }
+    
+    /**
      * Render character sheet content
      */
     renderCharacterSheetContent(character) {
         return `<div class="character-section">
                 <h3>Ability Scores</h3>
-                <div class="ability-scores-grid">
-                    ${this.renderAbilityScores(character)}
+                <div class="ability-scores-container">
+                    ${character.portrait_url ? `
+                    <div class="character-portrait-section">
+                        <div class="character-portrait">
+                            <img src="${character.portrait_url}" alt="${character.character_name}" class="character-portrait-img">
+                        </div>
+                    </div>
+                    ` : ''}
+                    <div class="ability-scores-grid">
+                        ${this.renderAbilityScores(character)}
+                    </div>
                 </div>
             </div>
             
@@ -603,16 +716,24 @@ class CharacterSheetModule {
      */
     renderSavingThrows(character) {
         const saves = [
-            { name: 'Death Ray', value: character.save_death_ray },
-            { name: 'Magic Wand', value: character.save_magic_wand },
-            { name: 'Paralysis', value: character.save_paralysis },
-            { name: 'Dragon Breath', value: character.save_dragon_breath },
-            { name: 'Spells', value: character.save_spells }
+            { name: 'Death Ray', value: character.save_death_ray, key: 'death_ray' },
+            { name: 'Magic Wand', value: character.save_magic_wand, key: 'magic_wand' },
+            { name: 'Paralysis', value: character.save_paralysis, key: 'paralysis' },
+            { name: 'Dragon Breath', value: character.save_dragon_breath, key: 'dragon_breath' },
+            { name: 'Spells', value: character.save_spells, key: 'spells' }
         ];
         
         return saves.map(save => `<div class="saving-throw">
-                <span class="save-name">${save.name}:</span>
-                <span class="save-value">${save.value}</span>
+                <div class="save-info">
+                    <span class="save-name">${save.name}:</span>
+                    <span class="save-value">${save.value}</span>
+                </div>
+                <button class="btn btn-xs btn-secondary saving-throw-roll-btn" 
+                        data-save-name="${this.escapeHtml(save.name)}" 
+                        data-save-value="${save.value}"
+                        data-save-key="${save.key}">
+                    <i class="fas fa-dice-d20"></i> Roll
+                </button>
             </div>
         `).join('');
     }
@@ -772,6 +893,14 @@ class CharacterSheetModule {
                                 <i class="fas fa-bullseye"></i> 
                                 ${effectiveDamage}
                                 ${weaponMastery ? `<small class="mastery-bonus">(${weaponMastery.level})</small>` : ''}
+                                <button class="damage-roll-btn" 
+                                        data-damage-die="${item.damage_die}" 
+                                        data-magical-bonus="${item.magical_bonus || 0}"
+                                        data-mastery-bonus="${weaponMastery ? weaponMastery.damage_bonus : 0}"
+                                        data-item-name="${this.escapeHtml(item.custom_name || item.name)}"
+                                        title="Roll damage">
+                                    <i class="fas fa-dice"></i>
+                                </button>
                             </span>
                         ` : ''}
                         ${item.ac_bonus > 0 ? `
@@ -788,7 +917,6 @@ class CharacterSheetModule {
                             </span>
                         ` : ''}
                     </div>
-                    ${item.description ? `<div class="item-description">${item.description}</div>` : ''}
                     ${item.notes ? `<div class="item-notes"><small><i class="fas fa-sticky-note"></i> ${item.notes}</small></div>` : ''}
                 </div>
                 <div class="item-actions">
@@ -920,39 +1048,38 @@ class CharacterSheetModule {
             const itemDetails = response.data.base_item || item;
             
             const modal = $(`
-                <div class="modal fade" id="itemDetailsModal" tabindex="-1" role="dialog">
-                    <div class="modal-dialog modal-lg" role="document">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title">
-                                    <i class="fas fa-info-circle"></i> 
-                                    ${item.custom_name || item.name}
-                                    ${item.is_magical ? '<span class="badge badge-purple">Magical</span>' : ''}
-                                </h5>
-                                <button type="button" class="close" data-dismiss="modal">
-                                    <span>&times;</span>
+                <div class="modal" id="itemDetailsModal">
+                    <div class="modal-content" style="max-width: 800px;">
+                        <div class="modal-header">
+                            <h2>
+                                <i class="fas fa-info-circle"></i> 
+                                ${item.custom_name || item.name}
+                                ${item.is_magical ? '<span class="badge badge-purple">Magical</span>' : ''}
+                            </h2>
+                            <button type="button" class="modal-close" onclick="$(this).closest('.modal').removeClass('show')">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="item-details-full">
+                                ${this.renderFullItemDetails(item, itemDetails, characterId)}
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            ${item.identified === false && item.is_magical ? `
+                                <button type="button" class="btn btn-info" id="identify-item-btn">
+                                    <i class="fas fa-search"></i> Identify Item
                                 </button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="item-details-full">
-                                    ${this.renderFullItemDetails(item, itemDetails, characterId)}
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                ${item.identified === false && item.is_magical ? `
-                                    <button type="button" class="btn btn-info" id="identify-item-btn">
-                                        <i class="fas fa-search"></i> Identify Item
-                                    </button>
-                                ` : ''}
-                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                            </div>
+                            ` : ''}
+                            <button type="button" class="btn btn-secondary" onclick="$(this).closest('.modal').removeClass('show')">Close</button>
                         </div>
                     </div>
                 </div>
             `);
             
             $('body').append(modal);
-            $('#itemDetailsModal').modal('show');
+            // Use custom modal system - add 'show' class
+            $('#itemDetailsModal').addClass('show');
             
             // Setup identify button if present
             if (item.identified === false && item.is_magical) {
@@ -961,9 +1088,12 @@ class CharacterSheetModule {
                 });
             }
             
-            // Cleanup when modal is closed
-            $('#itemDetailsModal').on('hidden.bs.modal', () => {
-                $('#itemDetailsModal').remove();
+            // Cleanup when modal is closed - listen for click on background or close button
+            $('#itemDetailsModal').on('click', (e) => {
+                if (e.target === e.currentTarget) {
+                    $('#itemDetailsModal').removeClass('show');
+                    setTimeout(() => $('#itemDetailsModal').remove(), 300);
+                }
             });
             
         } catch (error) {
@@ -974,6 +1104,75 @@ class CharacterSheetModule {
         }
     }
 
+    /**
+     * Show skill description modal
+     * 
+     * @param {string} skillName - Name of the skill
+     * @param {string} skillDescription - Full description of the skill
+     */
+    async showSkillDescriptionModal(skillName, skillDescription) {
+        // Remove any existing modal first
+        $('#skillDescriptionModal').remove();
+        
+        // Fetch full description from Rules Cyclopedia
+        let fullDescription = skillDescription;
+        try {
+            const response = await this.apiClient.get(`/api/skills/get-full-description.php?skill_name=${encodeURIComponent(skillName)}&t=${Date.now()}`);
+            if (response.status === 'success' && response.data.full_description) {
+                fullDescription = response.data.full_description;
+            }
+        } catch (error) {
+            console.warn('Failed to fetch full skill description, using database description:', error);
+        }
+        
+        const modal = $(`
+            <div class="modal" id="skillDescriptionModal">
+                <div class="modal-content" style="max-width: 800px;">
+                    <div class="modal-header">
+                        <h2>
+                            <i class="fas fa-scroll"></i> 
+                            ${this.escapeHtml(skillName)}
+                        </h2>
+                        <button type="button" class="modal-close" id="close-skill-modal">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="skill-description-full">
+                            <div class="skill-description-content">
+                                ${fullDescription.split('\n\n').map(para => 
+                                    `<p>${this.escapeHtml(para.trim())}</p>`
+                                ).join('')}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" id="close-skill-modal-btn">Close</button>
+                    </div>
+                </div>
+            </div>
+        `);
+        
+        $('body').append(modal);
+        // Use custom modal system - add 'show' class
+        $('#skillDescriptionModal').addClass('show');
+        
+        // Setup close handlers
+        const closeModal = () => {
+            $('#skillDescriptionModal').removeClass('show');
+            setTimeout(() => $('#skillDescriptionModal').remove(), 300);
+        };
+        
+        $('#close-skill-modal, #close-skill-modal-btn').on('click', closeModal);
+        
+        // Cleanup when modal is closed - listen for click on background
+        $('#skillDescriptionModal').on('click', (e) => {
+            if (e.target === e.currentTarget) {
+                closeModal();
+            }
+        });
+    }
+    
     /**
      * Render full item details for modal
      * 
@@ -986,19 +1185,47 @@ class CharacterSheetModule {
         const item = inventoryItem;
         const base = baseItem;
         
+        // Check if image exists (from item or baseItem)
+        let imageUrl = (item.image_url && item.image_url.trim() !== '' && item.image_url !== 'null') 
+            ? item.image_url 
+            : (base.image_url && base.image_url.trim() !== '' && base.image_url !== 'null') 
+                ? base.image_url 
+                : null;
+        
+        // Ensure imageUrl starts with / (but don't double it)
+        if (imageUrl && !imageUrl.startsWith('/')) {
+            imageUrl = '/' + imageUrl;
+        }
+        
+        const hasImage = imageUrl !== null;
+        
         return `
             <div class="item-details-container">
                 <div class="item-header">
-                    <div class="item-icon-large ${item.is_magical ? 'magical-item' : ''}">
-                        <i class="fas ${this.getItemIcon(item.item_type)}"></i>
-                        ${item.is_magical ? '<div class="magical-glow"></div>' : ''}
+                    <div class="item-image-container-large">
+                        ${hasImage ? `
+                            <div class="item-image-large">
+                                <img src="${imageUrl}?v=${Date.now()}" alt="${item.custom_name || item.name}" 
+                                     onerror="this.style.display='none'; const icon = this.closest('.item-image-container-large').querySelector('.item-icon-large'); if (icon) icon.style.display='flex';">
+                            </div>
+                        ` : ''}
+                        <div class="item-icon-large ${item.is_magical ? 'magical-item' : ''}" style="display: ${hasImage ? 'none' : 'flex'};">
+                            <i class="fas ${this.getItemIcon(item.item_type)}"></i>
+                            ${item.is_magical ? '<div class="magical-glow"></div>' : ''}
+                        </div>
                     </div>
                     <div class="item-info">
                         <h4>${item.custom_name || item.name}</h4>
                         <p class="item-type">${item.item_type} ${item.item_category ? '(' + item.item_category + ')' : ''}</p>
-                        ${item.description ? `<p class="item-description">${item.description}</p>` : ''}
                     </div>
                 </div>
+                
+                ${item.description ? `
+                    <div class="item-description-full">
+                        <h6>Description:</h6>
+                        <p class="item-description">${item.description}</p>
+                    </div>
+                ` : ''}
                 
                 <div class="item-properties">
                     <div class="properties-grid">
@@ -1165,7 +1392,8 @@ class CharacterSheetModule {
             
             if (response.status === 'success') {
                 // Close modal
-                $('#itemDetailsModal').modal('hide');
+                $('#itemDetailsModal').removeClass('show');
+                setTimeout(() => $('#itemDetailsModal').remove(), 300);
                 
                 // Show success message
                 if (this.app.modules.notifications) {
@@ -1309,9 +1537,22 @@ class CharacterSheetModule {
                                     <span class="skill-name">${skill.skill_name}</span>
                                     <span class="skill-ability-score">${skill.ability_score} (${window.BECMIUtils ? window.BECMIUtils.formatModifier(skill.ability_modifier) : skill.ability_modifier})</span>
                                 </div>
-                                <button class="btn btn-xs btn-secondary" onclick="rollSkillCheck('${skill.skill_name}', ${skill.ability_score}, ${skill.ability_modifier})">
-                                    <i class="fas fa-dice-d20"></i> Roll
-                                </button>
+                                <div class="skill-actions">
+                                    ${skill.description ? `
+                                        <button class="btn btn-xs btn-info skill-description-btn" 
+                                                data-skill-name="${this.escapeHtml(skill.skill_name)}" 
+                                                data-skill-description="${this.escapeHtml(skill.description)}"
+                                                title="View skill description">
+                                            <i class="fas fa-info-circle"></i>
+                                        </button>
+                                    ` : ''}
+                                    <button class="btn btn-xs btn-secondary skill-roll-btn" 
+                                            data-skill-name="${this.escapeHtml(skill.skill_name)}" 
+                                            data-ability-score="${skill.ability_score}" 
+                                            data-ability-modifier="${skill.ability_modifier || 0}">
+                                        <i class="fas fa-dice-d20"></i> Roll
+                                    </button>
+                                </div>
                             </div>
                         `).join('')}
                     </div>
@@ -1980,6 +2221,89 @@ class CharacterSheetModule {
             }
         });
         
+        // View skill description
+        $(document).on('click', '.skill-description-btn', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // Get the clicked button element directly
+            const btn = e.currentTarget;
+            // Use getAttribute() to avoid jQuery caching issues
+            const skillName = btn.getAttribute('data-skill-name');
+            const skillDescription = btn.getAttribute('data-skill-description');
+            
+            if (skillName) {
+                // Decode HTML entities that were escaped
+                const decodedName = $('<textarea>').html(skillName).text();
+                const decodedDescription = skillDescription ? $('<textarea>').html(skillDescription).text() : '';
+                await this.showSkillDescriptionModal(decodedName, decodedDescription);
+            } else {
+                console.error('Missing skill name:', { skillName, skillDescription, btn });
+            }
+        });
+        
+        // Skill roll button
+        $(document).on('click', '.skill-roll-btn', (e) => {
+            e.preventDefault();
+            const $btn = $(e.currentTarget);
+            const skillName = $btn.data('skill-name');
+            const abilityScore = parseInt($btn.data('ability-score'));
+            const abilityModifier = parseInt($btn.data('ability-modifier')) || 0;
+            
+            if (!skillName || isNaN(abilityScore)) {
+                console.error('Invalid skill roll data:', { skillName, abilityScore, abilityModifier });
+                this.app.showError('Invalid skill data');
+                return;
+            }
+            
+            if (typeof window.rollSkillCheck === 'function') {
+                window.rollSkillCheck(skillName, abilityScore, abilityModifier);
+            } else {
+                console.error('rollSkillCheck function not found');
+                this.app.showError('Roll function not available');
+            }
+        });
+        
+        // Saving throw roll button
+        $(document).on('click', '.saving-throw-roll-btn', (e) => {
+            e.preventDefault();
+            const $btn = $(e.currentTarget);
+            const saveName = $btn.data('save-name');
+            const saveValue = parseInt($btn.data('save-value'));
+            const saveKey = $btn.data('save-key');
+            
+            if (!saveName || isNaN(saveValue)) {
+                console.error('Invalid saving throw roll data:', { saveName, saveValue, saveKey });
+                this.app.showError('Invalid saving throw data');
+                return;
+            }
+            
+            if (typeof window.rollSavingThrow === 'function') {
+                window.rollSavingThrow(saveName, saveValue, saveKey);
+            } else {
+                console.error('rollSavingThrow function not found');
+                this.app.showError('Roll function not available');
+            }
+        });
+        
+        // Damage roll button
+        $(document).on('click', '.damage-roll-btn', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const $btn = $(e.currentTarget);
+            const damageDie = $btn.data('damage-die');
+            const magicalBonus = parseInt($btn.data('magical-bonus')) || 0;
+            const masteryBonus = parseInt($btn.data('mastery-bonus')) || 0;
+            const itemName = $btn.data('item-name');
+            
+            if (!damageDie) {
+                console.error('Invalid damage roll data:', { damageDie, magicalBonus, masteryBonus });
+                this.app.showError('Invalid damage data');
+                return;
+            }
+            
+            this.rollDamage(damageDie, magicalBonus, masteryBonus, itemName);
+        });
+        
         // Identify magical item
         $(document).on('click', '[data-action="identify-item"]', async (e) => {
             e.preventDefault();
@@ -2035,8 +2359,10 @@ class CharacterSheetModule {
      */
     async viewCharacter(characterId) {
         try {
-            const content = await this.renderCharacterSheet(characterId);
-            $('#content-area').html(content);
+            await this.renderCharacterSheetIntoContainer(characterId, '#content-area', {
+                showEditButton: true,
+                showBackButton: false
+            });
             
             // Update navigation and current view
             $('.nav-link').removeClass('active');
@@ -2495,6 +2821,78 @@ class CharacterSheetModule {
             // Re-enable button
             $('#edit-generate-portrait-btn').prop('disabled', false).html('<i class="fas fa-magic"></i> Generate AI Portrait');
         }
+    }
+    
+    /**
+     * Roll damage dice
+     * 
+     * @param {string} damageDie - Damage die string (e.g., "1d6", "1d8+1")
+     * @param {number} magicalBonus - Magical bonus to damage
+     * @param {number} masteryBonus - Weapon mastery bonus to damage
+     * @param {string} itemName - Name of the item
+     */
+    rollDamage(damageDie, magicalBonus, masteryBonus, itemName) {
+        console.log(`Rolling damage for ${itemName}: ${damageDie} + ${magicalBonus} (magical) + ${masteryBonus} (mastery)`);
+        
+        // Parse damage die (e.g., "1d6", "1d8+1", "2d4")
+        const dieMatch = damageDie.match(/(\d+)d(\d+)([+-]\d+)?/);
+        if (!dieMatch) {
+            console.error('Invalid damage die format:', damageDie);
+            this.app.showError(`Invalid damage die format: ${damageDie}`);
+            return;
+        }
+        
+        const numDice = parseInt(dieMatch[1]);
+        const dieSize = parseInt(dieMatch[2]);
+        const dieBonus = dieMatch[3] ? parseInt(dieMatch[3]) : 0;
+        
+        // Roll dice
+        let total = 0;
+        const rolls = [];
+        for (let i = 0; i < numDice; i++) {
+            const roll = Math.floor(Math.random() * dieSize) + 1;
+            rolls.push(roll);
+            total += roll;
+        }
+        
+        // Add bonuses
+        const totalBonus = dieBonus + magicalBonus + masteryBonus;
+        const finalDamage = total + totalBonus;
+        
+        // Build message
+        let message = `${itemName}: `;
+        if (numDice > 1) {
+            message += `[${rolls.join(', ')}]`;
+        } else {
+            message += rolls[0];
+        }
+        
+        if (totalBonus !== 0) {
+            const bonusParts = [];
+            if (dieBonus !== 0) bonusParts.push(dieBonus);
+            if (magicalBonus !== 0) bonusParts.push(`${magicalBonus} (magical)`);
+            if (masteryBonus !== 0) bonusParts.push(`${masteryBonus} (mastery)`);
+            message += ` + ${bonusParts.join(' + ')}`;
+        }
+        
+        message += ` = ${finalDamage} damage`;
+        
+        // Show notification
+        if (this.app.modules.notifications) {
+            this.app.modules.notifications.show(message, 'success', 5000);
+        } else {
+            alert(message);
+        }
+        
+        console.log(`Damage roll result: ${message}`);
+        
+        return {
+            rolls: rolls,
+            total: total,
+            bonus: totalBonus,
+            finalDamage: finalDamage,
+            message: message
+        };
     }
     
     /**

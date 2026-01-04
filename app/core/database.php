@@ -68,15 +68,16 @@ class Database {
         try {
             $dsn = "mysql:host={$this->config['host']};port={$this->config['port']};dbname={$this->config['database']};charset={$this->config['charset']}";
             
+            // Use existing options - don't add unsupported timeout constants
+            // PDO::MYSQL_ATTR_CONNECT_TIMEOUT doesn't exist in all PHP versions
+            $options = $this->config['options'];
+            
             $this->connection = new PDO(
                 $dsn,
                 $this->config['username'],
                 $this->config['password'],
-                $this->config['options']
+                $options
             );
-            
-            // Log successful connection
-            error_log("Database connection established successfully");
             
         } catch (PDOException $e) {
             error_log("Database connection failed: " . $e->getMessage());
@@ -145,6 +146,13 @@ class Database {
      */
     public function insert($sql, $params = []) {
         $this->execute($sql, $params);
+        return $this->connection->lastInsertId();
+    }
+    
+    /**
+     * Get last insert ID
+     */
+    public function lastInsertId() {
         return $this->connection->lastInsertId();
     }
     
@@ -274,4 +282,3 @@ class Database {
 function getDB() {
     return Database::getInstance();
 }
-?>

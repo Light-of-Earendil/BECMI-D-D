@@ -5,24 +5,27 @@
  * Returns initiative order for a session sorted by initiative roll (DESC), then dexterity (DESC).
  */
 
+// Disable output compression
+if (function_exists('apache_setenv')) {
+    @apache_setenv('no-gzip', 1);
+}
+@ini_set('zlib.output_compression', 0);
+
+// Clear any output buffers
+while (ob_get_level()) {
+    ob_end_clean();
+}
+
 // Enable error logging but disable display
 ini_set('display_errors', 0);
 ini_set('display_startup_errors', 0);
 error_reporting(E_ALL);
 
-// Start output buffering
-if (!ob_get_level()) {
-    ob_start();
-}
-
 try {
     require_once '../../app/core/database.php';
     require_once '../../app/core/security.php';
 } catch (Exception $e) {
-    if (ob_get_level()) {
-        ob_clean();
-    }
-    header('Content-Type: application/json');
+    header('Content-Type: application/json; charset=utf-8');
     http_response_code(500);
     echo json_encode([
         'status' => 'error',
@@ -32,16 +35,11 @@ try {
     exit;
 }
 
-// Initialize security
+// Initialize security (REQUIRED to start session)
 Security::init();
 
-// Clear any output
-if (ob_get_level()) {
-    ob_clean();
-}
-
 // Set content type
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 
 try {
     // Only allow GET requests
@@ -145,11 +143,6 @@ try {
     ], 'Initiative order retrieved');
     
 } catch (Exception $e) {
-    // Clear any output before sending error
-    if (ob_get_level()) {
-        ob_clean();
-    }
-    
     error_log("Get initiative error: " . $e->getMessage());
     error_log("Get initiative error trace: " . $e->getTraceAsString());
     error_log("Get initiative error file: " . $e->getFile() . " line " . $e->getLine());
