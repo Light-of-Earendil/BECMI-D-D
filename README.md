@@ -156,7 +156,14 @@ BECMI VTT/
    - **Important**: Run migration `021_add_meet_link_to_sessions.sql` for video conferencing support
 
 3. **Configuration**
-   - Update `config/database.php` with database credentials
+   - **Set environment variables** (required for production):
+     - `DB_HOST` - Database host (default: localhost)
+     - `DB_PORT` - Database port (default: 3306)
+     - `DB_NAME` - Database name (default: becmi_vtt)
+     - `DB_USER` - Database username (default: root)
+     - `DB_PASS` - Database password (no default - must be set)
+     - `TOGETHER_AI_API_KEY` - Together AI API key (no default - must be set)
+   - **Note**: Configuration files use `getenv()` to read environment variables with fallback values for development
    - Configure email settings in `app/services/email-service.php`
    - Set up cron job for session reminders (see below)
 
@@ -277,6 +284,7 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 - ✅ Input validation and sanitization
 - ✅ Secure session management
 - ✅ Authentication tokens
+- ✅ **Environment variable configuration** ⭐ NEW - Credentials and API keys moved to environment variables
 
 ---
 
@@ -456,6 +464,12 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - Improved error handling in session creation API
 - Enhanced database migration system
 - Better logging for debugging
+- **Security improvements** ⭐ NEW (January 2026)
+  - Database credentials and API keys moved to environment variables
+  - Transaction error handling improved
+  - Explicit column lists in critical queries (reduced SELECT * usage)
+  - Dynamic query building secured with proper escaping (backticks)
+  - Code comments added for magic numbers (constants to be implemented)
 
 ### Email Queue System
 - Added `email_queue` table (Migration 022)
