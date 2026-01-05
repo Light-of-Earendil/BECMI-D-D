@@ -777,24 +777,29 @@ input.hp-input
 
 .encumbrance-bar-fill
   height: 100%
-  background: linear-gradient(90deg, var(--brass-400), var(--brass-600))
+  background: linear-gradient(90deg, var(--brass-300), var(--brass-400))
   transition: width var(--t-med) var(--ease)
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3)
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 8px rgba(202, 162, 74, 0.5)
 
   .encumbrance-bar.unencumbered &
     background: linear-gradient(90deg, var(--green-crt-dim), var(--green-crt))
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 8px rgba(142, 242, 126, 0.4)
 
   .encumbrance-bar.lightly_encumbered &
-    background: linear-gradient(90deg, var(--brass-400), var(--brass-600))
+    background: linear-gradient(90deg, var(--brass-300), var(--brass-400))
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 8px rgba(202, 162, 74, 0.5)
 
   .encumbrance-bar.heavily_encumbered &
-    background: linear-gradient(90deg, var(--brass-500), var(--brass-700))
+    background: linear-gradient(90deg, var(--brass-400), var(--brass-500))
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 8px rgba(202, 162, 74, 0.6)
 
   .encumbrance-bar.severely_encumbered &
     background: linear-gradient(90deg, #d86c5d, #b33a2b)
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 0 8px rgba(216, 108, 93, 0.5)
 
   .encumbrance-bar.overloaded &
     background: linear-gradient(90deg, #b33a2b, #8b2d1f)
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 8px rgba(179, 58, 43, 0.6)
 
 .movement-rates
   display: flex
@@ -2616,6 +2621,11 @@ input.hp-input
     box-shadow: inset 0 2px 0 var(--bevel-light), inset 0 -2px 0 rgba(0,0,0,0.55)
     pointer-events: none
 
+.sessions-grid
+
+  .session-card
+    margin-bottom: var(--space-4);
+
 .session-header
   position: relative
   z-index: 1
@@ -3608,6 +3618,312 @@ input.hp-input
     background: linear-gradient(90deg, rgba(202, 162, 74, 0.1), var(--parchment-100))
 
 // ==========================================================================
+// Enhanced Initiative Tracker Styles
+// ==========================================================================
+
+.initiative-tracker-section
+  background: linear-gradient(180deg, var(--wood-700), var(--wood-900))
+  border-radius: var(--radius-md)
+  padding: var(--space-4)
+  margin: var(--space-4) 0
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)
+  border: 2px solid var(--wood-800)
+
+.initiative-header
+  display: flex
+  justify-content: space-between
+  align-items: center
+  margin-bottom: var(--space-4)
+  padding-bottom: var(--space-3)
+  border-bottom: 2px solid var(--brass-500)
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2)
+
+  h2
+    font-family: "Cinzel", Georgia, serif
+    color: var(--brass-300)
+    font-size: 1.5rem
+    font-weight: 700
+    text-transform: uppercase
+    letter-spacing: 1px
+    margin: 0
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5)
+    display: flex
+    align-items: center
+    gap: var(--space-2)
+
+    i
+      color: var(--brass-400)
+      font-size: 1.5rem
+      filter: drop-shadow(0 0 4px rgba(202, 162, 74, 0.6))
+
+.initiative-actions
+  display: flex
+  gap: var(--space-2)
+  flex-wrap: wrap
+
+  .btn
+    border: 1px solid rgba(202, 162, 74, 0.3)
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3)
+    transition: all 0.2s ease
+    font-weight: 600
+    text-transform: uppercase
+    letter-spacing: 0.5px
+    font-size: 0.75rem
+
+    &:hover
+      transform: translateY(-2px)
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4)
+
+    &:active
+      transform: translateY(0)
+
+.round-indicator
+  background: linear-gradient(135deg, var(--brass-400), var(--brass-600))
+  color: var(--wood-900)
+  padding: var(--space-2) var(--space-4)
+  border-radius: var(--radius-full)
+  font-weight: 700
+  font-size: 1rem
+  text-align: center
+  margin-bottom: var(--space-3)
+  box-shadow: 0 2px 8px rgba(202, 162, 74, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3)
+  border: 2px solid var(--brass-700)
+  display: inline-flex
+  align-items: center
+  gap: var(--space-2)
+  font-family: "Cinzel", Georgia, serif
+
+  i
+    animation: spin 2s linear infinite
+
+@keyframes spin
+  from
+    transform: rotate(0deg)
+  to
+    transform: rotate(360deg)
+
+.initiative-list
+  display: flex
+  flex-direction: column
+  gap: var(--space-3)
+
+.initiative-entry
+  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+  border-radius: var(--radius-md)
+  padding: var(--space-4)
+  border: 2px solid var(--parchment-600)
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3)
+  display: grid
+  grid-template-columns: 50px 80px 1fr auto
+  gap: var(--space-3)
+  align-items: center
+  transition: all 0.3s ease
+  position: relative
+  overflow: hidden
+
+  &::before
+    content: ''
+    position: absolute
+    top: 0
+    left: 0
+    right: 0
+    height: 3px
+    background: linear-gradient(90deg, transparent, var(--parchment-500), transparent)
+    opacity: 0
+    transition: opacity 0.3s ease
+
+  &:hover
+    transform: translateX(4px)
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.4)
+    border-color: var(--brass-500)
+
+    &::before
+      opacity: 1
+
+  &.current-turn
+    background: linear-gradient(135deg, rgba(202, 162, 74, 0.2), var(--parchment-300), rgba(202, 162, 74, 0.15))
+    border-color: var(--brass-400)
+    border-width: 3px
+    box-shadow: 0 0 20px rgba(202, 162, 74, 0.5), 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.4)
+    transform: translateX(8px) scale(1.02)
+    z-index: 10
+
+    &::before
+      background: linear-gradient(90deg, transparent, var(--brass-400), transparent)
+      opacity: 1
+      height: 4px
+
+.initiative-order-number
+  width: 40px
+  height: 40px
+  border-radius: 50%
+  background: linear-gradient(135deg, var(--wood-700), var(--wood-900))
+  color: var(--brass-300)
+  display: flex
+  align-items: center
+  justify-content: center
+  font-weight: 700
+  font-size: 1.25rem
+  border: 2px solid var(--brass-500)
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)
+  font-family: "Cinzel", Georgia, serif
+
+.initiative-entry.current-turn .initiative-order-number
+  background: linear-gradient(135deg, var(--brass-400), var(--brass-600))
+  color: var(--wood-900)
+  border-color: var(--brass-700)
+  box-shadow: 0 0 12px rgba(202, 162, 74, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.3)
+  animation: pulse 2s ease-in-out infinite
+
+@keyframes pulse
+  0%, 100%
+    transform: scale(1)
+  50%
+    transform: scale(1.1)
+
+.initiative-roll-display
+  display: flex
+  align-items: center
+  gap: var(--space-2)
+  font-size: 1.5rem
+  font-weight: 700
+  color: var(--wood-900)
+  background: linear-gradient(135deg, var(--parchment-100), var(--parchment-300))
+  padding: var(--space-2) var(--space-3)
+  border-radius: var(--radius-sm)
+  border: 1px solid var(--parchment-500)
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1)
+
+  i
+    color: var(--brass-600)
+    font-size: 1.25rem
+
+.initiative-character-info
+  display: flex
+  flex-direction: column
+  gap: var(--space-1)
+  flex: 1
+
+.character-name-row
+  display: flex
+  align-items: center
+  gap: var(--space-2)
+  font-size: 1.125rem
+
+  i
+    color: var(--brass-600)
+    font-size: 1rem
+
+  strong
+    color: var(--wood-900)
+    font-weight: 700
+    font-family: "Cinzel", Georgia, serif
+
+.current-turn-indicator
+  background: linear-gradient(135deg, var(--brass-400), var(--brass-600))
+  color: var(--wood-900)
+  padding: var(--space-1) var(--space-3)
+  border-radius: var(--radius-full)
+  font-size: 0.75rem
+  font-weight: 700
+  text-transform: uppercase
+  letter-spacing: 0.5px
+  margin-left: auto
+  box-shadow: 0 2px 6px rgba(202, 162, 74, 0.4)
+  border: 1px solid var(--brass-700)
+  display: inline-flex
+  align-items: center
+  gap: var(--space-1)
+  animation: glow 2s ease-in-out infinite
+
+@keyframes glow
+  0%, 100%
+    box-shadow: 0 2px 6px rgba(202, 162, 74, 0.4)
+  50%
+    box-shadow: 0 2px 12px rgba(202, 162, 74, 0.8), 0 0 8px rgba(202, 162, 74, 0.6)
+
+  i
+    color: var(--wood-900)
+
+.character-class-level
+  font-size: 0.875rem
+  color: var(--wood-700)
+  font-style: italic
+  font-weight: 500
+
+.initiative-hp-display
+  display: flex
+  flex-direction: column
+  gap: var(--space-1)
+  min-width: 100px
+  align-items: flex-end
+
+.hp-bar-container
+  width: 100%
+  height: 12px
+  background: var(--parchment-500)
+  border-radius: var(--radius-full)
+  overflow: hidden
+  border: 1px solid var(--parchment-600)
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2)
+
+.hp-bar-fill
+  height: 100%
+  border-radius: var(--radius-full)
+  transition: width 0.3s ease, background-color 0.3s ease
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3)
+
+.hp-text-display
+  font-size: 0.875rem
+  font-weight: 600
+  color: var(--wood-800)
+  font-family: "VT323", monospace
+
+.initiative-empty
+  text-align: center
+  padding: var(--space-6)
+  color: var(--parchment-600)
+
+  i
+    color: var(--brass-500)
+    margin-bottom: var(--space-3)
+    opacity: 0.6
+
+  p
+    font-size: 1.125rem
+    color: var(--text-light)
+    margin: var(--space-2) 0
+
+  .help-text
+    font-size: 0.875rem
+    color: var(--parchment-600)
+    font-style: italic
+    margin-top: var(--space-3)
+
+// Responsive adjustments
+@media (max-width: 768px)
+  .initiative-entry
+    grid-template-columns: 40px 70px 1fr
+    gap: var(--space-2)
+    padding: var(--space-3)
+
+  .initiative-header
+    flex-direction: column
+    align-items: flex-start
+    gap: var(--space-3)
+
+    h2
+      font-size: 1.25rem
+
+  .initiative-actions
+    width: 100%
+    justify-content: flex-start
+
+    .btn
+      flex: 1
+      min-width: 0
+
+// ==========================================================================
 // Hex Map Editor Styles
 // ==========================================================================
 
@@ -4222,12 +4538,40 @@ button#upload-map-btn
     color: var(--text-soft)
     margin-bottom: var(--space-1)
 
+  .color-picker-container
+    display: flex
+    flex-direction: column
+    gap: var(--space-2)
+    
   input[type="color"]
     width: 50px
     height: 35px
     border: 2px solid var(--wood-900)
     border-radius: var(--radius-sm)
     cursor: pointer
+    
+  .preset-colors
+    display: flex
+    flex-wrap: wrap
+    gap: var(--space-1)
+    margin-top: var(--space-1)
+    
+  .preset-color
+    width: 24px
+    height: 24px
+    border-radius: var(--radius-sm)
+    border: 2px solid var(--wood-900)
+    cursor: pointer
+    transition: all var(--t-fast)
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2)
+    
+    &:hover
+      transform: scale(1.15)
+      border-color: var(--brass-500)
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3), 0 0 0 2px var(--brass-300)
+      
+    &:active
+      transform: scale(1.05)
 
   input[type="range"]
     width: 100px
@@ -4261,6 +4605,27 @@ button#upload-map-btn
   left: 0
   display: block
   cursor: crosshair
+
+.brush-preview
+  position: absolute
+  pointer-events: none
+  border-radius: 50%
+  border: 2px solid
+  display: none
+  z-index: 1000
+  transition: width 0.1s ease, height 0.1s ease
+  box-sizing: border-box
+  
+  &.draw-preview
+    border-color: var(--brass-400)
+    background: rgba(202, 162, 74, 0.1)
+    box-shadow: 0 0 0 1px rgba(202, 162, 74, 0.3), inset 0 0 8px rgba(202, 162, 74, 0.2)
+    
+  &.erase-preview
+    border-color: var(--wood-400)
+    background: rgba(139, 69, 19, 0.15)
+    box-shadow: 0 0 0 1px rgba(139, 69, 19, 0.4), inset 0 0 8px rgba(139, 69, 19, 0.25)
+    border-style: dashed
 
 #map-background-canvas
   z-index: 1
@@ -4332,4 +4697,105 @@ button#upload-map-btn
   .card
     box-shadow: none
     border: 1px solid #ccc
+
+
+// Monster entry styling
+.initiative-entry.monster-entry
+  border-left: 4px solid var(--danger-500)
+  background: linear-gradient(180deg, rgba(220, 53, 69, 0.15), var(--parchment-300))
+  
+  .initiative-character-info .character-name-row i
+    color: var(--danger-500)
+  
+  &.current-turn
+    border-left-color: var(--danger-600)
+    background: linear-gradient(135deg, rgba(220, 53, 69, 0.25), var(--parchment-300), rgba(202, 162, 74, 0.15))
+    
+  .monster-ac-display
+    font-size: 0.85rem
+    color: var(--text-soft)
+    margin-top: 2px
+    
+  .fa-crown
+    color: var(--brass-400)
+    margin-left: 4px
+    font-size: 0.9rem
+
+
+// Monster Browser Styling
+.monster-list
+  display: grid
+  gap: var(--space-4)
+  margin-top: var(--space-4)
+
+.monster-item
+  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-300))
+  border: 2px solid var(--wood-500)
+  border-radius: var(--radius-md)
+  padding: var(--space-4)
+  box-shadow: var(--shadow-wood)
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease)
+  
+  &:hover
+    transform: translateY(-2px)
+    box-shadow: var(--shadow-wood-hover)
+
+.monster-item-content
+  display: flex
+  gap: var(--space-4)
+  align-items: flex-start
+
+.monster-item-image
+  flex-shrink: 0
+  width: 120px
+  height: 120px
+  border-radius: var(--radius-sm)
+  overflow: hidden
+  border: 2px solid var(--wood-600)
+  background: var(--wood-400)
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.2)
+  
+  img
+    width: 100%
+    height: 100%
+    object-fit: cover
+    display: block
+
+.monster-item-details
+  flex: 1
+  min-width: 0
+
+.monster-item-header
+  display: flex
+  justify-content: space-between
+  align-items: center
+  margin-bottom: var(--space-3)
+  
+  h4
+    font-family: "Cinzel", Georgia, serif
+    font-size: 1.25rem
+    color: var(--wood-900)
+    margin: 0
+    text-shadow-soft()
+
+.monster-item-stats
+  display: flex
+  flex-direction: column
+  gap: var(--space-2)
+
+.stat-row
+  display: flex
+  flex-wrap: wrap
+  gap: var(--space-3)
+  align-items: center
+  font-size: 0.9rem
+
+.stat-label
+  font-weight: 600
+  color: var(--wood-700)
+  font-family: "VT323", monospace
+
+.stat-value
+  color: var(--wood-900)
+  font-family: "VT323", monospace
 

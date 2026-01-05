@@ -11,6 +11,9 @@ class SessionManagementModule {
         this.currentSession = null;
         this.isLoadingDashboard = false;
         this.lastDashboardLoad = null;
+        this.gameTimeRealtimeClient = null;
+        this.playerInitiativePollInterval = null;
+        this.playerInitiativePollInterval = null;
         
         console.log('Session Management Module initialized');
     }
@@ -218,6 +221,14 @@ class SessionManagementModule {
                     </div>
                     
                     <div class="form-group">
+                        <label for="session-campaign">Campaign (Optional):</label>
+                        <select id="session-campaign" name="campaign_id">
+                            <option value="">-- No Campaign --</option>
+                        </select>
+                        <small class="form-hint">Select a campaign to organize this session</small>
+                    </div>
+                    
+                    <div class="form-group">
                         <label for="meet-link">Video Conference Link (Optional):</label>
                         <div class="input-with-button">
                             <input type="url" id="meet-link" name="meet_link" placeholder="https://meet.google.com/xxx-xxxx-xxx" pattern="https?://.*">
@@ -274,6 +285,9 @@ class SessionManagementModule {
         
         this.setupSessionCreationHandlers();
         
+        // Load campaigns for dropdown
+        this.loadCampaignsForDropdown('#session-campaign');
+        
         // Set default date to tomorrow
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
@@ -281,6 +295,40 @@ class SessionManagementModule {
         
         // Set default time to 7 PM
         $('#session-time').val('19:00');
+    }
+    
+    /**
+     * Load campaigns and populate dropdown
+     */
+    async loadCampaignsForDropdown(selector) {
+        try {
+            const response = await this.apiClient.get('/api/campaigns/list.php');
+            if (response.status === 'success' && response.data.campaigns) {
+                const $select = $(selector);
+                const campaigns = response.data.campaigns;
+                
+                // Clear existing options except the first one
+                $select.find('option:not(:first)').remove();
+                
+                // Add campaign options
+                campaigns.forEach(campaign => {
+                    $select.append(`<option value="${campaign.campaign_id}">${this.escapeHtml(campaign.campaign_name)}</option>`);
+                });
+            }
+        } catch (error) {
+            console.error('Failed to load campaigns for dropdown:', error);
+            // Don't show error to user - just leave dropdown empty
+        }
+    }
+    
+    /**
+     * Escape HTML to prevent XSS
+     */
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
     
     /**
@@ -314,13 +362,15 @@ class SessionManagementModule {
         try {
             const formData = new FormData(document.getElementById('session-creation-form'));
             
+            const campaignId = formData.get('campaign_id');
             const sessionData = {
                 session_title: formData.get('session_title'),
                 session_description: formData.get('session_description'),
                 meet_link: formData.get('meet_link') || '',
                 session_datetime: `${formData.get('session_date')} ${formData.get('session_time')}:00`,
                 duration_minutes: parseInt(formData.get('duration_minutes')),
-                max_players: parseInt(formData.get('max_players'))
+                max_players: parseInt(formData.get('max_players')),
+                campaign_id: campaignId && campaignId !== '' ? parseInt(campaignId) : null
             };
             
             // Validate required fields
@@ -540,6 +590,22 @@ class SessionManagementModule {
             }
         });
         
+        // Time advancement buttons
+        $(document).on('click', '#advance-round-btn', async (e) => {
+            e.preventDefault();
+            await this.advanceCampaignTime('round', e.currentTarget);
+        });
+        
+        $(document).on('click', '#advance-turn-btn', async (e) => {
+            e.preventDefault();
+            await this.advanceCampaignTime('turn', e.currentTarget);
+        });
+        
+        $(document).on('click', '#advance-day-btn', async (e) => {
+            e.preventDefault();
+            await this.advanceCampaignTime('day', e.currentTarget);
+        });
+        
         $(document).on('click', '[data-action="back-to-sessions"]', (e) => {
             e.preventDefault();
             this.app.navigateToView('sessions');
@@ -625,6 +691,16 @@ class SessionManagementModule {
         });
         
         // Initiative Tracker actions
+        $(document).on('click', '[data-action="add-monster"]', (e) => {
+            e.preventDefault();
+            const sessionId = $(e.currentTarget).data('session-id');
+            if (this.app.modules.monsterBrowser) {
+                this.app.modules.monsterBrowser.showMonsterBrowser(sessionId);
+            } else {
+                this.app.showError('Monster browser module not available');
+            }
+        });
+        
         $(document).on('click', '[data-action="initiative-roll"]', (e) => {
             e.preventDefault();
             const sessionId = $(e.currentTarget).data('session-id');
@@ -648,6 +724,333 @@ class SessionManagementModule {
             const sessionId = $(e.currentTarget).data('session-id');
             this.clearInitiative(sessionId);
         });
+        
+        // Click on character entry to remove from initiative (if not current turn)
+        $(document).on('click', '.initiative-entry:not(.monster-entry)', async (e) => {
+            e.preventDefault();
+            const $entry = $(e.currentTarget);
+            const initiativeId = $entry.data('initiative-id');
+            const characterId = $entry.data('character-id');
+            const entityName = $entry.find('.character-name-row strong').text();
+            const sessionId = this.currentSession?.session_id;
+            
+            if (!initiativeId || !characterId || !sessionId) {
+                return;
+            }
+            
+            // Don't allow removing current turn
+            if ($entry.hasClass('current-turn')) {
+                this.app.showError('Cannot remove character during their turn. Advance turn first.');
+                return;
+            }
+            
+            if (confirm(`Remove ${entityName} from initiative tracker?`)) {
+                try {
+                    const response = await this.apiClient.post('/api/combat/remove-character.php', {
+                        initiative_id: initiativeId,
+                        session_id: sessionId
+                    });
+                    
+                    if (response.status === 'success') {
+                        this.app.showSuccess(`${entityName} removed from initiative`);
+                        await this.refreshInitiativeTracker(sessionId);
+                    } else {
+                        this.app.showError(response.message || 'Failed to remove character');
+                    }
+                } catch (error) {
+                    console.error('Failed to remove character:', error);
+                    this.app.showError('Failed to remove character: ' + error.message);
+                }
+            }
+        });
+        
+        // Click on monster entry to place token on map
+        $(document).on('click', '.initiative-entry.monster-entry', async (e) => {
+            e.preventDefault();
+            const $entry = $(e.currentTarget);
+            const monsterInstanceId = $entry.data('monster-instance-id');
+            const initiativeId = $entry.data('initiative-id');
+            const entityName = $entry.find('.character-name-row strong').text();
+            
+            if (!monsterInstanceId) {
+                return;
+            }
+            
+            // Check if map scratchpad module is available
+            if (!this.app.modules.sessionMapScratchpad) {
+                this.app.showError('Map scratchpad is not available');
+                return;
+            }
+            
+            // Get current map ID
+            const currentMapId = this.app.modules.sessionMapScratchpad.currentMapId;
+            if (!currentMapId) {
+                this.app.showError('No active map. Please open a map first.');
+                return;
+            }
+            
+            // Show message to click on map
+            this.app.showSuccess(`Click on the map to place token for ${entityName}`);
+            
+            // Set up one-time click handler on map
+            const mapCanvas = document.getElementById('map-token-canvas');
+            if (!mapCanvas) {
+                this.app.showError('Map canvas not found');
+                return;
+            }
+            
+            const handleMapClick = async (event) => {
+                const rect = mapCanvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+                
+                // Remove handler
+                mapCanvas.removeEventListener('click', handleMapClick);
+                
+                // Place token
+                try {
+                    await this.app.modules.sessionMapScratchpad.addToken(
+                        currentMapId,
+                        null, // character_id
+                        'marker',
+                        x,
+                        y,
+                        '#DC3545', // Red color for monsters
+                        entityName,
+                        monsterInstanceId,
+                        initiativeId
+                    );
+                    
+                    this.app.showSuccess(`Token placed for ${entityName}`);
+                } catch (error) {
+                    console.error('Failed to place monster token:', error);
+                    this.app.showError('Failed to place token: ' + error.message);
+                }
+            };
+            
+            mapCanvas.addEventListener('click', handleMapClick, { once: true });
+        });
+        
+        // Click on HP display to adjust HP
+        $(document).on('click', '.initiative-hp-display', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const $hpDisplay = $(e.currentTarget);
+            const entityType = $hpDisplay.data('entity-type');
+            const monsterInstanceId = $hpDisplay.data('monster-instance-id');
+            const characterId = $hpDisplay.data('character-id');
+            const sessionId = this.currentSession?.session_id;
+            const entityName = $hpDisplay.closest('.initiative-entry').find('.character-name-row strong').text();
+            
+            if (!sessionId) {
+                return;
+            }
+            
+            if (entityType === 'monster' && monsterInstanceId) {
+                await this.showHPAdjustModal('monster', monsterInstanceId, null, entityName, sessionId);
+            } else if (entityType === 'character' && characterId) {
+                await this.showHPAdjustModal('character', null, characterId, entityName, sessionId);
+            }
+        });
+    }
+    
+    /**
+     * Show HP adjustment modal
+     * 
+     * @param {string} entityType - 'monster' or 'character'
+     * @param {number|null} monsterInstanceId - Monster instance ID (if monster)
+     * @param {number|null} characterId - Character ID (if character)
+     * @param {string} entityName - Name of entity
+     * @param {number} sessionId - Session ID
+     */
+    async showHPAdjustModal(entityType, monsterInstanceId, characterId, entityName, sessionId) {
+        try {
+            // Get current HP
+            let currentHP, maxHP;
+            
+            if (entityType === 'monster') {
+                const response = await this.apiClient.get(`/api/monsters/list-instances.php?session_id=${sessionId}`);
+                if (response.status === 'success') {
+                    const instance = response.data.instances.find(i => i.instance_id === monsterInstanceId);
+                    if (!instance) {
+                        this.app.showError('Monster instance not found');
+                        return;
+                    }
+                    currentHP = instance.current_hp;
+                    maxHP = instance.max_hp;
+                } else {
+                    this.app.showError('Failed to load monster data');
+                    return;
+                }
+            } else {
+                const dashboardData = await this.loadDMDashboard(sessionId);
+                const character = dashboardData.players
+                    .flatMap(p => p.characters || [])
+                    .find(c => c.character_id === characterId);
+                if (!character) {
+                    this.app.showError('Character not found');
+                    return;
+                }
+                currentHP = character.hp.current;
+                maxHP = character.hp.max;
+            }
+            
+            // Create modal
+            const modal = $(`
+                <div class="modal" id="hp-adjust-modal">
+                    <div class="modal-content" style="max-width: 500px;">
+                        <div class="modal-header">
+                            <h2><i class="fas fa-heart"></i> Adjust HP: ${this.escapeHtml(entityName)}</h2>
+                            <button type="button" class="modal-close" id="close-hp-adjust">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <div style="text-align: center; margin-bottom: var(--space-4);">
+                                <div style="font-size: 2rem; font-weight: bold; color: var(--wood-900);">
+                                    ${currentHP} / ${maxHP}
+                                </div>
+                                <div style="font-size: 0.9em; color: var(--text-soft); margin-top: var(--space-1);">
+                                    Current HP
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Damage (negative) or Heal (positive)</label>
+                                <input type="number" id="hp-change-input" class="form-control" 
+                                       placeholder="e.g., -5 for damage, +3 for healing" 
+                                       style="font-size: 1.2rem; text-align: center;">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Or set exact HP</label>
+                                <input type="number" id="hp-exact-input" class="form-control" 
+                                       placeholder="e.g., 10" 
+                                       min="-10" max="${maxHP}"
+                                       style="font-size: 1.2rem; text-align: center;">
+                            </div>
+                            
+                            <div style="display: flex; gap: var(--space-2); margin-top: var(--space-4);">
+                                <button class="btn btn-danger btn-sm" id="quick-damage-1" data-amount="-1">
+                                    -1
+                                </button>
+                                <button class="btn btn-danger btn-sm" id="quick-damage-5" data-amount="-5">
+                                    -5
+                                </button>
+                                <button class="btn btn-danger btn-sm" id="quick-damage-10" data-amount="-10">
+                                    -10
+                                </button>
+                                <button class="btn btn-success btn-sm" id="quick-heal-1" data-amount="1">
+                                    +1
+                                </button>
+                                <button class="btn btn-success btn-sm" id="quick-heal-5" data-amount="5">
+                                    +5
+                                </button>
+                                <button class="btn btn-success btn-sm" id="quick-heal-10" data-amount="10">
+                                    +10
+                                </button>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" id="close-hp-adjust-btn">Cancel</button>
+                            <button type="button" class="btn btn-primary" id="apply-hp-change">Apply</button>
+                        </div>
+                    </div>
+                </div>
+            `);
+            
+            $('body').append(modal);
+            modal.addClass('show');
+            
+            // Setup event listeners
+            $('#close-hp-adjust, #close-hp-adjust-btn').on('click', () => {
+                $('#hp-adjust-modal').remove();
+            });
+            
+            $('#hp-adjust-modal').on('click', (e) => {
+                if (e.target.id === 'hp-adjust-modal') {
+                    $('#hp-adjust-modal').remove();
+                }
+            });
+            
+            // Quick damage/heal buttons
+            $('[id^="quick-"]').on('click', (e) => {
+                const amount = parseInt($(e.currentTarget).data('amount'));
+                $('#hp-change-input').val(amount);
+                $('#hp-exact-input').val('');
+            });
+            
+            // Apply HP change
+            $('#apply-hp-change').on('click', async () => {
+                const hpChange = $('#hp-change-input').val();
+                const exactHP = $('#hp-exact-input').val();
+                
+                if (!hpChange && !exactHP) {
+                    this.app.showError('Please enter a damage/heal amount or exact HP value');
+                    return;
+                }
+                
+                try {
+                    let response;
+                    
+                    if (entityType === 'monster') {
+                        const payload = {};
+                        if (exactHP) {
+                            payload.new_hp = parseInt(exactHP);
+                        } else {
+                            payload.hp_change = parseInt(hpChange);
+                        }
+                        payload.instance_id = monsterInstanceId;
+                        
+                        response = await this.apiClient.post('/api/monsters/update-hp.php', payload);
+                    } else {
+                        const payload = {
+                            character_id: characterId
+                        };
+                        if (exactHP) {
+                            payload.new_hp = parseInt(exactHP);
+                        } else {
+                            payload.hp_change = parseInt(hpChange);
+                        }
+                        
+                        response = await this.apiClient.post('/api/character/update-hp.php', payload);
+                    }
+                    
+                    if (response.status === 'success') {
+                        const newHP = response.data.current_hp || response.data.new_hp;
+                        const maxHP = response.data.max_hp;
+                        const isDead = response.data.is_dead;
+                        
+                        if (isDead) {
+                            this.app.showError(`${entityName} is now DEAD (${newHP}/${maxHP})`);
+                        } else {
+                            this.app.showSuccess(`${entityName} HP: ${newHP}/${maxHP}`);
+                        }
+                        
+                        $('#hp-adjust-modal').remove();
+                        
+                        // Refresh initiative tracker to show updated HP
+                        await this.refreshInitiativeTracker(sessionId);
+                    } else {
+                        this.app.showError(response.message || 'Failed to update HP');
+                    }
+                } catch (error) {
+                    console.error('Failed to update HP:', error);
+                    this.app.showError('Failed to update HP: ' + error.message);
+                }
+            });
+            
+            // Enter key to apply
+            $('#hp-change-input, #hp-exact-input').on('keypress', (e) => {
+                if (e.which === 13) { // Enter key
+                    $('#apply-hp-change').click();
+                }
+            });
+            
+        } catch (error) {
+            console.error('Failed to show HP adjust modal:', error);
+            this.app.showError('Failed to load HP data: ' + error.message);
+        }
     }
     
     /**
@@ -691,6 +1094,29 @@ class SessionManagementModule {
             
             // Load players list
             this.loadAndRenderPlayers(sessionId);
+            
+            // Load initiative tracker for players (read-only)
+            if (!this.currentSession.is_dm) {
+                await this.loadPlayerInitiativeTracker(sessionId);
+                // Set up polling to refresh initiative tracker every 5 seconds
+                this.startPlayerInitiativePolling(sessionId);
+            }
+            
+            // Initialize audio manager for players (to receive synchronized audio)
+            // This must be done before game time realtime client so we can reuse it
+            this.initializePlayerAudioManager(sessionId);
+            
+            // Load game time if session has campaign_id
+            if (this.currentSession.campaign_id) {
+                await this.loadGameTime(sessionId, this.currentSession.campaign_id);
+                
+                // Start real-time client for game time updates
+                // If audio manager already created a realtime client, reuse it
+                if (!this.gameTimeRealtimeClient && this.audioManager?.realtimeClient) {
+                    this.gameTimeRealtimeClient = this.audioManager.realtimeClient;
+                }
+                this.startGameTimeRealtimeClient(sessionId);
+            }
             
             // Initialize map scratch-pad for players
             setTimeout(async () => {
@@ -857,6 +1283,17 @@ class SessionManagementModule {
                         </div>
                     ` : ''}
                     
+                    ${!session.is_dm ? `
+                        <div class="initiative-tracker-section" id="player-initiative-tracker">
+                            <div class="initiative-header">
+                                <h2><i class="fas fa-bolt"></i> INITIATIVE TRACKER</h2>
+                            </div>
+                            <div class="initiative-list" id="player-initiative-list">
+                                <p class="text-muted">Loading initiative order...</p>
+                            </div>
+                        </div>
+                    ` : ''}
+                    
                     <div class="map-scratchpad-section">
                         <h3><i class="fas fa-map"></i> Map Scratch-Pad</h3>
                         <div id="session-map-scratchpad-container"></div>
@@ -894,6 +1331,16 @@ class SessionManagementModule {
                         <h3>Description</h3>
                         <p>${session.session_description || 'No description provided.'}</p>
                     </div>
+                    
+                    ${session.campaign_id ? `
+                    <div class="game-time-display" id="game-time-display">
+                        <h3><i class="fas fa-clock"></i> Game World Time</h3>
+                        <div class="game-time-info">
+                            <div id="current-game-time" class="game-time-current">Loading...</div>
+                            <div id="game-time-elapsed" class="game-time-elapsed text-muted"></div>
+                        </div>
+                    </div>
+                    ` : ''}
                     
                     ${!session.is_dm ? `
                         <div class="your-character-section" id="your-character-section" style="display: none;">
@@ -966,6 +1413,14 @@ class SessionManagementModule {
                     </div>
                     
                     <div class="form-group">
+                        <label for="edit-session-campaign">Campaign (Optional):</label>
+                        <select id="edit-session-campaign" name="campaign_id">
+                            <option value="">-- No Campaign --</option>
+                        </select>
+                        <small class="form-hint">Select a campaign to organize this session</small>
+                    </div>
+                    
+                    <div class="form-group">
                         <label for="edit-meet-link">Video Conference Link (Optional):</label>
                         <div class="input-with-button">
                             <input type="url" id="edit-meet-link" name="meet_link" value="${session.meet_link || ''}" placeholder="https://meet.google.com/xxx-xxxx-xxx" pattern="https?://.*">
@@ -1035,6 +1490,13 @@ class SessionManagementModule {
             }, 500);
         });
         
+        // Load campaigns for dropdown and set selected value
+        this.loadCampaignsForDropdown('#edit-session-campaign').then(() => {
+            if (session.campaign_id) {
+                $('#edit-session-campaign').val(session.campaign_id);
+            }
+        });
+        
         modal.show();
     }
     
@@ -1054,6 +1516,7 @@ class SessionManagementModule {
             
             const meetLink = $('#edit-meet-link').val() || '';
             
+            const campaignId = $('#edit-session-campaign').val();
             const response = await this.apiClient.put('/api/session/update.php', {
                 session_id: parseInt(sessionId),
                 session_title: title,
@@ -1062,7 +1525,8 @@ class SessionManagementModule {
                 session_datetime: datetime.replace('T', ' ') + ':00',
                 duration_minutes: duration,
                 max_players: maxPlayers,
-                status: status
+                status: status,
+                campaign_id: campaignId && campaignId !== '' ? parseInt(campaignId) : null
             });
             
             if (response.status === 'success') {
@@ -1693,6 +2157,9 @@ class SessionManagementModule {
                     console.log('Starting real-time client for DM Dashboard...');
                     this.app.modules.dmDashboard.startRealtimeClient(sessionId);
                 }
+                
+                // Initialize audio manager and soundboard
+                this.initializeSoundboard(sessionId);
             }, 100);
             
         } catch (error) {
@@ -1739,6 +2206,28 @@ class SessionManagementModule {
                         <button class="btn btn-success" id="award-xp-btn" data-session-id="${session.session_id}">
                             <i class="fas fa-star"></i> Award XP
                         </button>
+                        ${session.campaign_id ? `
+                        <div class="time-advancement-buttons" style="display: inline-flex; gap: 0.5rem; margin-left: 0.5rem;">
+                            <button class="btn btn-info btn-sm" id="advance-round-btn" 
+                                    data-campaign-id="${session.campaign_id}" 
+                                    data-session-id="${session.session_id}"
+                                    title="Advance time by 1 round (10 seconds)">
+                                <i class="fas fa-forward"></i> Round
+                            </button>
+                            <button class="btn btn-info btn-sm" id="advance-turn-btn" 
+                                    data-campaign-id="${session.campaign_id}" 
+                                    data-session-id="${session.session_id}"
+                                    title="Advance time by 1 turn (10 minutes)">
+                                <i class="fas fa-fast-forward"></i> Turn
+                            </button>
+                            <button class="btn btn-info btn-sm" id="advance-day-btn" 
+                                    data-campaign-id="${session.campaign_id}" 
+                                    data-session-id="${session.session_id}"
+                                    title="Advance time by 1 day">
+                                <i class="fas fa-step-forward"></i> Day
+                            </button>
+                        </div>
+                        ` : ''}
                         <button class="btn btn-primary" data-action="invite-player" data-session-id="${session.session_id}">
                             <i class="fas fa-user-plus"></i> Invite Player
                         </button>
@@ -1818,9 +2307,126 @@ class SessionManagementModule {
                     ` : players.map(player => this.renderDMPlayerCard(player, session.session_id)).join('')}
                 </div>
                 
+                ${this.renderSoundboard(session.session_id)}
+                
                 <div class="map-scratchpad-section">
                     <h2><i class="fas fa-map"></i> Map Scratch-Pad</h2>
                     <div id="map-scratchpad-container"></div>
+                </div>
+            </div>
+        `;
+    }
+    
+    /**
+     * Render Soundboard section for audio control
+     * 
+     * @param {number} sessionId - Session ID
+     * @returns {string} HTML for soundboard
+     */
+    renderSoundboard(sessionId) {
+        return `
+            <div class="soundboard-section">
+                <h2><i class="fas fa-music"></i> Audio & Soundboard</h2>
+                
+                <div class="soundboard-container">
+                    <div class="soundboard-tabs">
+                        <button class="tab-btn active" data-tab="music">
+                            <i class="fas fa-music"></i> Music
+                        </button>
+                        <button class="tab-btn" data-tab="sounds">
+                            <i class="fas fa-volume-up"></i> Sound Effects
+                        </button>
+                        <button class="tab-btn" data-tab="playlists">
+                            <i class="fas fa-list"></i> Playlists
+                        </button>
+                    </div>
+                    
+                    <div class="tab-content active" data-tab-content="music">
+                        <div class="audio-controls-panel">
+                            <div class="audio-upload-section">
+                                <h3><i class="fas fa-upload"></i> Upload Music</h3>
+                                <input type="file" id="music-upload-input" accept="audio/mpeg,audio/mp3" style="display: none;">
+                                <button class="btn btn-primary" id="upload-music-btn" data-session-id="${sessionId}">
+                                    <i class="fas fa-upload"></i> Upload MP3
+                                </button>
+                                <input type="text" id="music-track-name" placeholder="Track name" class="form-control" style="display: inline-block; width: 200px; margin-left: 10px;">
+                            </div>
+                            
+                            <div class="audio-player-controls">
+                                <h3><i class="fas fa-play-circle"></i> Player Controls</h3>
+                                <p style="font-size: 0.875rem; color: #666; margin-bottom: 1rem;">
+                                    <i class="fas fa-info-circle"></i> Click "Play" on a track below to start playing music
+                                </p>
+                                <div class="control-buttons">
+                                    <button class="btn btn-warning" id="audio-pause-btn" data-session-id="${sessionId}" title="Pause current track">
+                                        <i class="fas fa-pause"></i> Pause
+                                    </button>
+                                    <button class="btn btn-danger" id="audio-stop-btn" data-session-id="${sessionId}" title="Stop current track">
+                                        <i class="fas fa-stop"></i> Stop
+                                    </button>
+                                    <label class="checkbox-label" style="margin-left: 20px;">
+                                        <input type="checkbox" id="audio-loop-checkbox" data-session-id="${sessionId}">
+                                        <span>Loop</span>
+                                    </label>
+                                </div>
+                                
+                                <div class="volume-controls">
+                                    <label>Master Volume: <span id="master-volume-value">60</span>%</label>
+                                    <input type="range" id="master-volume-slider" min="0" max="100" value="60" data-session-id="${sessionId}">
+                                    
+                                    <label style="margin-left: 20px;">Music Volume: <span id="music-volume-value">33</span>%</label>
+                                    <input type="range" id="music-volume-slider" min="0" max="100" value="33" data-session-id="${sessionId}">
+                                </div>
+                                
+                                <div class="current-track-info" id="current-track-info" style="margin-top: 10px; padding: 10px; background: #f0f0f0; border-radius: 4px; display: none;">
+                                    <strong>Now Playing:</strong> <span id="current-track-name">-</span>
+                                </div>
+                            </div>
+                            
+                            <div class="music-tracks-list">
+                                <h3><i class="fas fa-list"></i> Music Tracks</h3>
+                                <div id="music-tracks-container">
+                                    <div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i> Loading tracks...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-content" data-tab-content="sounds">
+                        <div class="soundboard-upload-section">
+                            <h3><i class="fas fa-upload"></i> Upload Sound Effect</h3>
+                            <input type="file" id="sound-upload-input" accept="audio/mpeg,audio/mp3" style="display: none;">
+                            <button class="btn btn-primary" id="upload-sound-btn" data-session-id="${sessionId}">
+                                <i class="fas fa-upload"></i> Upload MP3
+                            </button>
+                            <input type="text" id="sound-track-name" placeholder="Sound name" class="form-control" style="display: inline-block; width: 200px; margin-left: 10px;">
+                        </div>
+                        
+                        <div class="soundboard-volume-control">
+                            <label>Sound Volume: <span id="sound-volume-value">100</span>%</label>
+                            <input type="range" id="sound-volume-slider" min="0" max="100" value="100" data-session-id="${sessionId}">
+                        </div>
+                        
+                        <div class="soundboard-grid" id="soundboard-grid">
+                            <div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i> Loading sounds...</div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-content" data-tab-content="playlists">
+                        <div class="playlist-management">
+                            <div class="playlist-create-section">
+                                <h3><i class="fas fa-plus"></i> Create Playlist</h3>
+                                <input type="text" id="playlist-name-input" placeholder="Playlist name" class="form-control" style="display: inline-block; width: 200px;">
+                                <button class="btn btn-primary" id="create-playlist-btn" data-session-id="${sessionId}">
+                                    <i class="fas fa-plus"></i> Create
+                                </button>
+                            </div>
+                            
+                            <div class="playlists-list" id="playlists-container">
+                                <div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i> Loading playlists...</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
@@ -1840,24 +2446,36 @@ class SessionManagementModule {
         return `
             <div class="initiative-tracker-section">
                 <div class="initiative-header">
-                    <h2><i class="fas fa-bolt"></i> Initiative Tracker</h2>
+                    <h2><i class="fas fa-bolt"></i> INITIATIVE TRACKER</h2>
                     <div class="initiative-actions">
                         ${hasInitiatives ? `
-                            <button class="btn btn-sm btn-success" data-action="initiative-prev" data-session-id="${sessionId}">
+                            <button class="btn btn-sm btn-info" data-action="add-character" data-session-id="${sessionId}" title="Add Character">
+                                <i class="fas fa-user-plus"></i> Add Character
+                            </button>
+                            <button class="btn btn-sm btn-info" data-action="add-monster" data-session-id="${sessionId}" title="Add Monster">
+                                <i class="fas fa-dragon"></i> Add Monster
+                            </button>
+                            <button class="btn btn-sm btn-success" data-action="initiative-prev" data-session-id="${sessionId}" title="Previous Turn">
                                 <i class="fas fa-arrow-left"></i> Previous
                             </button>
-                            <button class="btn btn-sm btn-success" data-action="initiative-next" data-session-id="${sessionId}">
+                            <button class="btn btn-sm btn-success" data-action="initiative-next" data-session-id="${sessionId}" title="Next Turn">
                                 Next <i class="fas fa-arrow-right"></i>
                             </button>
-                            <button class="btn btn-sm btn-warning" data-action="initiative-roll" data-session-id="${sessionId}">
-                                <i class="fas fa-dice-d6"></i> Re-roll
+                            <button class="btn btn-sm btn-warning" data-action="initiative-roll" data-session-id="${sessionId}" title="Re-roll All Initiative">
+                                <i class="fas fa-dice-d6"></i> Re-roll All
                             </button>
-                            <button class="btn btn-sm btn-danger" data-action="initiative-clear" data-session-id="${sessionId}">
+                            <button class="btn btn-sm btn-danger" data-action="initiative-clear" data-session-id="${sessionId}" title="End Combat">
                                 <i class="fas fa-times"></i> End Combat
                             </button>
                         ` : `
-                            <button class="btn btn-primary" data-action="initiative-roll" data-session-id="${sessionId}">
-                                <i class="fas fa-dice-d6"></i> Roll Initiative!
+                            <button class="btn btn-info" data-action="add-character" data-session-id="${sessionId}" title="Add Character">
+                                <i class="fas fa-user-plus"></i> Add Character
+                            </button>
+                            <button class="btn btn-info" data-action="add-monster" data-session-id="${sessionId}" title="Add Monster">
+                                <i class="fas fa-dragon"></i> Add Monster
+                            </button>
+                            <button class="btn btn-primary" data-action="initiative-roll" data-session-id="${sessionId}" title="Roll Initiative for All Characters">
+                                <i class="fas fa-dice-d6"></i> Roll All
                             </button>
                         `}
                     </div>
@@ -1866,43 +2484,65 @@ class SessionManagementModule {
                 ${hasInitiatives ? `
                     <div class="initiative-list">
                         ${current_turn ? `
-                            <div class="round-indicator">
+                            <div class="round-indicator" style="display: flex; justify-content: center; width: 100%;">
                                 <i class="fas fa-redo"></i> Round ${current_turn.round_number}
                             </div>
                         ` : ''}
                         
-                        ${initiatives.map((init, index) => `
-                            <div class="initiative-entry ${init.is_current_turn ? 'current-turn' : ''}">
-                                <div class="initiative-position">${index + 1}</div>
-                                <div class="initiative-roll">
-                                    <i class="fas fa-dice-d6"></i> ${init.initiative_roll}
+                        ${initiatives.map((init, index) => {
+                            const isMonster = init.entity_type === 'monster';
+                            const iconClass = isMonster ? 'fa-skull' : 'fa-user';
+                            const entryClass = isMonster ? 'monster-entry' : '';
+                            const bossIndicator = isMonster && init.is_named_boss ? '<i class="fas fa-crown" title="Named Boss Monster"></i>' : '';
+                            
+                            return `
+                            <div class="initiative-entry ${entryClass} ${init.is_current_turn ? 'current-turn' : ''}" 
+                                 data-initiative-id="${init.initiative_id}"
+                                 data-entity-type="${init.entity_type}"
+                                 ${isMonster ? `data-monster-instance-id="${init.monster_instance_id}"` : ''}
+                                 ${!isMonster ? `data-character-id="${init.character_id}"` : ''}
+                                 style="cursor: ${isMonster ? 'pointer' : 'default'};">
+                                <div class="initiative-order-number">${index + 1}</div>
+                                <div class="initiative-roll-display">
+                                    <i class="fas fa-dice-d6"></i>
+                                    <span>${init.initiative_roll}</span>
                                 </div>
-                                <div class="initiative-entity">
-                                    <div class="entity-name">
-                                        ${init.entity_type === 'character' ? '<i class="fas fa-user"></i>' : '<i class="fas fa-skull"></i>'}
-                                        ${init.entity_name}
+                                <div class="initiative-character-info">
+                                    <div class="character-name-row">
+                                        <i class="fas ${iconClass}"></i>
+                                        <strong>${init.entity_name}</strong>
+                                        ${bossIndicator}
+                                        ${init.is_current_turn ? '<span class="current-turn-indicator"><i class="fas fa-arrow-right"></i> CURRENT TURN</span>' : ''}
                                     </div>
                                     ${init.class && init.level ? `
-                                        <div class="entity-details">${init.class} ${init.level}</div>
+                                        <div class="character-class-level">${init.class} ${init.level}</div>
+                                    ` : ''}
+                                    ${isMonster && init.monster_ac ? `
+                                        <div class="monster-ac-display">AC: ${init.monster_ac}</div>
                                     ` : ''}
                                 </div>
                                 ${init.hp ? `
-                                    <div class="initiative-hp">
-                                        <div class="hp-bar-small">
+                                    <div class="initiative-hp-display" style="cursor: pointer;" 
+                                         data-entity-type="${init.entity_type}"
+                                         ${isMonster ? `data-monster-instance-id="${init.monster_instance_id}"` : ''}
+                                         ${!isMonster ? `data-character-id="${init.character_id}"` : ''}
+                                         title="Click to adjust HP">
+                                        <div class="hp-bar-container">
                                             <div class="hp-bar-fill" style="width: ${init.hp.percentage}%; background-color: ${this.getHPColor(init.hp.percentage)}"></div>
                                         </div>
-                                        <div class="hp-text">${init.hp.current}/${init.hp.max}</div>
+                                        <div class="hp-text-display">${init.hp.current}/${init.hp.max}</div>
                                     </div>
-                                ` : ''}
-                                ${init.is_current_turn ? '<div class="current-turn-badge"><i class="fas fa-arrow-right"></i> CURRENT TURN</div>' : ''}
+                                ` : '<div class="initiative-hp-display"><div class="hp-text-display">—</div></div>'}
                             </div>
-                        `).join('')}
+                        `;
+                        }).join('')}
                     </div>
                 ` : `
                     <div class="initiative-empty">
                         <i class="fas fa-dice-d6 fa-3x"></i>
-                        <p>No active combat. Roll initiative to start!</p>
-                        <p class="help-text">BECMI Rules: Each character rolls 1d6. Highest goes first!</p>
+                        <p><strong>No active combat</strong></p>
+                        <p>Click "Roll Initiative!" to start combat tracking</p>
+                        <p class="help-text"><small>BECMI Rules: Each character rolls 1d6. Highest roll goes first!</small></p>
                     </div>
                 `}
             </div>
@@ -2298,8 +2938,8 @@ class SessionManagementModule {
             if (response.status === 'success') {
                 this.app.showSuccess('Initiative rolled! Combat begins!');
                 
-                // Reload DM dashboard to show initiative
-                await this.viewDMDashboard(sessionId);
+                // Just refresh initiative tracker instead of reloading entire dashboard
+                await this.refreshInitiativeTracker(sessionId);
             } else {
                 this.app.showError(response.message || 'Failed to roll initiative');
             }
@@ -2308,6 +2948,254 @@ class SessionManagementModule {
             console.error('Failed to roll initiative:', error);
             this.app.showError('Failed to roll initiative: ' + error.message);
         }
+    }
+    
+    /**
+     * Refresh only the initiative tracker section (optimized - no full dashboard reload)
+     * 
+     * @param {number} sessionId - Session ID
+     */
+    async refreshInitiativeTracker(sessionId) {
+        try {
+            const initiativeData = await this.loadInitiativeOrder(sessionId);
+            
+            // Update only the initiative tracker section
+            const trackerHTML = this.renderInitiativeTracker(sessionId, initiativeData);
+            $('.initiative-tracker-section').replaceWith(trackerHTML);
+            
+            // Event handlers are already set up via document delegation, no need to re-attach
+            
+        } catch (error) {
+            console.error('Failed to refresh initiative tracker:', error);
+            // Fallback to full reload if refresh fails
+            await this.viewDMDashboard(sessionId);
+        }
+    }
+    
+    /**
+     * Show modal to add character to initiative
+     * 
+     * @param {number} sessionId - Session ID
+     */
+    async showAddCharacterModal(sessionId) {
+        try {
+            // Load dashboard data to get characters
+            const dashboardData = await this.loadDMDashboard(sessionId);
+            
+            // Get all characters from all players
+            const allCharacters = [];
+            if (dashboardData.players) {
+                dashboardData.players.forEach(player => {
+                    if (player.characters) {
+                        player.characters.forEach(char => {
+                            allCharacters.push({
+                                ...char,
+                                player_username: player.username
+                            });
+                        });
+                    }
+                });
+            }
+            
+            // Get current initiative to see which characters are already added
+            const initiativeData = await this.loadInitiativeOrder(sessionId);
+            const existingCharacterIds = new Set(
+                (initiativeData.initiatives || [])
+                    .filter(init => init.entity_type === 'character')
+                    .map(init => init.character_id)
+            );
+            
+            // Filter out characters already in initiative
+            const availableCharacters = allCharacters.filter(char => 
+                !existingCharacterIds.has(char.character_id)
+            );
+            
+            if (availableCharacters.length === 0) {
+                this.app.showInfo('All characters are already in the initiative tracker');
+                return;
+            }
+            
+            // Create modal
+            const modal = $(`
+                <div class="modal" id="add-character-modal">
+                    <div class="modal-content" style="max-width: 600px;">
+                        <div class="modal-header">
+                            <h2><i class="fas fa-user-plus"></i> Add Character to Initiative</h2>
+                            <button type="button" class="modal-close" id="close-add-character">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="text-muted">Select a character to add to the initiative tracker:</p>
+                            <div class="character-list" style="max-height: 400px; overflow-y: auto;">
+                                ${availableCharacters.map(char => `
+                                    <div class="character-item" data-character-id="${char.character_id}" style="padding: var(--space-3); margin-bottom: var(--space-2); background: var(--parchment-200); border-radius: var(--radius-sm); cursor: pointer; border: 2px solid var(--wood-400);">
+                                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                                            <div>
+                                                <strong>${this.escapeHtml(char.character_name)}</strong>
+                                                <div style="font-size: 0.9em; color: var(--text-soft);">
+                                                    ${char.class} ${char.level} | Player: ${this.escapeHtml(char.player_username)}
+                                                </div>
+                                            </div>
+                                            <button class="btn btn-sm btn-primary add-character-btn" data-character-id="${char.character_id}">
+                                                <i class="fas fa-plus"></i> Add
+                                            </button>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" id="close-add-character-btn">Close</button>
+                        </div>
+                    </div>
+                </div>
+            `);
+            
+            $('body').append(modal);
+            modal.addClass('show');
+            
+            // Setup event listeners
+            $('#close-add-character, #close-add-character-btn').on('click', () => {
+                $('#add-character-modal').remove();
+            });
+            
+            $('#add-character-modal').on('click', (e) => {
+                if (e.target.id === 'add-character-modal') {
+                    $('#add-character-modal').remove();
+                }
+            });
+            
+            $('.add-character-btn, .character-item').on('click', async (e) => {
+                e.preventDefault();
+                const $target = $(e.currentTarget);
+                const characterId = $target.data('character-id') || $target.closest('.character-item').data('character-id');
+                
+                if (!characterId) {
+                    return;
+                }
+                
+                try {
+                    const response = await this.apiClient.post('/api/combat/add-character.php', {
+                        character_id: characterId,
+                        session_id: sessionId
+                    });
+                    
+                    if (response.status === 'success') {
+                        this.app.showSuccess('Character added to initiative tracker!');
+                        $('#add-character-modal').remove();
+                        await this.refreshInitiativeTracker(sessionId);
+                    } else {
+                        this.app.showError(response.message || 'Failed to add character');
+                    }
+                } catch (error) {
+                    console.error('Failed to add character:', error);
+                    this.app.showError('Failed to add character: ' + error.message);
+                }
+            });
+            
+        } catch (error) {
+            console.error('Failed to show add character modal:', error);
+            this.app.showError('Failed to load characters: ' + error.message);
+        }
+    }
+    
+    /**
+     * Load initiative tracker for players (read-only view)
+     * 
+     * @param {number} sessionId - Session ID
+     */
+    async loadPlayerInitiativeTracker(sessionId) {
+        try {
+            const initiativeData = await this.loadInitiativeOrder(sessionId);
+            this.renderPlayerInitiativeTracker(sessionId, initiativeData);
+        } catch (error) {
+            console.error('Failed to load player initiative tracker:', error);
+            $('#player-initiative-list').html('<p class="text-muted">Unable to load initiative order</p>');
+        }
+    }
+    
+    /**
+     * Render initiative tracker for players (read-only, no controls)
+     * 
+     * @param {number} sessionId - Session ID
+     * @param {object} initiativeData - Initiative order data
+     */
+    renderPlayerInitiativeTracker(sessionId, initiativeData) {
+        const { initiatives, current_turn } = initiativeData;
+        const hasInitiatives = initiatives && initiatives.length > 0;
+        
+        const listHTML = hasInitiatives ? `
+            ${current_turn ? `
+                <div class="round-indicator" style="display: flex; justify-content: center; width: 100%; margin-bottom: var(--space-3);">
+                    <i class="fas fa-redo"></i> Round ${current_turn.round_number}
+                </div>
+            ` : ''}
+            
+            ${initiatives.map((init, index) => `
+                <div class="initiative-entry ${init.is_current_turn ? 'current-turn' : ''}" data-initiative-id="${init.initiative_id}">
+                    <div class="initiative-order-number">${index + 1}</div>
+                    <div class="initiative-roll-display">
+                        <i class="fas fa-dice-d6"></i>
+                        <span>${init.initiative_roll}</span>
+                    </div>
+                    <div class="initiative-character-info">
+                        <div class="character-name-row">
+                            <i class="fas fa-user"></i>
+                            <strong>${init.entity_name}</strong>
+                            ${init.is_current_turn ? '<span class="current-turn-indicator"><i class="fas fa-arrow-right"></i> CURRENT TURN</span>' : ''}
+                        </div>
+                        ${init.class && init.level ? `
+                            <div class="character-class-level">${init.class} ${init.level}</div>
+                        ` : ''}
+                    </div>
+                                ${init.hp ? `
+                                    <div class="initiative-hp-display" style="cursor: pointer;" 
+                                         data-entity-type="${init.entity_type}"
+                                         ${isMonster ? `data-monster-instance-id="${init.monster_instance_id}"` : ''}
+                                         ${!isMonster ? `data-character-id="${init.character_id}"` : ''}
+                                         title="Click to adjust HP">
+                                        <div class="hp-bar-container">
+                                            <div class="hp-bar-fill" style="width: ${init.hp.percentage}%; background-color: ${this.getHPColor(init.hp.percentage)}"></div>
+                                        </div>
+                                        <div class="hp-text-display">${init.hp.current}/${init.hp.max}</div>
+                                    </div>
+                                ` : '<div class="initiative-hp-display"><div class="hp-text-display">—</div></div>'}
+                </div>
+            `).join('')}
+        ` : `
+            <div class="initiative-empty">
+                <i class="fas fa-dice-d6 fa-3x"></i>
+                <p><strong>No active combat</strong></p>
+                <p class="help-text"><small>Waiting for DM to roll initiative...</small></p>
+            </div>
+        `;
+        
+        $('#player-initiative-list').html(listHTML);
+    }
+    
+    /**
+     * Start polling to refresh player initiative tracker
+     * 
+     * @param {number} sessionId - Session ID
+     */
+    startPlayerInitiativePolling(sessionId) {
+        // Clear any existing polling
+        if (this.playerInitiativePollInterval) {
+            clearInterval(this.playerInitiativePollInterval);
+        }
+        
+        // Poll every 5 seconds
+        this.playerInitiativePollInterval = setInterval(async () => {
+            // Only poll if we're still on the session details view
+            if ($('#player-initiative-tracker').length > 0) {
+                await this.loadPlayerInitiativeTracker(sessionId);
+            } else {
+                // Stop polling if we've navigated away
+                clearInterval(this.playerInitiativePollInterval);
+                this.playerInitiativePollInterval = null;
+            }
+        }, 5000);
     }
     
     /**
@@ -2327,8 +3215,8 @@ class SessionManagementModule {
             if (response.status === 'success') {
                 this.app.showSuccess(`Next turn: ${response.data.entity_name} (Round ${response.data.round_number})`);
                 
-                // Reload DM dashboard to update current turn
-                await this.viewDMDashboard(sessionId);
+                // Just refresh initiative tracker instead of reloading entire dashboard
+                await this.refreshInitiativeTracker(sessionId);
             } else {
                 this.app.showError(response.message || 'Failed to advance turn');
             }
@@ -2356,8 +3244,8 @@ class SessionManagementModule {
             if (response.status === 'success') {
                 this.app.showSuccess(`Previous turn: ${response.data.entity_name} (Round ${response.data.round_number})`);
                 
-                // Reload DM dashboard to update current turn
-                await this.viewDMDashboard(sessionId);
+                // Just refresh initiative tracker instead of reloading entire dashboard
+                await this.refreshInitiativeTracker(sessionId);
             } else {
                 this.app.showError(response.message || 'Failed to go back');
             }
@@ -2389,8 +3277,8 @@ class SessionManagementModule {
             if (response.status === 'success') {
                 this.app.showSuccess('Combat ended - initiative cleared');
                 
-                // Reload DM dashboard to show empty initiative
-                await this.viewDMDashboard(sessionId);
+                // Just refresh initiative tracker instead of reloading entire dashboard
+                await this.refreshInitiativeTracker(sessionId);
             } else {
                 this.app.showError(response.message || 'Failed to clear initiative');
             }
@@ -2398,6 +3286,1108 @@ class SessionManagementModule {
         } catch (error) {
             console.error('Failed to clear initiative:', error);
             this.app.showError('Failed to clear initiative: ' + error.message);
+        }
+    }
+    
+    /**
+     * Load game time for a campaign
+     * 
+     * @param {number} sessionId - Session ID
+     * @param {number} campaignId - Campaign ID
+     */
+    async loadGameTime(sessionId, campaignId) {
+        try {
+            const response = await this.apiClient.get(
+                `/api/campaigns/get-game-time.php?campaign_id=${campaignId}&session_id=${sessionId}`
+            );
+            
+            if (response.status === 'success') {
+                this.updateGameTimeDisplay(response.data);
+            }
+        } catch (error) {
+            console.error('Failed to load game time:', error);
+            $('#current-game-time').text('Unable to load game time');
+        }
+    }
+    
+    /**
+     * Update game time display
+     * 
+     * @param {Object} data - Game time data
+     */
+    updateGameTimeDisplay(data) {
+        if (data.current_game_datetime) {
+            const gameDate = new Date(data.current_game_datetime);
+            const formatted = gameDate.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            $('#current-game-time').text(formatted);
+        } else {
+            $('#current-game-time').text('Game time not set');
+        }
+        
+        if (data.time_elapsed_formatted) {
+            $('#game-time-elapsed').text(`Time elapsed: ${data.time_elapsed_formatted}`);
+        } else if (data.game_time_seconds) {
+            $('#game-time-elapsed').text(`Time elapsed: ${this.formatGameTimeFromSeconds(data.game_time_seconds)}`);
+        }
+    }
+    
+    /**
+     * Format game time from seconds
+     * 
+     * @param {number} seconds - Total seconds
+     * @returns {string} Formatted time
+     */
+    formatGameTimeFromSeconds(seconds) {
+        if (seconds < 60) {
+            return `${seconds} second${seconds !== 1 ? 's' : ''}`;
+        }
+        
+        const days = Math.floor(seconds / 86400);
+        const hours = Math.floor((seconds % 86400) / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = seconds % 60;
+        
+        const parts = [];
+        if (days > 0) {
+            parts.push(`${days} day${days !== 1 ? 's' : ''}`);
+        }
+        if (hours > 0) {
+            parts.push(`${hours} hour${hours !== 1 ? 's' : ''}`);
+        }
+        if (minutes > 0) {
+            parts.push(`${minutes} minute${minutes !== 1 ? 's' : ''}`);
+        }
+        if (secs > 0 && days === 0) {
+            parts.push(`${secs} second${secs !== 1 ? 's' : ''}`);
+        }
+        
+        return parts.length > 0 ? parts.join(', ') : '0 seconds';
+    }
+    
+    /**
+     * Start real-time client for game time updates
+     * 
+     * @param {number} sessionId - Session ID
+     */
+    startGameTimeRealtimeClient(sessionId) {
+        // Reuse existing realtime client if available (e.g., from audio manager)
+        if (!this.gameTimeRealtimeClient && this.audioManager?.realtimeClient) {
+            this.gameTimeRealtimeClient = this.audioManager.realtimeClient;
+        }
+        
+        // Create new client only if we don't have one
+        if (!this.gameTimeRealtimeClient) {
+            if (window.RealtimeClient) {
+                this.gameTimeRealtimeClient = new RealtimeClient(sessionId, this.app);
+            } else {
+                console.warn('[Session Management] RealtimeClient not available');
+                return;
+            }
+        }
+        
+        // Register event handler for game_time_advanced (if not already registered)
+        if (!this.gameTimeRealtimeClient._gameTimeHandlerRegistered) {
+            this.gameTimeRealtimeClient.on('game_time_advanced', (data) => {
+                console.log('[Session Management] Game time advanced event received:', data);
+                this.handleGameTimeUpdate(data);
+            });
+            this.gameTimeRealtimeClient._gameTimeHandlerRegistered = true;
+        }
+        
+        // Start polling if not already started
+        if (!this.gameTimeRealtimeClient.isPolling) {
+            this.gameTimeRealtimeClient.start();
+        }
+        
+        console.log('[Session Management] Game time real-time client started for session', sessionId);
+    }
+    
+    /**
+     * Initialize audio manager for players (to receive synchronized audio from DM)
+     * 
+     * @param {number} sessionId - Session ID
+     */
+    initializePlayerAudioManager(sessionId) {
+        // Initialize audio manager if available
+        if (window.AudioManager) {
+            if (!this.audioManager) {
+                this.audioManager = new AudioManager(this.app);
+            }
+            
+            // Use gameTimeRealtimeClient if available, otherwise create a new one
+            let realtimeClient = this.gameTimeRealtimeClient;
+            if (!realtimeClient) {
+                // Create a new realtime client for audio if gameTimeRealtimeClient doesn't exist
+                if (window.RealtimeClient) {
+                    realtimeClient = new RealtimeClient(sessionId, this.app);
+                    // Store it so we can reuse it for game time if needed
+                    this.gameTimeRealtimeClient = realtimeClient;
+                } else {
+                    console.warn('[Session Management] RealtimeClient not available, audio synchronization will not work for players');
+                    return;
+                }
+            }
+            
+            // Initialize audio manager with realtime client
+            this.audioManager.init(sessionId, realtimeClient);
+            
+            // Set initial volume levels to match defaults
+            if (this.audioManager) {
+                this.audioManager.setMasterVolume(0.6);
+                this.audioManager.setMusicVolume(0.33);
+            }
+            
+            // Ensure realtime client is started
+            if (!realtimeClient.isPolling) {
+                realtimeClient.start();
+            }
+            
+            console.log('[Session Management] Audio Manager initialized for player, session:', sessionId);
+        } else {
+            console.warn('[Session Management] AudioManager not available');
+        }
+    }
+    
+    /**
+     * Initialize soundboard for DM Dashboard
+     * 
+     * @param {number} sessionId - Session ID
+     */
+    async initializeSoundboard(sessionId) {
+        // Initialize audio manager if available
+        if (window.AudioManager) {
+            if (!this.audioManager) {
+                this.audioManager = new AudioManager(this.app);
+            }
+            
+            // Get realtime client from dmDashboard
+            const realtimeClient = this.app.modules.dmDashboard?.realtimeClient;
+            if (realtimeClient) {
+                this.audioManager.init(sessionId, realtimeClient);
+            }
+            
+            // Set initial volume levels to match UI defaults
+            if (this.audioManager) {
+                this.audioManager.setMasterVolume(0.6);
+                this.audioManager.setMusicVolume(0.33);
+            }
+        }
+        
+        // Setup soundboard event handlers
+        this.setupSoundboardHandlers(sessionId);
+        
+        // Load tracks and playlists
+        await this.loadAudioTracks(sessionId);
+        await this.loadPlaylists(sessionId);
+    }
+    
+    /**
+     * Setup soundboard event handlers
+     */
+    setupSoundboardHandlers(sessionId) {
+        // Tab switching
+        $(document).off('click', '.soundboard-tabs .tab-btn').on('click', '.soundboard-tabs .tab-btn', function() {
+            const tab = $(this).data('tab');
+            $('.soundboard-tabs .tab-btn').removeClass('active');
+            $(this).addClass('active');
+            $('.tab-content').removeClass('active');
+            $(`.tab-content[data-tab-content="${tab}"]`).addClass('active');
+        });
+        
+        // Music upload
+        $(document).off('click', '#upload-music-btn').on('click', '#upload-music-btn', () => {
+            $('#music-upload-input').click();
+        });
+        
+        $('#music-upload-input').off('change').on('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                await this.uploadAudioFile(sessionId, file, 'music', $('#music-track-name').val() || file.name);
+                $('#music-track-name').val('');
+                e.target.value = '';
+            }
+        });
+        
+        // Sound upload
+        $(document).off('click', '#upload-sound-btn').on('click', '#upload-sound-btn', () => {
+            $('#sound-upload-input').click();
+        });
+        
+        $('#sound-upload-input').off('change').on('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                await this.uploadAudioFile(sessionId, file, 'sound', $('#sound-track-name').val() || file.name);
+                $('#sound-track-name').val('');
+                e.target.value = '';
+            }
+        });
+        
+        // Audio controls
+        $(document).off('click', '#audio-play-btn').on('click', '#audio-play-btn', async (e) => {
+            const trackId = $(e.currentTarget).data('track-id');
+            if (trackId) {
+                await this.playTrack(sessionId, trackId);
+            }
+        });
+        
+        $(document).off('click', '#audio-pause-btn').on('click', '#audio-pause-btn', async () => {
+            await this.pauseAudio(sessionId);
+        });
+        
+        $(document).off('click', '#audio-stop-btn').on('click', '#audio-stop-btn', async () => {
+            await this.stopAudio(sessionId);
+        });
+        
+        $(document).off('change', '#audio-loop-checkbox').on('change', '#audio-loop-checkbox', async (e) => {
+            await this.setAudioLoop(sessionId, $(e.target).is(':checked'));
+        });
+        
+        // Volume controls
+        $(document).off('input', '#master-volume-slider').on('input', '#master-volume-slider', async (e) => {
+            const volume = parseInt($(e.target).val()) / 100;
+            $('#master-volume-value').text($(e.target).val());
+            await this.setAudioVolume(sessionId, { volume });
+        });
+        
+        $(document).off('input', '#music-volume-slider').on('input', '#music-volume-slider', async (e) => {
+            const volume = parseInt($(e.target).val()) / 100;
+            $('#music-volume-value').text($(e.target).val());
+            await this.setAudioVolume(sessionId, { music_volume: volume });
+        });
+        
+        $(document).off('input', '#sound-volume-slider').on('input', '#sound-volume-slider', async (e) => {
+            const volume = parseInt($(e.target).val()) / 100;
+            $('#sound-volume-value').text($(e.target).val());
+            await this.setAudioVolume(sessionId, { sound_volume: volume });
+        });
+        
+        // Playlist creation
+        $(document).off('click', '#create-playlist-btn').on('click', '#create-playlist-btn', async () => {
+            const name = $('#playlist-name-input').val().trim();
+            if (name) {
+                await this.createPlaylist(sessionId, name);
+                $('#playlist-name-input').val('');
+            }
+        });
+    }
+    
+    /**
+     * Upload audio file
+     */
+    async uploadAudioFile(sessionId, file, trackType, trackName) {
+        try {
+            const formData = new FormData();
+            formData.append('audio', file);
+            formData.append('session_id', sessionId);
+            formData.append('track_type', trackType);
+            formData.append('track_name', trackName);
+            
+            const xhr = new XMLHttpRequest();
+            const url = this.app.modules.apiClient.buildURL('/api/audio/upload.php');
+            
+            return new Promise((resolve, reject) => {
+                xhr.addEventListener('load', () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        try {
+                            // Parse JSON response (may have HTML before JSON)
+                            const jsonMatch = xhr.responseText.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+                            const responseText = jsonMatch ? jsonMatch[1] : xhr.responseText;
+                            const response = JSON.parse(responseText);
+                            
+                            if (response.status === 'success') {
+                                this.app.showSuccess('Audio file uploaded successfully');
+                                this.loadAudioTracks(sessionId).then(() => resolve(response)).catch(reject);
+                            } else {
+                                reject(new Error(response.message || 'Upload failed'));
+                            }
+                        } catch (e) {
+                            console.error('Parse error:', e, 'Response:', xhr.responseText);
+                            reject(new Error('Failed to parse server response'));
+                        }
+                    } else {
+                        reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
+                    }
+                });
+                
+                xhr.addEventListener('error', () => {
+                    reject(new Error('Network error during upload'));
+                });
+                
+                xhr.timeout = 30000;
+                xhr.addEventListener('timeout', () => {
+                    reject(new Error('Upload timeout'));
+                });
+                
+                xhr.open('POST', url);
+                
+                // Add auth headers
+                const authToken = localStorage.getItem('auth_token');
+                if (authToken) {
+                    xhr.setRequestHeader('Authorization', `Bearer ${authToken}`);
+                }
+                
+                // Don't set Content-Type header - browser will set it with boundary for FormData
+                
+                xhr.send(formData);
+            });
+        } catch (error) {
+            console.error('Upload error:', error);
+            this.app.showError('Failed to upload audio file: ' + error.message);
+            throw error;
+        }
+    }
+    
+    /**
+     * Load audio tracks
+     */
+    async loadAudioTracks(sessionId) {
+        try {
+            const [musicResponse, soundResponse] = await Promise.all([
+                this.app.modules.apiClient.get(`/api/audio/list.php?session_id=${sessionId}&track_type=music`),
+                this.app.modules.apiClient.get(`/api/audio/list.php?session_id=${sessionId}&track_type=sound`)
+            ]);
+            
+            if (musicResponse.status === 'success' && musicResponse.data && musicResponse.data.tracks) {
+                this.renderMusicTracks(musicResponse.data.tracks);
+            } else {
+                this.renderMusicTracks([]);
+            }
+            
+            if (soundResponse.status === 'success' && soundResponse.data && soundResponse.data.tracks) {
+                this.renderSoundboardGrid(soundResponse.data.tracks);
+            } else {
+                this.renderSoundboardGrid([]);
+            }
+        } catch (error) {
+            console.error('Failed to load audio tracks:', error);
+            // Render empty lists on error
+            this.renderMusicTracks([]);
+            this.renderSoundboardGrid([]);
+        }
+    }
+    
+    /**
+     * Render music tracks list
+     */
+    renderMusicTracks(tracks) {
+        const container = $('#music-tracks-container');
+        if (!tracks || !Array.isArray(tracks)) {
+            container.html('<p class="text-muted">No music tracks uploaded yet</p>');
+            return;
+        }
+        
+        if (tracks.length === 0) {
+            container.html('<p class="text-muted">No music tracks uploaded yet</p>');
+            return;
+        }
+        
+        const html = tracks.map(track => `
+            <div class="track-item" data-track-id="${track.track_id}">
+                <div class="track-info">
+                    <strong>${this.escapeHtml(track.track_name)}</strong>
+                    <span class="track-meta">${track.duration_seconds ? this.formatDuration(track.duration_seconds) : 'Unknown duration'}</span>
+                </div>
+                <div class="track-actions">
+                    <button class="btn btn-sm btn-success play-track-btn" data-track-id="${track.track_id}" data-file-path="${track.file_path}">
+                        <i class="fas fa-play"></i> Play
+                    </button>
+                    <button class="btn btn-sm btn-danger delete-track-btn" data-track-id="${track.track_id}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+        
+        container.html(html);
+        
+        // Setup play buttons
+        $(document).off('click', '.play-track-btn').on('click', '.play-track-btn', async (e) => {
+            const trackId = $(e.currentTarget).data('track-id');
+            const sessionId = this.currentSession?.session_id || $(e.currentTarget).closest('.soundboard-section').find('[data-session-id]').first().data('session-id');
+            if (sessionId && trackId) {
+                await this.playTrack(sessionId, trackId);
+                // Update play button to show it's playing
+                $('#audio-play-btn').data('track-id', trackId);
+            }
+        });
+        
+        // Setup delete buttons
+        $(document).off('click', '.delete-track-btn').on('click', '.delete-track-btn', async (e) => {
+            const trackId = $(e.currentTarget).data('track-id');
+            if (confirm('Are you sure you want to delete this track?')) {
+                await this.deleteTrack(trackId);
+            }
+        });
+    }
+    
+    /**
+     * Render soundboard grid
+     */
+    renderSoundboardGrid(tracks) {
+        const container = $('#soundboard-grid');
+        if (!tracks || !Array.isArray(tracks)) {
+            container.html('<p class="text-muted">No sound effects uploaded yet</p>');
+            return;
+        }
+        
+        if (tracks.length === 0) {
+            container.html('<p class="text-muted">No sound effects uploaded yet</p>');
+            return;
+        }
+        
+        const html = tracks.map(track => `
+            <div class="soundboard-button" data-track-id="${track.track_id}" data-file-path="${track.file_path}">
+                <i class="fas fa-volume-up"></i>
+                <span>${this.escapeHtml(track.track_name)}</span>
+            </div>
+        `).join('');
+        
+        container.html(html);
+        
+        // Setup soundboard buttons
+        $(document).off('click', '.soundboard-button').on('click', '.soundboard-button', async (e) => {
+            const trackId = $(e.currentTarget).data('track-id');
+            const sessionId = this.currentSession?.session_id || $(e.currentTarget).closest('.soundboard-section').find('[data-session-id]').first().data('session-id');
+            if (sessionId && trackId) {
+                await this.playSoundEffect(sessionId, trackId);
+            }
+        });
+    }
+    
+    /**
+     * Load playlists
+     */
+    async loadPlaylists(sessionId) {
+        try {
+            const response = await this.app.modules.apiClient.get(`/api/audio/playlists/list.php?session_id=${sessionId}`);
+            if (response.status === 'success' && response.data && response.data.playlists) {
+                this.renderPlaylists(response.data.playlists);
+            } else {
+                this.renderPlaylists([]);
+            }
+        } catch (error) {
+            console.error('Failed to load playlists:', error);
+            this.renderPlaylists([]);
+        }
+    }
+    
+    /**
+     * Render playlists
+     */
+    renderPlaylists(playlists) {
+        const container = $('#playlists-container');
+        if (!playlists || !Array.isArray(playlists)) {
+            container.html('<p class="text-muted">No playlists created yet</p>');
+            return;
+        }
+        
+        if (playlists.length === 0) {
+            container.html('<p class="text-muted">No playlists created yet</p>');
+            return;
+        }
+        
+        const sessionId = this.currentSession?.session_id;
+        
+        const html = playlists.map(playlist => {
+            const tracksHtml = playlist.tracks && playlist.tracks.length > 0 
+                ? playlist.tracks.map((pt, idx) => `
+                    <div class="playlist-track-item" data-playlist-track-id="${pt.playlist_track_id}">
+                        <span class="track-order">${idx + 1}.</span>
+                        <span class="track-name">${this.escapeHtml(pt.track.track_name)}</span>
+                        <button class="btn btn-xs btn-danger remove-track-btn" data-playlist-id="${playlist.playlist_id}" data-track-id="${pt.track_id}" title="Remove from playlist">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                `).join('')
+                : '<p style="font-size: 0.875rem; margin: 0.5rem 0; color: #2a1409; font-weight: 500;">No tracks in playlist</p>';
+            
+            return `
+            <div class="playlist-item" data-playlist-id="${playlist.playlist_id}">
+                <div class="playlist-header">
+                    <strong>${this.escapeHtml(playlist.playlist_name)}</strong>
+                    <span class="playlist-track-count">${playlist.tracks ? playlist.tracks.length : 0} tracks</span>
+                </div>
+                <div class="playlist-tracks-list">
+                    ${tracksHtml}
+                </div>
+                <div class="playlist-actions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <button class="btn btn-sm btn-primary edit-playlist-btn" data-playlist-id="${playlist.playlist_id}" data-session-id="${sessionId}">
+                        <i class="fas fa-edit"></i> Add Tracks
+                    </button>
+                    <button class="btn btn-sm btn-success play-playlist-btn" data-playlist-id="${playlist.playlist_id}">
+                        <i class="fas fa-play"></i> Play
+                    </button>
+                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; margin: 0; cursor: pointer;">
+                        <input type="checkbox" class="playlist-shuffle-checkbox" data-playlist-id="${playlist.playlist_id}" style="width: 18px; height: 18px; accent-color: var(--brass-600);">
+                        <span style="font-family: 'Lora', serif; color: #2a1409; font-weight: 500;">Shuffle</span>
+                    </label>
+                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; margin: 0; cursor: pointer;">
+                        <input type="checkbox" class="playlist-loop-checkbox" data-playlist-id="${playlist.playlist_id}" style="width: 18px; height: 18px; accent-color: var(--brass-600);">
+                        <span style="font-family: 'Lora', serif; color: #2a1409; font-weight: 500;">Repeat</span>
+                    </label>
+                    <button class="btn btn-sm btn-danger delete-playlist-btn" data-playlist-id="${playlist.playlist_id}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+        }).join('');
+        
+        container.html(html);
+        
+        // Setup event handlers
+        this.setupPlaylistEventHandlers(sessionId);
+    }
+    
+    /**
+     * Setup playlist event handlers
+     */
+    setupPlaylistEventHandlers(sessionId) {
+        // Edit playlist button - show modal to add tracks
+        $(document).off('click', '.edit-playlist-btn').on('click', '.edit-playlist-btn', async (e) => {
+            const playlistId = $(e.currentTarget).data('playlist-id');
+            const sessionId = $(e.currentTarget).data('session-id') || this.currentSession?.session_id;
+            if (playlistId && sessionId) {
+                await this.showAddTracksToPlaylistModal(sessionId, playlistId);
+            }
+        });
+        
+        // Remove track from playlist
+        $(document).off('click', '.remove-track-btn').on('click', '.remove-track-btn', async (e) => {
+            e.stopPropagation();
+            const playlistId = $(e.currentTarget).data('playlist-id');
+            const trackId = $(e.currentTarget).data('track-id');
+            const sessionId = this.currentSession?.session_id;
+            if (playlistId && trackId && sessionId) {
+                await this.removeTrackFromPlaylist(sessionId, playlistId, trackId);
+            }
+        });
+        
+        // Play playlist
+        $(document).off('click', '.play-playlist-btn').on('click', '.play-playlist-btn', async (e) => {
+            const playlistId = $(e.currentTarget).data('playlist-id');
+            const sessionId = this.currentSession?.session_id;
+            if (playlistId && sessionId) {
+                const $playlistItem = $(e.currentTarget).closest('.playlist-item');
+                const isLooping = $playlistItem.find('.playlist-loop-checkbox').is(':checked');
+                const isShuffled = $playlistItem.find('.playlist-shuffle-checkbox').is(':checked');
+                await this.playPlaylist(sessionId, playlistId, isLooping, isShuffled);
+            }
+        });
+        
+        // Playlist shuffle checkbox
+        $(document).off('change', '.playlist-shuffle-checkbox').on('change', '.playlist-shuffle-checkbox', async (e) => {
+            const playlistId = $(e.currentTarget).data('playlist-id');
+            const sessionId = this.currentSession?.session_id;
+            const isShuffled = $(e.currentTarget).is(':checked');
+            if (playlistId && sessionId) {
+                // Update playlist shuffle state (this is just UI state, actual shuffling happens during playback)
+                console.log(`Playlist ${playlistId} shuffle set to: ${isShuffled}`);
+            }
+        });
+        
+        // Playlist loop checkbox
+        $(document).off('change', '.playlist-loop-checkbox').on('change', '.playlist-loop-checkbox', async (e) => {
+            const playlistId = $(e.currentTarget).data('playlist-id');
+            const sessionId = this.currentSession?.session_id;
+            const isLooping = $(e.currentTarget).is(':checked');
+            if (playlistId && sessionId) {
+                // Update playlist loop state (this is just UI state, actual looping happens during playback)
+                console.log(`Playlist ${playlistId} loop set to: ${isLooping}`);
+            }
+        });
+        
+        // Delete playlist
+        $(document).off('click', '.delete-playlist-btn').on('click', '.delete-playlist-btn', async (e) => {
+            const playlistId = $(e.currentTarget).data('playlist-id');
+            const sessionId = this.currentSession?.session_id;
+            if (playlistId && sessionId && confirm('Are you sure you want to delete this playlist?')) {
+                await this.deletePlaylist(sessionId, playlistId);
+            }
+        });
+    }
+    
+    /**
+     * Show modal to add tracks to playlist
+     */
+    async showAddTracksToPlaylistModal(sessionId, playlistId) {
+        try {
+            // Load available music tracks
+            const tracksResponse = await this.app.modules.apiClient.get(`/api/audio/list.php?session_id=${sessionId}&track_type=music`);
+            const tracks = tracksResponse.status === 'success' && tracksResponse.data && tracksResponse.data.tracks 
+                ? tracksResponse.data.tracks 
+                : [];
+            
+            // Get current playlist tracks
+            const playlistResponse = await this.app.modules.apiClient.get(`/api/audio/playlists/list.php?session_id=${sessionId}`);
+            let currentTrackIds = [];
+            if (playlistResponse.status === 'success' && playlistResponse.data && playlistResponse.data.playlists) {
+                const playlist = playlistResponse.data.playlists.find(p => p.playlist_id === playlistId);
+                if (playlist && playlist.tracks) {
+                    currentTrackIds = playlist.tracks.map(pt => pt.track_id);
+                }
+            }
+            
+            // Create modal HTML (matching existing modal style)
+            const modalHtml = $(`
+                <div class="modal" id="add-tracks-modal">
+                    <div class="modal-content" style="max-width: 800px;">
+                        <div class="modal-header">
+                            <h2><i class="fas fa-music"></i> Add Tracks to Playlist</h2>
+                            <button type="button" class="modal-close close-modal-btn">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <p>Select tracks to add to the playlist. Tracks already in the playlist are marked and cannot be selected again.</p>
+                            <div class="available-tracks-list" style="max-height: 400px; overflow-y: auto; margin-top: 1rem;">
+                                ${tracks.length === 0 
+                                    ? '<p class="text-muted">No music tracks available. Upload some tracks first.</p>'
+                                    : tracks.map(track => {
+                                        const isInPlaylist = currentTrackIds.includes(track.track_id);
+                                        return `
+                                            <div class="track-select-item ${isInPlaylist ? 'in-playlist' : ''}" data-track-id="${track.track_id}" style="padding: 0.5rem; margin-bottom: 0.25rem; border: 1px solid var(--wood-600); border-radius: 4px; ${isInPlaylist ? 'opacity: 0.6; background: rgba(0,0,0,0.1);' : ''}">
+                                                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: ${isInPlaylist ? 'not-allowed' : 'pointer'};">
+                                                    <input type="checkbox" ${isInPlaylist ? 'checked disabled' : ''} data-track-id="${track.track_id}">
+                                                    <span style="flex: 1;">${this.escapeHtml(track.track_name)}</span>
+                                                    ${isInPlaylist ? '<span class="badge" style="background: var(--brass-500); color: var(--wood-900);">Already in Playlist</span>' : ''}
+                                                </label>
+                                            </div>
+                                        `;
+                                    }).join('')
+                                }
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary close-modal-btn">Cancel</button>
+                            <button type="button" class="btn btn-primary" id="add-selected-tracks-btn" data-playlist-id="${playlistId}" data-session-id="${sessionId}">
+                                <i class="fas fa-plus"></i> Add Selected Tracks
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `);
+            
+            // Remove existing modal if any
+            $('#add-tracks-modal').remove();
+            
+            // Add modal to body
+            $('body').append(modalHtml);
+            
+            // Show modal (matching existing modal style)
+            $('#add-tracks-modal').addClass('show');
+            
+            // Handle close modal buttons
+            $('.close-modal-btn').off('click').on('click', () => {
+                $('#add-tracks-modal').removeClass('show');
+                setTimeout(() => $('#add-tracks-modal').remove(), 300);
+            });
+            
+            // Handle add tracks button
+            $('#add-selected-tracks-btn').off('click').on('click', async () => {
+                const selectedTracks = [];
+                $('.track-select-item input[type="checkbox"]:checked:not(:disabled)').each(function() {
+                    selectedTracks.push({
+                        track_id: parseInt($(this).data('track-id'))
+                    });
+                });
+                
+                if (selectedTracks.length === 0) {
+                    this.app.showError('Please select at least one track to add');
+                    return;
+                }
+                
+                // Get current tracks and add new ones
+                const allTracks = [...currentTrackIds.map(tid => ({ track_id: tid })), ...selectedTracks];
+                
+                await this.updatePlaylistTracks(sessionId, playlistId, allTracks);
+                // Hide modal
+                $('#add-tracks-modal').removeClass('show');
+                setTimeout(() => $('#add-tracks-modal').remove(), 300);
+            });
+            
+        } catch (error) {
+            console.error('Failed to show add tracks modal:', error);
+            this.app.showError('Failed to load tracks: ' + error.message);
+        }
+    }
+    
+    /**
+     * Update playlist tracks
+     */
+    async updatePlaylistTracks(sessionId, playlistId, tracks) {
+        try {
+            // Add track_order to each track
+            const tracksWithOrder = tracks.map((track, index) => ({
+                track_id: track.track_id,
+                track_order: index
+            }));
+            
+            const response = await this.app.modules.apiClient.put('/api/audio/playlists/update.php', {
+                playlist_id: playlistId,
+                tracks: tracksWithOrder
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess('Playlist updated successfully');
+                // Reload playlists
+                await this.loadPlaylists(sessionId);
+            } else {
+                this.app.showError('Failed to update playlist');
+            }
+        } catch (error) {
+            console.error('Failed to update playlist tracks:', error);
+            this.app.showError('Failed to update playlist: ' + error.message);
+        }
+    }
+    
+    /**
+     * Remove track from playlist
+     */
+    async removeTrackFromPlaylist(sessionId, playlistId, trackId) {
+        try {
+            // Get current playlist tracks
+            const playlistResponse = await this.app.modules.apiClient.get(`/api/audio/playlists/list.php?session_id=${sessionId}`);
+            if (playlistResponse.status === 'success' && playlistResponse.data && playlistResponse.data.playlists) {
+                const playlist = playlistResponse.data.playlists.find(p => p.playlist_id === playlistId);
+                if (playlist && playlist.tracks) {
+                    // Remove the track
+                    const updatedTracks = playlist.tracks
+                        .filter(pt => pt.track_id !== trackId)
+                        .map((pt, index) => ({
+                            track_id: pt.track_id,
+                            track_order: index
+                        }));
+                    
+                    await this.updatePlaylistTracks(sessionId, playlistId, updatedTracks);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to remove track from playlist:', error);
+            this.app.showError('Failed to remove track: ' + error.message);
+        }
+    }
+    
+    /**
+     * Play playlist
+     */
+    async playPlaylist(sessionId, playlistId, isLooping = false, isShuffled = false) {
+        try {
+            const response = await this.app.modules.apiClient.post('/api/audio/control.php', {
+                session_id: sessionId,
+                action: 'play',
+                playlist_id: playlistId,
+                is_playlist_looping: isLooping,
+                is_playlist_shuffled: isShuffled
+            });
+            
+            if (response.status === 'success') {
+                let message = 'Playing playlist';
+                if (isShuffled && isLooping) {
+                    message += ' (shuffled, repeating)';
+                } else if (isShuffled) {
+                    message += ' (shuffled)';
+                } else if (isLooping) {
+                    message += ' (repeating)';
+                }
+                this.app.showSuccess(message);
+            }
+        } catch (error) {
+            console.error('Failed to play playlist:', error);
+            this.app.showError('Failed to play playlist: ' + error.message);
+        }
+    }
+    
+    /**
+     * Delete playlist
+     */
+    async deletePlaylist(sessionId, playlistId) {
+        try {
+            const response = await this.app.modules.apiClient.delete(`/api/audio/playlists/delete.php?playlist_id=${playlistId}`);
+            
+            if (response.status === 'success') {
+                this.app.showSuccess('Playlist deleted successfully');
+                // Reload playlists
+                await this.loadPlaylists(sessionId);
+            } else {
+                this.app.showError('Failed to delete playlist');
+            }
+        } catch (error) {
+            console.error('Failed to delete playlist:', error);
+            this.app.showError('Failed to delete playlist: ' + error.message);
+        }
+    }
+    
+    /**
+     * Play track
+     */
+    async playTrack(sessionId, trackId) {
+        try {
+            const response = await this.app.modules.apiClient.post('/api/audio/control.php', {
+                session_id: sessionId,
+                action: 'play',
+                track_id: trackId
+            });
+            
+            if (response.status === 'success') {
+                // Update UI
+                const track = await this.getTrackInfo(trackId);
+                if (track) {
+                    $('#current-track-info').show();
+                    $('#current-track-name').text(track.track_name);
+                }
+            }
+        } catch (error) {
+            console.error('Play error:', error);
+            this.app.showError('Failed to play track: ' + error.message);
+        }
+    }
+    
+    /**
+     * Pause audio
+     */
+    async pauseAudio(sessionId) {
+        try {
+            await this.app.modules.apiClient.post('/api/audio/control.php', {
+                session_id: sessionId,
+                action: 'pause'
+            });
+        } catch (error) {
+            console.error('Pause error:', error);
+        }
+    }
+    
+    /**
+     * Stop audio
+     */
+    async stopAudio(sessionId) {
+        try {
+            await this.app.modules.apiClient.post('/api/audio/control.php', {
+                session_id: sessionId,
+                action: 'stop'
+            });
+            $('#current-track-info').hide();
+        } catch (error) {
+            console.error('Stop error:', error);
+        }
+    }
+    
+    /**
+     * Set audio loop
+     */
+    async setAudioLoop(sessionId, loop) {
+        try {
+            await this.app.modules.apiClient.post('/api/audio/control.php', {
+                session_id: sessionId,
+                action: 'loop',
+                loop: loop
+            });
+        } catch (error) {
+            console.error('Loop error:', error);
+        }
+    }
+    
+    /**
+     * Set audio volume
+     */
+    async setAudioVolume(sessionId, volumeData) {
+        try {
+            await this.app.modules.apiClient.post('/api/audio/control.php', {
+                session_id: sessionId,
+                action: 'volume',
+                ...volumeData
+            });
+        } catch (error) {
+            console.error('Volume error:', error);
+        }
+    }
+    
+    /**
+     * Play sound effect
+     */
+    async playSoundEffect(sessionId, trackId) {
+        try {
+            await this.app.modules.apiClient.post('/api/audio/soundboard/play.php', {
+                session_id: sessionId,
+                track_id: trackId,
+                volume: 1.0
+            });
+        } catch (error) {
+            console.error('Sound effect error:', error);
+        }
+    }
+    
+    /**
+     * Create playlist
+     */
+    async createPlaylist(sessionId, name) {
+        try {
+            const response = await this.app.modules.apiClient.post('/api/audio/playlists/create.php', {
+                session_id: sessionId,
+                playlist_name: name
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess('Playlist created successfully');
+                await this.loadPlaylists(sessionId);
+            }
+        } catch (error) {
+            console.error('Create playlist error:', error);
+            this.app.showError('Failed to create playlist: ' + error.message);
+        }
+    }
+    
+    /**
+     * Delete track
+     */
+    async deleteTrack(trackId) {
+        try {
+            const response = await this.app.modules.apiClient.delete(`/api/audio/delete.php?track_id=${trackId}`);
+            if (response.status === 'success') {
+                this.app.showSuccess('Track deleted successfully');
+                // Reload tracks
+                const sessionId = this.currentSession?.session_id;
+                if (sessionId) {
+                    await this.loadAudioTracks(sessionId);
+                }
+            }
+        } catch (error) {
+            console.error('Delete track error:', error);
+            this.app.showError('Failed to delete track: ' + error.message);
+        }
+    }
+    
+    /**
+     * Get track info
+     */
+    async getTrackInfo(trackId) {
+        try {
+            // Get all tracks and find the one we need
+            const response = await this.app.modules.apiClient.get(`/api/audio/list.php?session_id=${this.currentSession?.session_id}`);
+            if (response.status === 'success' && response.data.tracks) {
+                const track = response.data.tracks.find(t => t.track_id === trackId);
+                return track || null;
+            }
+        } catch (error) {
+            console.error('Get track info error:', error);
+        }
+        return null;
+    }
+    
+    /**
+     * Format duration
+     */
+    formatDuration(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    /**
+     * Escape HTML
+     */
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    /**
+     * Handle game time update from real-time event
+     * 
+     * @param {Object} data - Event data
+     */
+    handleGameTimeUpdate(data) {
+        if (data.current_game_datetime) {
+            const gameDate = new Date(data.current_game_datetime);
+            const formatted = gameDate.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            $('#current-game-time').text(formatted);
+        }
+        
+        if (data.new_game_time_seconds !== undefined) {
+            $('#game-time-elapsed').text(`Time elapsed: ${this.formatGameTimeFromSeconds(data.new_game_time_seconds)}`);
+        }
+        
+        // Show notification if effects expired
+        if (data.effects_expired && data.effects_expired.length > 0) {
+            const effectNames = data.effects_expired.map(e => e.effect_name).join(', ');
+            this.app.showInfo(`${data.effects_expired.length} effect(s) expired: ${effectNames}`);
+        }
+    }
+    
+    /**
+     * Advance campaign game time
+     * 
+     * @param {string} type - 'round', 'turn', or 'day'
+     * @param {HTMLElement} button - Button element that triggered the action
+     */
+    async advanceCampaignTime(type, button) {
+        const campaignId = $(button).data('campaign-id');
+        const sessionId = $(button).data('session-id');
+        
+        if (!campaignId) {
+            this.app.showError('This session is not linked to a campaign. Please link it to a campaign first.');
+            return;
+        }
+        
+        const typeNames = {
+            'round': '1 round (10 seconds)',
+            'turn': '1 turn (10 minutes)',
+            'day': '1 day'
+        };
+        
+        // Disable button during request
+        const $button = $(button);
+        const originalHtml = $button.html();
+        $button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+        
+        try {
+            const response = await this.apiClient.post('/api/campaigns/advance-time.php', {
+                campaign_id: campaignId,
+                session_id: sessionId || null,
+                advancement_type: type,
+                notes: `DM advanced time by ${typeNames[type]}`
+            });
+            
+            if (response.status === 'success') {
+                const data = response.data;
+                
+                // Show success message with effects info
+                let message = `Time advanced by ${typeNames[type]}`;
+                if (data.effects_expired && data.effects_expired.length > 0) {
+                    message += `. ${data.effects_expired.length} effect(s) expired.`;
+                }
+                
+                this.app.showSuccess(message);
+                
+                // Refresh dashboard to show updated game time
+                if (sessionId) {
+                    await this.viewDMDashboard(sessionId);
+                }
+            } else {
+                throw new Error(response.message || 'Failed to advance time');
+            }
+        } catch (error) {
+            console.error('Failed to advance time:', error);
+            this.app.showError('Failed to advance time: ' + error.message);
+        } finally {
+            // Re-enable button
+            $button.prop('disabled', false).html(originalHtml);
         }
     }
     
@@ -2415,7 +4405,18 @@ class SessionManagementModule {
     cleanup() {
         // Stop any ongoing processes
         console.log('Session Management Module cleanup');
-        // Add any cleanup logic here if needed
+        
+        // Stop game time real-time client
+        if (this.gameTimeRealtimeClient) {
+            this.gameTimeRealtimeClient.stop();
+            this.gameTimeRealtimeClient = null;
+        }
+        
+        // Stop player initiative polling
+        if (this.playerInitiativePollInterval) {
+            clearInterval(this.playerInitiativePollInterval);
+            this.playerInitiativePollInterval = null;
+        }
     }
 }
 

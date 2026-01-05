@@ -45,6 +45,8 @@ try {
     
     $mapId = (int) $data['map_id'];
     $characterId = isset($data['character_id']) ? (int) $data['character_id'] : null;
+    $monsterInstanceId = isset($data['monster_instance_id']) ? (int) $data['monster_instance_id'] : null;
+    $initiativeId = isset($data['initiative_id']) ? (int) $data['initiative_id'] : null;
     $tokenType = isset($data['token_type']) && $data['token_type'] === 'portrait' ? 'portrait' : 'marker';
     $xPosition = (float) $data['x_position'];
     $yPosition = (float) $data['y_position'];
@@ -103,13 +105,39 @@ try {
         }
     }
     
-    // Check if token already exists for this character on this map
+    // If monster_instance_id provided, get monster instance name for label
+    if ($monsterInstanceId && !$label) {
+        try {
+            $monsterInstance = $db->selectOne(
+                "SELECT instance_name FROM monster_instances WHERE instance_id = ?",
+                [$monsterInstanceId]
+            );
+            
+            if ($monsterInstance) {
+                $label = $monsterInstance['instance_name'];
+                // Use red color for monsters by default
+                if ($color === '#FF0000') {
+                    $color = '#DC3545'; // Bootstrap danger red
+                }
+            }
+        } catch (Exception $e) {
+            error_log("MAP TOKEN ADD: Error fetching monster instance: " . $e->getMessage());
+        }
+    }
+    
+    // Check if token already exists (for character or monster)
     $existingToken = null;
     if ($characterId) {
         $existingToken = $db->selectOne(
             "SELECT token_id FROM session_map_tokens 
              WHERE map_id = ? AND character_id = ?",
             [$mapId, $characterId]
+        );
+    } elseif ($monsterInstanceId) {
+        $existingToken = $db->selectOne(
+            "SELECT token_id FROM session_map_tokens 
+             WHERE map_id = ? AND monster_instance_id = ?",
+            [$mapId, $monsterInstanceId]
         );
     }
     
@@ -119,52 +147,32 @@ try {
         $db->execute(
             "UPDATE session_map_tokens 
              SET x_position = ?, y_position = ?, color = ?, label = ?, 
-                 portrait_url = ?, token_type = ?, updated_at = NOW()
+                 portrait_url = ?, token_type = ?, monster_instance_id = ?, 
+                 initiative_id = ?, updated_at = NOW()
              WHERE token_id = ?",
-            [$xPosition, $yPosition, $color, $label, $portraitUrl, $tokenType, $tokenId]
+            [$xPosition, $yPosition, $color, $label, $portraitUrl, $tokenType, 
+             $monsterInstanceId, $initiativeId, $tokenId]
         );
     } else {
         // Create new token
         $tokenId = $db->insert(
             "INSERT INTO session_map_tokens 
-             (map_id, character_id, user_id, token_type, x_position, y_position, 
-              color, label, portrait_url, is_visible, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, NOW(), NOW())",
-            [$mapId, $characterId, $userId, $tokenType, $xPosition, $yPosition, 
-             $color, $label, $portraitUrl]
+             (map_id, character_id, monster_instance_id, initiative_id, user_id, token_type, 
+              x_position, y_position, color, label, portrait_url, is_visible, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, NOW(), NOW())",
+            [$mapId, $characterId, $monsterInstanceId, $initiativeId, $userId, $tokenType, 
+             $xPosition, $yPosition, $color, $label, $portraitUrl]
         );
     }
     
-    // Broadcast event
-    try {
-        require_once '../../../../app/services/event-broadcaster.php';
-        $broadcastResult = broadcastEvent(
-            $map['session_id'],
-            'map_token_moved',
-            [
-                'token_id' => $tokenId,
-                'map_id' => $mapId,
-                'character_id' => $characterId,
-                'x_position' => $xPosition,
-                'y_position' => $yPosition,
-                'user_id' => $userId
-            ],
-            $userId
-        );
-        if (!$broadcastResult) {
-            error_log("MAP TOKEN ADD: Failed to broadcast event for token_id: $tokenId");
-        }
-    } catch (Exception $broadcastError) {
-        // Log broadcast error but don't fail the request
-        error_log("MAP TOKEN ADD: Broadcast error: " . $broadcastError->getMessage());
-    }
-    
-    // Get created/updated token
+    // Get created/updated token first (needed for broadcast)
     $token = $db->selectOne(
         "SELECT 
             t.token_id,
             t.map_id,
             t.character_id,
+            t.monster_instance_id,
+            t.initiative_id,
             t.user_id,
             t.token_type,
             t.x_position,
@@ -176,19 +184,64 @@ try {
             t.created_at,
             t.updated_at,
             c.character_name,
+            mi.instance_name as monster_instance_name,
             u.username
          FROM session_map_tokens t
          LEFT JOIN characters c ON t.character_id = c.character_id
+         LEFT JOIN monster_instances mi ON t.monster_instance_id = mi.instance_id
          JOIN users u ON t.user_id = u.user_id
          WHERE t.token_id = ?",
         [$tokenId]
     );
+    
+    // Broadcast event with full token data
+    try {
+        require_once '../../../../app/services/event-broadcaster.php';
+        
+        // Determine event type: 'map_token_added' for new tokens, 'map_token_moved' for updated positions
+        $eventType = $existingToken ? 'map_token_moved' : 'map_token_added';
+        
+        $broadcastResult = broadcastEvent(
+            $map['session_id'],
+            $eventType,
+            [
+                'token_id' => (int) $token['token_id'],
+                'map_id' => (int) $token['map_id'],
+                'character_id' => $token['character_id'] ? (int) $token['character_id'] : null,
+                'character_name' => $token['character_name'],
+                'monster_instance_id' => $token['monster_instance_id'] ? (int) $token['monster_instance_id'] : null,
+                'monster_instance_name' => $token['monster_instance_name'],
+                'initiative_id' => $token['initiative_id'] ? (int) $token['initiative_id'] : null,
+                'user_id' => (int) $token['user_id'],
+                'username' => $token['username'],
+                'token_type' => $token['token_type'],
+                'x_position' => (float) $token['x_position'],
+                'y_position' => (float) $token['y_position'],
+                'color' => $token['color'],
+                'label' => $token['label'],
+                'portrait_url' => $token['portrait_url'],
+                'is_visible' => (bool) $token['is_visible']
+            ],
+            $userId
+        );
+        if (!$broadcastResult) {
+            error_log("MAP TOKEN ADD: Failed to broadcast {$eventType} event for token_id: $tokenId");
+        } else {
+            error_log("MAP TOKEN ADD: Successfully broadcast {$eventType} event for token_id: $tokenId");
+        }
+    } catch (Exception $broadcastError) {
+        // Log broadcast error but don't fail the request
+        error_log("MAP TOKEN ADD: Broadcast error: " . $broadcastError->getMessage());
+    }
     
     $formatted = [
         'token_id' => (int) $token['token_id'],
         'map_id' => (int) $token['map_id'],
         'character_id' => $token['character_id'] ? (int) $token['character_id'] : null,
         'character_name' => $token['character_name'],
+        'monster_instance_id' => $token['monster_instance_id'] ? (int) $token['monster_instance_id'] : null,
+        'monster_instance_name' => $token['monster_instance_name'],
+        'initiative_id' => $token['initiative_id'] ? (int) $token['initiative_id'] : null,
         'user_id' => (int) $token['user_id'],
         'username' => $token['username'],
         'token_type' => $token['token_type'],

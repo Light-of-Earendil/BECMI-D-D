@@ -50,6 +50,7 @@ try {
     $maxPlayers = isset($payload['max_players']) ? (int) $payload['max_players'] : 6;
     $status = $payload['status'] ?? 'scheduled';
     $meetLink = Security::sanitizeInput($payload['meet_link'] ?? '');
+    $campaignId = isset($payload['campaign_id']) ? (int) $payload['campaign_id'] : null;
     
     // Validate meet_link if provided
     if (!empty($meetLink)) {
@@ -100,6 +101,27 @@ try {
     $userId = Security::getCurrentUserId();
     $db = getDB();
 
+    // Validate campaign_id if provided
+    if ($campaignId !== null && $campaignId > 0) {
+        $campaign = $db->selectOne(
+            "SELECT campaign_id, dm_user_id FROM campaigns WHERE campaign_id = ?",
+            [$campaignId]
+        );
+        
+        if (!$campaign) {
+            $errors['campaign_id'] = 'Campaign not found';
+        } else {
+            // Verify user is the DM of this campaign
+            if ($campaign['dm_user_id'] != $userId) {
+                $errors['campaign_id'] = 'You must be the DM of this campaign to link a session to it';
+            }
+        }
+    }
+
+    if (!empty($errors)) {
+        Security::sendValidationErrorResponse($errors);
+    }
+
     // Verify user owns this session
     $existingSession = $db->selectOne(
         'SELECT dm_user_id FROM game_sessions WHERE session_id = ?',
@@ -117,6 +139,7 @@ try {
     // Update session
     $db->execute(
         'UPDATE game_sessions SET
+            campaign_id = ?,
             session_title = ?,
             session_description = ?,
             meet_link = ?,
@@ -127,6 +150,7 @@ try {
             updated_at = NOW()
          WHERE session_id = ?',
         [
+            $campaignId,
             $title,
             $description,
             $meetLink ?: null,
@@ -147,6 +171,7 @@ try {
         'session' => [
             'session_id' => $sessionId,
             'dm_user_id' => $userId,
+            'campaign_id' => $campaignId,
             'session_title' => $title,
             'session_description' => $description,
             'meet_link' => $meetLink ?: null,

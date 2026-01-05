@@ -88,6 +88,12 @@ class DMDashboardModule {
                             <span class="session-meta realtime-badge" id="realtime-status">
                                 <i class="fas fa-wifi"></i> Live
                             </span>
+                            ${data.session.campaign_id ? `
+                            <span class="session-meta" id="dm-game-time-display">
+                                <i class="fas fa-clock"></i> 
+                                <span id="dm-current-game-time">Loading...</span>
+                            </span>
+                            ` : ''}
                         </div>
                     </div>
                     <div class="header-actions">
@@ -103,6 +109,26 @@ class DMDashboardModule {
                         <button class="btn btn-success" id="award-xp-btn" data-session-id="${data.session.session_id}">
                             <i class="fas fa-star"></i> Award XP
                         </button>
+                        <div class="time-advancement-buttons" style="display: inline-flex; gap: 0.5rem; margin-left: 0.5rem;">
+                            <button class="btn btn-info btn-sm" id="advance-round-btn" 
+                                    data-campaign-id="${data.session.campaign_id || ''}" 
+                                    data-session-id="${data.session.session_id}"
+                                    title="Advance time by 1 round (10 seconds)">
+                                <i class="fas fa-forward"></i> Round
+                            </button>
+                            <button class="btn btn-info btn-sm" id="advance-turn-btn" 
+                                    data-campaign-id="${data.session.campaign_id || ''}" 
+                                    data-session-id="${data.session.session_id}"
+                                    title="Advance time by 1 turn (10 minutes)">
+                                <i class="fas fa-fast-forward"></i> Turn
+                            </button>
+                            <button class="btn btn-info btn-sm" id="advance-day-btn" 
+                                    data-campaign-id="${data.session.campaign_id || ''}" 
+                                    data-session-id="${data.session.session_id}"
+                                    title="Advance time by 1 day">
+                                <i class="fas fa-step-forward"></i> Day
+                            </button>
+                        </div>
                         <button class="btn btn-secondary" id="refresh-dashboard">
                             <i class="fas fa-sync-alt"></i> Refresh
                         </button>
@@ -160,7 +186,129 @@ class DMDashboardModule {
                     }, 100);
                 }
             }
+            
+            // Load active effects for all characters
+            await this.loadCharacterEffects(sessionId);
+            
+            // Load game time if campaign is linked
+            if (this.dashboardData && this.dashboardData.session.campaign_id) {
+                await this.loadDMGameTime(sessionId, this.dashboardData.session.campaign_id);
+            }
         }, 200);
+    }
+    
+    /**
+     * Load active effects for all characters in the session
+     */
+    async loadCharacterEffects(sessionId) {
+        try {
+            // Get session data to find campaign_id
+            const sessionResponse = await this.apiClient.get(`/api/session/get-dm-dashboard.php?session_id=${sessionId}`);
+            if (sessionResponse.status !== 'success' || !sessionResponse.data.session.campaign_id) {
+                return; // No campaign linked
+            }
+            
+            const campaignId = sessionResponse.data.session.campaign_id;
+            const characters = sessionResponse.data.players.flatMap(p => p.characters || []);
+            
+            // Load effects for each character
+            for (const character of characters) {
+                try {
+                    const effectsResponse = await this.apiClient.get(
+                        `/api/time-based-effects/list.php?character_id=${character.character_id}&campaign_id=${campaignId}&active_only=true`
+                    );
+                    
+                    if (effectsResponse.status === 'success' && effectsResponse.data.effects.length > 0) {
+                        this.renderCharacterEffects(character.character_id, effectsResponse.data.effects);
+                    }
+                } catch (error) {
+                    console.error(`Failed to load effects for character ${character.character_id}:`, error);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load character effects:', error);
+        }
+    }
+    
+    /**
+     * Render active effects for a character
+     */
+    renderCharacterEffects(characterId, effects) {
+        const container = $(`#effects-${characterId}`);
+        if (container.length === 0) return;
+        
+        if (effects.length === 0) {
+            container.hide();
+            return;
+        }
+        
+        const effectsHtml = effects.map(effect => {
+            const remaining = this.formatTimeRemaining(effect.remaining_seconds);
+            const effectIcon = this.getEffectIcon(effect.effect_type);
+            const effectClass = effect.remaining_seconds < 60 ? 'expiring' : '';
+            
+            return `
+                <div class="active-effect ${effectClass}" data-effect-id="${effect.effect_id}" title="${this.escapeHtml(effect.effect_description || effect.effect_name)}">
+                    <i class="${effectIcon}"></i>
+                    <span class="effect-name">${this.escapeHtml(effect.effect_name)}</span>
+                    <span class="effect-time">${remaining}</span>
+                </div>
+            `;
+        }).join('');
+        
+        container.html(`
+            <div class="effects-header">
+                <strong><i class="fas fa-clock"></i> Active Effects:</strong>
+            </div>
+            <div class="effects-list">
+                ${effectsHtml}
+            </div>
+        `).show();
+    }
+    
+    /**
+     * Format remaining time in human readable format
+     */
+    formatTimeRemaining(seconds) {
+        if (seconds < 60) {
+            return `${seconds}s`;
+        } else if (seconds < 3600) {
+            const minutes = Math.floor(seconds / 60);
+            return `${minutes}m`;
+        } else if (seconds < 86400) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+        } else {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+        }
+    }
+    
+    /**
+     * Get icon for effect type
+     */
+    getEffectIcon(effectType) {
+        const icons = {
+            'spell': 'fas fa-magic',
+            'condition': 'fas fa-exclamation-triangle',
+            'hunger': 'fas fa-utensils',
+            'thirst': 'fas fa-tint',
+            'age': 'fas fa-birthday-cake',
+            'custom': 'fas fa-clock'
+        };
+        return icons[effectType] || 'fas fa-clock';
+    }
+    
+    /**
+     * Escape HTML to prevent XSS
+     */
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
     
     /**
@@ -336,12 +484,19 @@ class DMDashboardModule {
                 <span class="ability" title="Charisma">CHA ${character.abilities.charisma}</span>
             </div>
             
+            <div class="char-active-effects" data-character-id="${character.character_id}" id="effects-${character.character_id}">
+                <!-- Effects will be loaded here -->
+            </div>
+            
             <div class="char-actions">
                 <button class="btn btn-sm btn-primary" data-action="view-full-character" data-character-id="${character.character_id}">
                     <i class="fas fa-eye"></i> Full Sheet
                 </button>
                 <button class="btn btn-sm btn-success" data-action="dm-give-item" data-character-id="${character.character_id}" data-character-name="${character.character_name}">
                     <i class="fas fa-gift"></i> Give Item
+                </button>
+                <button class="btn btn-sm btn-info" data-action="manage-effects" data-character-id="${character.character_id}" data-character-name="${character.character_name}">
+                    <i class="fas fa-clock"></i> Effects
                 </button>
             </div>
         </div>`;
@@ -416,6 +571,9 @@ class DMDashboardModule {
             
             const content = await this.renderDashboard(this.currentSessionId);
             $('#content-area').html(content);
+            
+            // Reload effects after rendering
+            await this.loadCharacterEffects(this.currentSessionId);
             
             // Hide refresh indicator after a brief delay
             setTimeout(() => {
@@ -506,13 +664,22 @@ class DMDashboardModule {
             }
         });
 
-        // DM Give Item button
+        // DM Give Item button (note: this is handled in session-management.js, but keeping for compatibility)
         $(document).on('click', '[data-action="dm-give-item"]', async (e) => {
             e.preventDefault();
             const characterId = $(e.currentTarget).data('character-id');
             const characterName = $(e.currentTarget).data('character-name');
             
             await this.showItemGiftModal(characterId, characterName);
+        });
+        
+        // Manage Effects button
+        $(document).on('click', '[data-action="manage-effects"]', async (e) => {
+            e.preventDefault();
+            const characterId = $(e.currentTarget).data('character-id');
+            const characterName = $(e.currentTarget).data('character-name');
+            
+            await this.showManageEffectsModal(characterId, characterName);
         });
         
         // Award XP button
@@ -532,6 +699,85 @@ class DMDashboardModule {
                 await this.app.modules.sessionManagement.editSession(sessionId);
             }
         });
+        
+        // Time advancement buttons
+        $(document).on('click', '#advance-round-btn', async (e) => {
+            e.preventDefault();
+            await this.advanceTime('round', e.currentTarget);
+        });
+        
+        $(document).on('click', '#advance-turn-btn', async (e) => {
+            e.preventDefault();
+            await this.advanceTime('turn', e.currentTarget);
+        });
+        
+        $(document).on('click', '#advance-day-btn', async (e) => {
+            e.preventDefault();
+            await this.advanceTime('day', e.currentTarget);
+        });
+    }
+    
+    /**
+     * Advance campaign game time
+     * 
+     * @param {string} type - 'round', 'turn', or 'day'
+     * @param {HTMLElement} button - Button element that triggered the action
+     */
+    async advanceTime(type, button) {
+        const campaignId = $(button).data('campaign-id');
+        const sessionId = $(button).data('session-id');
+        
+        if (!campaignId) {
+            this.app.showError('This session is not linked to a campaign. Please link it to a campaign first.');
+            return;
+        }
+        
+        const typeNames = {
+            'round': '1 round (10 seconds)',
+            'turn': '1 turn (10 minutes)',
+            'day': '1 day'
+        };
+        
+        // Disable button during request
+        const $button = $(button);
+        const originalHtml = $button.html();
+        $button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+        
+        try {
+            const response = await this.apiClient.post('/api/campaigns/advance-time.php', {
+                campaign_id: campaignId,
+                session_id: sessionId || null,
+                advancement_type: type,
+                notes: `DM advanced time by ${typeNames[type]}`
+            });
+            
+            if (response.status === 'success') {
+                const data = response.data;
+                
+                // Show success message with effects info
+                let message = `Time advanced by ${typeNames[type]}`;
+                if (data.effects_expired && data.effects_expired.length > 0) {
+                    message += `. ${data.effects_expired.length} effect(s) expired.`;
+                }
+                
+                this.app.showSuccess(message);
+                
+                // Refresh dashboard to show updated game time and effects
+                if (this.currentSessionId) {
+                    await this.refreshDashboard();
+                    // Also reload effects specifically to show updated remaining times
+                    await this.loadCharacterEffects(this.currentSessionId);
+                }
+            } else {
+                throw new Error(response.message || 'Failed to advance time');
+            }
+        } catch (error) {
+            console.error('Failed to advance time:', error);
+            this.app.showError('Failed to advance time: ' + error.message);
+        } finally {
+            // Re-enable button
+            $button.prop('disabled', false).html(originalHtml);
+        }
     }
     
     /**
@@ -1342,6 +1588,11 @@ class DMDashboardModule {
             this.handleXPAwardedEvent(data);
         });
         
+        this.realtimeClient.on('game_time_advanced', (data) => {
+            console.log('Real-time game time advanced:', data);
+            this.handleGameTimeAdvancedEvent(data);
+        });
+        
         this.realtimeClient.on('online_users_update', (data) => {
             this.updateOnlineUsersDisplay(data.count);
         });
@@ -1440,6 +1691,325 @@ class DMDashboardModule {
      */
     updateOnlineUsersDisplay(count) {
         $('#online-count').text(count);
+    }
+    
+    /**
+     * Handle game time advanced event
+     */
+    handleGameTimeAdvancedEvent(data) {
+        // Update game time display in header
+        if (data.current_game_datetime) {
+            this.updateDMGameTimeDisplay(data);
+        }
+        
+        // Show notification about expired effects
+        if (data.effects_expired && data.effects_expired.length > 0) {
+            const effectNames = data.effects_expired.map(e => e.effect_name).join(', ');
+            if (this.app.modules.notifications) {
+                this.app.modules.notifications.show(
+                    `${data.effects_expired.length} effect(s) expired: ${effectNames}`,
+                    'info',
+                    5000
+                );
+            }
+        }
+    }
+    
+    /**
+     * Load game time for DM Dashboard display
+     */
+    async loadDMGameTime(sessionId, campaignId) {
+        try {
+            const response = await this.apiClient.get(
+                `/api/campaigns/get-game-time.php?campaign_id=${campaignId}&session_id=${sessionId}`
+            );
+            
+            if (response.status === 'success') {
+                this.updateDMGameTimeDisplay(response.data);
+            }
+        } catch (error) {
+            console.error('Failed to load game time for DM:', error);
+        }
+    }
+    
+    /**
+     * Update game time display in DM Dashboard header
+     */
+    updateDMGameTimeDisplay(data) {
+        const $display = $('#dm-current-game-time');
+        if ($display.length === 0) return;
+        
+        if (data.current_game_datetime) {
+            const gameDate = new Date(data.current_game_datetime);
+            const formatted = gameDate.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            $display.text(formatted);
+        } else {
+            $display.text('Not set');
+        }
+    }
+    
+    /**
+     * Show manage effects modal
+     */
+    async showManageEffectsModal(characterId, characterName) {
+        try {
+            // Get session to find campaign_id
+            if (!this.currentSessionId) {
+                this.app.showError('Session ID not available');
+                return;
+            }
+            
+            const sessionResponse = await this.apiClient.get(`/api/session/get-dm-dashboard.php?session_id=${this.currentSessionId}`);
+            if (sessionResponse.status !== 'success' || !sessionResponse.data.session.campaign_id) {
+                this.app.showError('Session must be linked to a campaign to manage effects');
+                return;
+            }
+            
+            const campaignId = sessionResponse.data.session.campaign_id;
+            
+            // Load current effects
+            const effectsResponse = await this.apiClient.get(
+                `/api/time-based-effects/list.php?character_id=${characterId}&campaign_id=${campaignId}&active_only=true`
+            );
+            
+            const effects = effectsResponse.status === 'success' ? effectsResponse.data.effects : [];
+            
+            const modal = $(`
+                <div class="modal fade" id="manageEffectsModal" tabindex="-1" role="dialog">
+                    <div class="modal-dialog modal-lg" role="document">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">
+                                    <i class="fas fa-clock"></i> Manage Effects - ${this.escapeHtml(characterName)}
+                                </h5>
+                                <button type="button" class="close" data-dismiss="modal">
+                                    <span>&times;</span>
+                                </button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="effects-management">
+                                    <div class="effects-list-section">
+                                        <h6>Active Effects</h6>
+                                        <div id="active-effects-list" class="effects-list-container">
+                                            ${this.renderEffectsList(effects)}
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="add-effect-section">
+                                        <h6>Add New Effect</h6>
+                                        <form id="add-effect-form">
+                                            <input type="hidden" id="effect-character-id" value="${characterId}">
+                                            <input type="hidden" id="effect-campaign-id" value="${campaignId}">
+                                            <input type="hidden" id="effect-session-id" value="${this.currentSessionId}">
+                                            
+                                            <div class="form-row">
+                                                <div class="form-group col-md-6">
+                                                    <label>Effect Type:</label>
+                                                    <select id="effect-type" class="form-control" required>
+                                                        <option value="spell">Spell</option>
+                                                        <option value="condition">Condition</option>
+                                                        <option value="hunger">Hunger</option>
+                                                        <option value="thirst">Thirst</option>
+                                                        <option value="age">Age</option>
+                                                        <option value="custom">Custom</option>
+                                                    </select>
+                                                </div>
+                                                <div class="form-group col-md-6">
+                                                    <label>Effect Name:</label>
+                                                    <input type="text" id="effect-name" class="form-control" required>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="form-group">
+                                                <label>Description:</label>
+                                                <textarea id="effect-description" class="form-control" rows="2"></textarea>
+                                            </div>
+                                            
+                                            <div class="form-row">
+                                                <div class="form-group col-md-4">
+                                                    <label>Duration (Rounds):</label>
+                                                    <input type="number" id="effect-duration-rounds" class="form-control" min="1" value="1">
+                                                </div>
+                                                <div class="form-group col-md-4">
+                                                    <label>Duration (Turns):</label>
+                                                    <input type="number" id="effect-duration-turns" class="form-control" min="0" value="0">
+                                                </div>
+                                                <div class="form-group col-md-4">
+                                                    <label>Duration (Days):</label>
+                                                    <input type="number" id="effect-duration-days" class="form-control" min="0" value="0">
+                                                </div>
+                                            </div>
+                                            
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="fas fa-plus"></i> Add Effect
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `);
+            
+            $('body').append(modal);
+            $('#manageEffectsModal').modal('show');
+            
+            // Setup form handler
+            $('#add-effect-form').off('submit').on('submit', async (e) => {
+                e.preventDefault();
+                await this.addEffect(characterId, campaignId);
+            });
+            
+            // Setup delete handlers
+            $(document).off('click', '.delete-effect-btn').on('click', '.delete-effect-btn', async (e) => {
+                e.preventDefault();
+                const effectId = $(e.currentTarget).data('effect-id');
+                await this.deleteEffect(effectId, characterId, campaignId);
+            });
+            
+            // Cleanup when modal is closed
+            $('#manageEffectsModal').on('hidden.bs.modal', () => {
+                $('#manageEffectsModal').remove();
+            });
+            
+        } catch (error) {
+            console.error('Failed to show manage effects modal:', error);
+            this.app.showError('Failed to load effects management: ' + error.message);
+        }
+    }
+    
+    /**
+     * Render effects list
+     */
+    renderEffectsList(effects) {
+        if (effects.length === 0) {
+            return '<p class="text-muted">No active effects</p>';
+        }
+        
+        return effects.map(effect => {
+            const remaining = this.formatTimeRemaining(effect.remaining_seconds);
+            const effectIcon = this.getEffectIcon(effect.effect_type);
+            
+            return `
+                <div class="effect-item">
+                    <div class="effect-info">
+                        <i class="${effectIcon}"></i>
+                        <div>
+                            <strong>${this.escapeHtml(effect.effect_name)}</strong>
+                            ${effect.effect_description ? `<p class="text-muted">${this.escapeHtml(effect.effect_description)}</p>` : ''}
+                        </div>
+                    </div>
+                    <div class="effect-meta">
+                        <span class="effect-time">${remaining} remaining</span>
+                        <button class="btn btn-sm btn-danger delete-effect-btn" data-effect-id="${effect.effect_id}">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    /**
+     * Add new effect
+     */
+    async addEffect(characterId, campaignId) {
+        try {
+            const effectType = $('#effect-type').val();
+            const effectName = $('#effect-name').val().trim();
+            const effectDescription = $('#effect-description').val().trim();
+            const rounds = parseInt($('#effect-duration-rounds').val()) || 0;
+            const turns = parseInt($('#effect-duration-turns').val()) || 0;
+            const days = parseInt($('#effect-duration-days').val()) || 0;
+            
+            if (!effectName) {
+                this.app.showError('Effect name is required');
+                return;
+            }
+            
+            if (rounds === 0 && turns === 0 && days === 0) {
+                this.app.showError('Duration must be greater than 0');
+                return;
+            }
+            
+            // Calculate total seconds
+            const durationSeconds = (rounds * 10) + (turns * 600) + (days * 86400);
+            
+            const response = await this.apiClient.post('/api/time-based-effects/create.php', {
+                character_id: characterId,
+                campaign_id: campaignId,
+                session_id: $('#effect-session-id').val() || null,
+                effect_type: effectType,
+                effect_name: effectName,
+                effect_description: effectDescription || null,
+                duration_seconds: durationSeconds
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess('Effect added successfully');
+                
+                // Reload effects list
+                const effectsResponse = await this.apiClient.get(
+                    `/api/time-based-effects/list.php?character_id=${characterId}&campaign_id=${campaignId}&active_only=true`
+                );
+                
+                if (effectsResponse.status === 'success') {
+                    $('#active-effects-list').html(this.renderEffectsList(effectsResponse.data.effects));
+                    
+                    // Update character card
+                    this.renderCharacterEffects(characterId, effectsResponse.data.effects);
+                }
+                
+                // Clear form
+                $('#add-effect-form')[0].reset();
+            } else {
+                throw new Error(response.message || 'Failed to add effect');
+            }
+        } catch (error) {
+            console.error('Failed to add effect:', error);
+            this.app.showError('Failed to add effect: ' + error.message);
+        }
+    }
+    
+    /**
+     * Delete effect
+     */
+    async deleteEffect(effectId, characterId, campaignId) {
+        try {
+            const response = await this.apiClient.post('/api/time-based-effects/delete.php', {
+                effect_id: effectId
+            });
+            
+            if (response.status === 'success') {
+                this.app.showSuccess('Effect removed');
+                
+                // Reload effects list
+                const effectsResponse = await this.apiClient.get(
+                    `/api/time-based-effects/list.php?character_id=${characterId}&campaign_id=${campaignId}&active_only=true`
+                );
+                
+                if (effectsResponse.status === 'success') {
+                    $('#active-effects-list').html(this.renderEffectsList(effectsResponse.data.effects));
+                    
+                    // Update character card
+                    this.renderCharacterEffects(characterId, effectsResponse.data.effects);
+                }
+            } else {
+                throw new Error(response.message || 'Failed to delete effect');
+            }
+        } catch (error) {
+            console.error('Failed to delete effect:', error);
+            this.app.showError('Failed to delete effect: ' + error.message);
+        }
     }
 
     /**

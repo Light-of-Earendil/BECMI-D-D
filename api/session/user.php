@@ -59,6 +59,7 @@ try {
         "SELECT DISTINCT
                 gs.session_id,
                 gs.dm_user_id,
+                gs.campaign_id,
                 gs.session_title,
                 gs.session_description,
                 gs.meet_link,
@@ -94,6 +95,7 @@ try {
         return [
             'session_id' => $sessionId,
             'dm_user_id' => (int) $session['dm_user_id'],
+            'campaign_id' => isset($session['campaign_id']) && $session['campaign_id'] ? (int) $session['campaign_id'] : null,
             'session_title' => $session['session_title'],
             'session_description' => $session['session_description'],
             'meet_link' => $session['meet_link'] ?? null,

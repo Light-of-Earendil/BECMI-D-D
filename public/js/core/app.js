@@ -97,10 +97,12 @@ class BECMIApp {
         this.modules.sessionManagement = new SessionManagementModule(this);
         this.modules.dmDashboard = new DMDashboardModule(this);
         this.modules.levelUpWizard = new LevelUpWizard(this);
+        this.modules.monsterBrowser = new MonsterBrowserModule(this);
         this.modules.calendar = new CalendarModule(this);
         this.modules.notifications = new NotificationsModule(this);
         this.modules.hexMapEditor = new HexMapEditorModule(this);
         this.modules.hexMapPlay = new HexMapPlayModule(this);
+        this.modules.campaignManagement = new CampaignManagementModule(this);
         this.modules.forum = new ForumModule(this);
         this.modules.forumThread = new ForumThreadModule(this);
         this.modules.forumModeration = new ForumModerationModule(this);
@@ -244,11 +246,24 @@ class BECMIApp {
         $(document).on('click', '.nav-link', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            const view = $(e.target).data('view');
+            const view = $(e.target).data('view') || $(e.target).closest('.nav-link').data('view');
             if (view) {
                 this.navigateToView(view);
             } else {
-                console.warn('Nav link clicked but no view data found:', e.target);
+                // Check if it's a dropdown toggle
+                const $dropdown = $(e.target).closest('.nav-dropdown');
+                if ($dropdown.length) {
+                    $dropdown.find('.dropdown-menu').toggle();
+                } else {
+                    console.warn('Nav link clicked but no view data found:', e.target);
+                }
+            }
+        });
+        
+        // Close dropdowns when clicking outside
+        $(document).on('click', (e) => {
+            if (!$(e.target).closest('.nav-dropdown').length) {
+                $('.nav-dropdown .dropdown-menu').hide();
             }
         });
         
@@ -497,6 +512,11 @@ class BECMIApp {
                     break;
                 case 'calendar':
                     content = await this.modules.calendar.render();
+                    this.modules.calendar.setupEventHandlers();
+                    break;
+                case 'campaigns':
+                    content = await this.modules.campaignManagement.render();
+                    this.modules.campaignManagement.setupEventListeners();
                     break;
                 case 'hex-maps':
                     // Show hex map list/editor
@@ -542,16 +562,12 @@ class BECMIApp {
      * Check if user is moderator and show/hide moderation panel link
      */
     async checkModeratorStatus() {
-        try {
-            // Try to access moderation queue - if successful, user is moderator
-            const response = await this.modules.apiClient.get('/api/forum/moderation/queue.php');
-            if (response.status === 'success') {
-                $('#moderation-panel-link').show();
-            } else {
-                $('#moderation-panel-link').hide();
-            }
-        } catch (error) {
-            // User is not a moderator or error occurred
+        // Use cached moderator status from user object (set during login/verification)
+        // No need to make API call - we already have this information
+        const isModerator = this.state.user && this.state.user.is_moderator === true;
+        if (isModerator) {
+            $('#moderation-panel-link').show();
+        } else {
             $('#moderation-panel-link').hide();
         }
     }

@@ -91,6 +91,7 @@ try {
     $mapName = Security::sanitizeInput($input['map_name'] ?? '');
     $mapDescription = Security::sanitizeInput($input['map_description'] ?? '');
     $sessionId = isset($input['session_id']) ? (int) $input['session_id'] : null;
+    $campaignId = isset($input['campaign_id']) ? (int) $input['campaign_id'] : null;
     $widthHexes = isset($input['width_hexes']) ? (int) $input['width_hexes'] : 20;
     $heightHexes = isset($input['height_hexes']) ? (int) $input['height_hexes'] : 20;
     $hexSizePixels = isset($input['hex_size_pixels']) ? (int) $input['hex_size_pixels'] : 50;
@@ -144,6 +145,25 @@ try {
         }
     }
     
+    // Validate campaign_id if provided
+    if ($campaignId !== null && $campaignId > 0) {
+        $db = getDB();
+        $campaign = $db->selectOne(
+            "SELECT campaign_id, dm_user_id FROM campaigns WHERE campaign_id = ?",
+            [$campaignId]
+        );
+        
+        if (!$campaign) {
+            $errors['campaign_id'] = 'Campaign not found';
+        } else {
+            // Verify user is the DM of this campaign
+            $userId = Security::getCurrentUserId();
+            if ($campaign['dm_user_id'] != $userId) {
+                $errors['campaign_id'] = 'You must be the DM of this campaign to link a map to it';
+            }
+        }
+    }
+    
     if (!empty($errors)) {
         Security::sendValidationErrorResponse($errors);
     }
@@ -155,13 +175,14 @@ try {
     $db = getDB();
     
     // Create the map
-    // Try to include scale, but handle gracefully if column doesn't exist yet
+    // Try to include scale and campaign_id, but handle gracefully if columns don't exist yet
     try {
         $mapId = $db->insert(
             'INSERT INTO hex_maps (
                 map_name,
                 map_description,
                 created_by_user_id,
+                campaign_id,
                 session_id,
                 width_hexes,
                 height_hexes,
@@ -170,11 +191,12 @@ try {
                 scale,
                 created_at,
                 updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
             [
                 $mapName,
                 $mapDescription ?: null,
                 $userId,
+                $campaignId,
                 $sessionId,
                 $widthHexes,
                 $heightHexes,
@@ -184,42 +206,76 @@ try {
             ]
         );
     } catch (Exception $e) {
-        // If scale column doesn't exist yet, insert without it
-        if (strpos($e->getMessage(), 'scale') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
-            $mapId = $db->insert(
-                'INSERT INTO hex_maps (
-                    map_name,
-                    map_description,
-                    created_by_user_id,
-                    session_id,
-                    width_hexes,
-                    height_hexes,
-                    hex_size_pixels,
-                    background_image_url,
-                    created_at,
-                    updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
-                [
-                    $mapName,
-                    $mapDescription ?: null,
-                    $userId,
-                    $sessionId,
-                    $widthHexes,
-                    $heightHexes,
-                    $hexSizePixels,
-                    $backgroundImageUrl ?: null
-                ]
-            );
+        // If scale or campaign_id column doesn't exist yet, try without them
+        if (strpos($e->getMessage(), 'scale') !== false || strpos($e->getMessage(), 'campaign_id') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
+            try {
+                $mapId = $db->insert(
+                    'INSERT INTO hex_maps (
+                        map_name,
+                        map_description,
+                        created_by_user_id,
+                        campaign_id,
+                        session_id,
+                        width_hexes,
+                        height_hexes,
+                        hex_size_pixels,
+                        background_image_url,
+                        created_at,
+                        updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
+                    [
+                        $mapName,
+                        $mapDescription ?: null,
+                        $userId,
+                        $campaignId,
+                        $sessionId,
+                        $widthHexes,
+                        $heightHexes,
+                        $hexSizePixels,
+                        $backgroundImageUrl ?: null
+                    ]
+                );
+            } catch (Exception $e2) {
+                // If campaign_id also doesn't exist, try without it
+                if (strpos($e2->getMessage(), 'campaign_id') !== false || strpos($e2->getMessage(), 'Unknown column') !== false) {
+                    $mapId = $db->insert(
+                        'INSERT INTO hex_maps (
+                            map_name,
+                            map_description,
+                            created_by_user_id,
+                            session_id,
+                            width_hexes,
+                            height_hexes,
+                            hex_size_pixels,
+                            background_image_url,
+                            created_at,
+                            updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
+                        [
+                            $mapName,
+                            $mapDescription ?: null,
+                            $userId,
+                            $sessionId,
+                            $widthHexes,
+                            $heightHexes,
+                            $hexSizePixels,
+                            $backgroundImageUrl ?: null
+                        ]
+                    );
+                } else {
+                    throw $e2;
+                }
+            }
         } else {
             throw $e;
         }
     }
     
     // Get the created map
-    // Try to include scale, but handle gracefully if column doesn't exist yet
+    // Try to include scale and campaign_id, but handle gracefully if columns don't exist yet
     try {
         $map = $db->selectOne(
-            "SELECT map_id, map_name, map_description, created_by_user_id, session_id,
+            "SELECT map_id, map_name, map_description, created_by_user_id, campaign_id, session_id,
                     width_hexes, height_hexes, hex_size_pixels, background_image_url,
                     scale, is_active, created_at, updated_at
              FROM hex_maps
@@ -227,17 +283,39 @@ try {
             [$mapId]
         );
     } catch (Exception $e) {
-        // If scale column doesn't exist yet, select without it
-        if (strpos($e->getMessage(), 'scale') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
-            $map = $db->selectOne(
-                "SELECT map_id, map_name, map_description, created_by_user_id, session_id,
-                        width_hexes, height_hexes, hex_size_pixels, background_image_url,
-                        is_active, created_at, updated_at
-                 FROM hex_maps
-                 WHERE map_id = ?",
-                [$mapId]
-            );
-            $map['scale'] = null;
+        // If scale or campaign_id column doesn't exist yet, select without them
+        if (strpos($e->getMessage(), 'scale') !== false || strpos($e->getMessage(), 'campaign_id') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
+            try {
+                $map = $db->selectOne(
+                    "SELECT map_id, map_name, map_description, created_by_user_id, campaign_id, session_id,
+                            width_hexes, height_hexes, hex_size_pixels, background_image_url,
+                            is_active, created_at, updated_at
+                     FROM hex_maps
+                     WHERE map_id = ?",
+                    [$mapId]
+                );
+                if (strpos($e->getMessage(), 'scale') !== false) {
+                    $map['scale'] = null;
+                }
+            } catch (Exception $e2) {
+                // If campaign_id also doesn't exist, select without it
+                if (strpos($e2->getMessage(), 'campaign_id') !== false || strpos($e2->getMessage(), 'Unknown column') !== false) {
+                    $map = $db->selectOne(
+                        "SELECT map_id, map_name, map_description, created_by_user_id, session_id,
+                                width_hexes, height_hexes, hex_size_pixels, background_image_url,
+                                is_active, created_at, updated_at
+                         FROM hex_maps
+                         WHERE map_id = ?",
+                        [$mapId]
+                    );
+                    $map['campaign_id'] = null;
+                    if (strpos($e->getMessage(), 'scale') !== false) {
+                        $map['scale'] = null;
+                    }
+                } else {
+                    throw $e2;
+                }
+            }
         } else {
             throw $e;
         }
@@ -253,6 +331,7 @@ try {
         'map_name' => $map['map_name'],
         'map_description' => $map['map_description'],
         'created_by_user_id' => (int) $map['created_by_user_id'],
+        'campaign_id' => isset($map['campaign_id']) && $map['campaign_id'] ? (int) $map['campaign_id'] : null,
         'session_id' => $map['session_id'] ? (int) $map['session_id'] : null,
         'width_hexes' => (int) $map['width_hexes'],
         'height_hexes' => (int) $map['height_hexes'],

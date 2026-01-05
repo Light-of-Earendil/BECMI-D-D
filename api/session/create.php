@@ -31,6 +31,7 @@ try {
     $duration = isset($payload['duration_minutes']) ? (int) $payload['duration_minutes'] : 240;
     $maxPlayers = isset($payload['max_players']) ? (int) $payload['max_players'] : 6;
     $meetLink = Security::sanitizeInput($payload['meet_link'] ?? '');
+    $campaignId = isset($payload['campaign_id']) ? (int) $payload['campaign_id'] : null;
     
     // Validate meet_link if provided (should be a valid URL)
     if (!empty($meetLink)) {
@@ -71,6 +72,24 @@ try {
         $errors['max_players'] = 'Max players must be at least 1';
     }
 
+    // Validate campaign_id if provided
+    if ($campaignId !== null && $campaignId > 0) {
+        $db = getDB();
+        $campaign = $db->selectOne(
+            "SELECT campaign_id, dm_user_id FROM campaigns WHERE campaign_id = ?",
+            [$campaignId]
+        );
+        
+        if (!$campaign) {
+            $errors['campaign_id'] = 'Campaign not found';
+        } else {
+            // Verify user is the DM of this campaign
+            if ($campaign['dm_user_id'] != $userId) {
+                $errors['campaign_id'] = 'You must be the DM of this campaign to link a session to it';
+            }
+        }
+    }
+
     if (!empty($errors)) {
         Security::sendValidationErrorResponse($errors);
     }
@@ -81,6 +100,7 @@ try {
     $sessionId = $db->insert(
         'INSERT INTO game_sessions (
             dm_user_id,
+            campaign_id,
             session_title,
             session_description,
             meet_link,
@@ -90,9 +110,10 @@ try {
             max_players,
             created_at,
             updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
         [
             $userId,
+            $campaignId,
             $title,
             $description,
             $meetLink ?: null,
@@ -113,6 +134,7 @@ try {
         'session' => [
             'session_id' => $sessionId,
             'dm_user_id' => $userId,
+            'campaign_id' => $campaignId,
             'session_title' => $title,
             'session_description' => $description,
             'meet_link' => $meetLink ?: null,

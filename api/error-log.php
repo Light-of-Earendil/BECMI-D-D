@@ -21,7 +21,7 @@ try {
     }
     
     // Get POST data
-    $data = Security::getJsonInput();
+    $data = Security::validateJSONInput();
     
     // Extract error details
     $message = isset($data['message']) ? substr($data['message'], 0, 500) : 'Unknown error';

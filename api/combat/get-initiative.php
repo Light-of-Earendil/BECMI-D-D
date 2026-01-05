@@ -63,7 +63,7 @@ try {
     // Get database connection
     $db = getDB();
     
-    // Verify user is DM of this session
+    // Verify user has access to this session (DM or accepted player)
     $session = $db->selectOne(
         "SELECT dm_user_id FROM game_sessions WHERE session_id = ?",
         [$sessionId]
@@ -73,63 +73,74 @@ try {
         Security::sendErrorResponse('Session not found', 404);
     }
     
-    if ($session['dm_user_id'] != $userId) {
-        Security::sendErrorResponse('Only the DM can view initiative', 403);
-    }
+    $isDM = ($session['dm_user_id'] == $userId);
     
-    // Get initiative order (handle missing tables gracefully)
-    $initiatives = [];
-    $currentTurn = null;
-    
-    try {
-        // Check if combat_initiatives table exists
-        $tableExists = $db->selectOne(
-            "SELECT COUNT(*) as count FROM information_schema.tables 
-             WHERE table_schema = DATABASE() AND table_name = 'combat_initiatives'"
+    // Check if user is accepted player (if not DM)
+    if (!$isDM) {
+        $playerStatus = $db->selectOne(
+            "SELECT status FROM session_players 
+             WHERE session_id = ? AND user_id = ?",
+            [$sessionId, $userId]
         );
         
-        if ($tableExists && $tableExists['count'] > 0) {
-            $initiatives = $db->select(
-                "SELECT ci.initiative_id, ci.character_id, ci.entity_name, ci.entity_type,
-                        ci.initiative_roll, ci.dexterity, ci.is_active,
-                        c.current_hp, c.max_hp, c.class, c.level
-                 FROM combat_initiatives ci
-                 LEFT JOIN characters c ON ci.character_id = c.character_id
-                 WHERE ci.session_id = ? AND ci.is_active = 1
-                 ORDER BY ci.initiative_roll DESC, ci.dexterity DESC, ci.entity_name ASC",
-                [$sessionId]
-            );
-            
-            // Get current turn
-            $currentTurn = $db->selectOne(
-                "SELECT current_initiative_id, round_number FROM combat_current_turn WHERE session_id = ?",
-                [$sessionId]
-            );
+        if (!$playerStatus || $playerStatus['status'] !== 'accepted') {
+            Security::sendErrorResponse('You do not have permission to view initiative for this session', 403);
         }
-    } catch (Exception $e) {
-        // Tables don't exist - return empty initiative list
-        error_log("Combat tables not found, returning empty initiative list: " . $e->getMessage());
-        $initiatives = [];
-        $currentTurn = null;
     }
+    
+    // Get initiative order (optimized - no table existence check needed)
+    $initiatives = $db->select(
+        "SELECT ci.initiative_id, ci.character_id, ci.monster_instance_id, ci.entity_name, ci.entity_type,
+                ci.initiative_roll, ci.dexterity, ci.is_active,
+                c.current_hp, c.max_hp, c.class, c.level,
+                mi.current_hp as monster_current_hp, mi.max_hp as monster_max_hp, 
+                mi.is_named_boss, mi.armor_class as monster_ac
+         FROM combat_initiatives ci
+         LEFT JOIN characters c ON ci.character_id = c.character_id
+         LEFT JOIN monster_instances mi ON ci.monster_instance_id = mi.instance_id
+         WHERE ci.session_id = ? AND ci.is_active = 1
+         ORDER BY ci.initiative_roll DESC, ci.dexterity DESC, ci.entity_name ASC",
+        [$sessionId]
+    );
+    
+    // Get current turn
+    $currentTurn = $db->selectOne(
+        "SELECT current_initiative_id, round_number FROM combat_current_turn WHERE session_id = ?",
+        [$sessionId]
+    );
     
     // Format initiative data
     $formattedInitiatives = array_map(function($init) use ($currentTurn) {
+        // Determine HP source (character or monster)
+        $hp = null;
+        if ($init['entity_type'] === 'monster' && $init['monster_current_hp'] && $init['monster_max_hp']) {
+            $hp = [
+                'current' => (int) $init['monster_current_hp'],
+                'max' => (int) $init['monster_max_hp'],
+                'percentage' => round(((int)$init['monster_current_hp'] / (int)$init['monster_max_hp']) * 100, 1)
+            ];
+        } elseif ($init['current_hp'] && $init['max_hp']) {
+            $hp = [
+                'current' => (int) $init['current_hp'],
+                'max' => (int) $init['max_hp'],
+                'percentage' => round(((int)$init['current_hp'] / (int)$init['max_hp']) * 100, 1)
+            ];
+        }
+        
         return [
             'initiative_id' => (int) $init['initiative_id'],
             'character_id' => $init['character_id'] ? (int) $init['character_id'] : null,
+            'monster_instance_id' => $init['monster_instance_id'] ? (int) $init['monster_instance_id'] : null,
             'entity_name' => $init['entity_name'],
             'entity_type' => $init['entity_type'],
             'initiative_roll' => (int) $init['initiative_roll'],
             'dexterity' => $init['dexterity'] ? (int) $init['dexterity'] : null,
             'is_current_turn' => $currentTurn && $currentTurn['current_initiative_id'] == $init['initiative_id'],
-            'hp' => $init['current_hp'] && $init['max_hp'] ? [
-                'current' => (int) $init['current_hp'],
-                'max' => (int) $init['max_hp'],
-                'percentage' => round(((int)$init['current_hp'] / (int)$init['max_hp']) * 100, 1)
-            ] : null,
+            'hp' => $hp,
             'class' => $init['class'],
-            'level' => $init['level'] ? (int) $init['level'] : null
+            'level' => $init['level'] ? (int) $init['level'] : null,
+            'is_named_boss' => $init['is_named_boss'] ? (bool) $init['is_named_boss'] : false,
+            'monster_ac' => $init['monster_ac'] ? (int) $init['monster_ac'] : null
         ];
     }, $initiatives);
     

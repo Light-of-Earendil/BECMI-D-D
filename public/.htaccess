@@ -42,6 +42,11 @@
         Header set Cache-Control "public, max-age=604800, immutable"
     </FilesMatch>
     
+    # Cache audio files for 1 week
+    <FilesMatch "\.(mp3|wav|ogg|m4a|aac)$">
+        Header set Cache-Control "public, max-age=604800, immutable"
+    </FilesMatch>
+    
     # Cache fonts for 1 month
     <FilesMatch "\.(woff|woff2|ttf|eot)$">
         Header set Cache-Control "public, max-age=2592000, immutable"

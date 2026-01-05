@@ -6,7 +6,7 @@
     <title>BECMI D&D Character & Session Manager</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/main.css?t=<?php echo time(); ?>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
@@ -34,7 +34,13 @@
                         <li><a href="#" data-view="equipment" class="nav-link">Equipment</a></li>
                         <li><a href="#" data-view="sessions" class="nav-link">Sessions</a></li>
                         <li><a href="#" data-view="calendar" class="nav-link">Calendar</a></li>
-                        <li><a href="#" data-view="hex-maps" class="nav-link">Hex Maps</a></li>
+                        <li class="nav-dropdown">
+                            <a href="#" class="nav-link">DM Tools <i class="fas fa-chevron-down"></i></a>
+                            <ul class="dropdown-menu">
+                                <li><a href="#" data-view="campaigns" class="nav-link">Campaigns</a></li>
+                                <li><a href="#" data-view="hex-maps" class="nav-link">Hex Maps</a></li>
+                            </ul>
+                        </li>
                         <li><a href="#" data-view="forum" class="nav-link">Forum</a></li>
                     </ul>
                 </nav>
@@ -137,7 +143,7 @@
 
         <!-- Footer -->
         <footer class="app-footer">
-            <p>&copy; 2024 BECMI Manager. Built for the Basic, Expert, Companion, Master, and Immortal ruleset.</p>
+            <p>&copy; 2026 BECMI Manager. Built for the Basic, Expert, Companion, Master, and Immortal ruleset.</p>
         </footer>
     </div>
 
@@ -339,15 +345,18 @@
     <script src="js/modules/session-management.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/dm-dashboard.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/level-up-wizard.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/monster-browser.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/calendar.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/notifications.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/equipment.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/hex-map-editor.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/hex-map-play.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/campaign-management.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/forum.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/forum-thread.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/forum-moderation.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/session-map-scratchpad.js?t=<?php echo time(); ?>"></script>
+    <script src="js/modules/audio-manager.js?t=<?php echo time(); ?>"></script>
     <script src="js/main.js?t=<?php echo time(); ?>"></script>
 </body>
 </html>

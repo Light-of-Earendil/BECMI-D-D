@@ -777,15 +777,35 @@ class LevelUpWizard {
     }
     
     calculateNewSaves(characterClass, level) {
-        // Simplified saving throws (would need full table from Rules Cyclopedia)
-        const base = 14 - Math.floor(level / 3);
+        // Use the rules engine to get correct saving throws from official BECMI Rules Cyclopedia table
+        if (this.rulesEngine && this.currentCharacter) {
+            // Create a character object with the new level for calculation
+            const characterForCalculation = {
+                ...this.currentCharacter,
+                class: characterClass,
+                level: level
+            };
+            
+            // Get saving throws using the official table
+            const saves = this.rulesEngine.calculateSavingThrows(characterForCalculation);
+            
+            // Return in the expected format
+            return {
+                'death_ray': saves.death_ray,
+                'magic_wand': saves.magic_wand,
+                'paralysis': saves.paralysis,
+                'dragon_breath': saves.dragon_breath,
+                'spells': saves.spells
+            };
+        }
         
+        // Fallback if rules engine not available (shouldn't happen)
         return {
-            'death_ray': base,
-            'magic_wand': base + 1,
-            'paralysis': base - 1,
-            'dragon_breath': base + 2,
-            'spells': base + 1
+            'death_ray': 20,
+            'magic_wand': 20,
+            'paralysis': 20,
+            'dragon_breath': 20,
+            'spells': 20
         };
     }
     

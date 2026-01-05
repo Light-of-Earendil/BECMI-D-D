@@ -193,8 +193,24 @@ class SessionMapScratchpadModule {
                     
                     <div class="tool-group">
                         <label>Color</label>
-                        <input type="color" id="drawing-color-picker" value="${this.drawingColor}" 
-                               title="Drawing color">
+                        <div class="color-picker-container">
+                            <input type="color" id="drawing-color-picker" value="${this.drawingColor}" 
+                                   title="Drawing color">
+                            <div class="preset-colors">
+                                <div class="preset-color" data-color="#000000" title="Black" style="background-color: #000000;"></div>
+                                <div class="preset-color" data-color="#FFFFFF" title="White" style="background-color: #FFFFFF; border: 1px solid #ccc;"></div>
+                                <div class="preset-color" data-color="#FF0000" title="Red" style="background-color: #FF0000;"></div>
+                                <div class="preset-color" data-color="#00FF00" title="Green" style="background-color: #00FF00;"></div>
+                                <div class="preset-color" data-color="#0000FF" title="Blue" style="background-color: #0000FF;"></div>
+                                <div class="preset-color" data-color="#FFFF00" title="Yellow" style="background-color: #FFFF00;"></div>
+                                <div class="preset-color" data-color="#FF00FF" title="Magenta" style="background-color: #FF00FF;"></div>
+                                <div class="preset-color" data-color="#00FFFF" title="Cyan" style="background-color: #00FFFF;"></div>
+                                <div class="preset-color" data-color="#8B4513" title="Brown" style="background-color: #8B4513;"></div>
+                                <div class="preset-color" data-color="#FFA500" title="Orange" style="background-color: #FFA500;"></div>
+                                <div class="preset-color" data-color="#800080" title="Purple" style="background-color: #800080;"></div>
+                                <div class="preset-color" data-color="#808080" title="Gray" style="background-color: #808080;"></div>
+                            </div>
+                        </div>
                     </div>
                     
                     <div class="tool-group">
@@ -251,6 +267,7 @@ class SessionMapScratchpadModule {
                             <canvas id="map-background-canvas"></canvas>
                             <canvas id="map-drawing-canvas"></canvas>
                             <canvas id="map-token-canvas"></canvas>
+                            <div class="brush-preview" id="brush-preview"></div>
                         </div>
                     ` : `
                         <div class="empty-state">
@@ -268,47 +285,37 @@ class SessionMapScratchpadModule {
      * Check if user is DM of session
      */
     async checkDMStatus(sessionId) {
-        try {
-            // Get userId from app state first - wait a bit if not available yet
-            let currentUserId = this.app.state?.user?.user_id;
-            if (!currentUserId) {
-                // Wait a bit for app state to be ready
-                await new Promise(resolve => setTimeout(resolve, 100));
-                currentUserId = this.app.state?.user?.user_id;
-            }
-            
-            if (!currentUserId) {
-                console.warn('[Map Scratch-Pad] checkDMStatus: No user ID in app state after wait');
-                this.isDM = false;
-                this.userId = null;
-                return;
-            }
-            
-            console.log('[Map Scratch-Pad] checkDMStatus: Checking DM status for session', sessionId, 'user', currentUserId);
-            
-            // Use get-dm-dashboard endpoint which only returns success if user is DM
-            // This is the most secure way to check DM status
-            const response = await this.apiClient.get(`/api/session/get-dm-dashboard.php?session_id=${sessionId}`);
-            if (response.status === 'success' && response.data) {
-                this.isDM = true;
-                this.userId = currentUserId;
-                console.log('[Map Scratch-Pad] checkDMStatus: User is DM');
-            } else {
-                this.isDM = false;
-                this.userId = currentUserId;
-                console.log('[Map Scratch-Pad] checkDMStatus: User is not DM');
-            }
-        } catch (error) {
-            // If endpoint returns error, user is not DM
-            let currentUserId = this.app.state?.user?.user_id;
-            if (!currentUserId) {
-                // Wait a bit for app state to be ready
-                await new Promise(resolve => setTimeout(resolve, 100));
-                currentUserId = this.app.state?.user?.user_id;
-            }
-            console.log('[Map Scratch-Pad] checkDMStatus: User is not DM (error):', error.message);
+        // Get userId from app state first - wait a bit if not available yet
+        let currentUserId = this.app.state?.user?.user_id;
+        if (!currentUserId) {
+            // Wait a bit for app state to be ready
+            await new Promise(resolve => setTimeout(resolve, 100));
+            currentUserId = this.app.state?.user?.user_id;
+        }
+        
+        if (!currentUserId) {
+            console.warn('[Map Scratch-Pad] checkDMStatus: No user ID in app state after wait');
             this.isDM = false;
-            this.userId = currentUserId || null;
+            this.userId = null;
+            return;
+        }
+        
+        console.log('[Map Scratch-Pad] checkDMStatus: Checking DM status for session', sessionId, 'user', currentUserId);
+        
+        // Use get-dm-dashboard endpoint which only returns success if user is DM
+        // This is the most secure way to check DM status
+        // 403 is expected if user is not DM, so don't log it as error
+        const response = await this.apiClient.get(`/api/session/get-dm-dashboard.php?session_id=${sessionId}`, {}, {
+            expectedStatusCodes: [403]
+        });
+        if (response.success && response.status === 'success' && response.data) {
+            this.isDM = true;
+            this.userId = currentUserId;
+            console.log('[Map Scratch-Pad] checkDMStatus: User is DM');
+        } else {
+            this.isDM = false;
+            this.userId = currentUserId;
+            console.log('[Map Scratch-Pad] checkDMStatus: User is not DM');
         }
     }
     
@@ -948,6 +955,9 @@ class SessionMapScratchpadModule {
         });
         
         this.drawingCanvas.addEventListener('mousemove', (e) => {
+            // Update brush preview position
+            this.updateBrushPreview(e);
+            
             if (!isMouseDown || !this.isDrawing) return;
             
             const point = this.getCanvasPoint(e, this.drawingCanvas);
@@ -995,6 +1005,9 @@ class SessionMapScratchpadModule {
         });
         
         this.drawingCanvas.addEventListener('mouseleave', () => {
+            // Hide brush preview when mouse leaves canvas
+            this.hideBrushPreview();
+            
             if (isMouseDown) {
                 // Only submit if path has at least 2 points
                 if (this.currentPath.length >= 2) {
@@ -1139,6 +1152,78 @@ class SessionMapScratchpadModule {
             draggedToken = null;
             dragStart = null;
         });
+        
+        // Right-click context menu for deleting tokens
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault(); // Prevent default browser context menu
+            
+            if (this.tokenMode) return; // Don't show menu when in placement mode
+            
+            const scale = this.mapScale && this.mapScale > 0 ? this.mapScale : 1.0;
+            const point = this.getCanvasPoint(e, canvas);
+            const clickedToken = this.findTokenAtPoint(point.x / scale, point.y / scale);
+            
+            if (clickedToken) {
+                // Check if user can delete this token (owner or DM)
+                // user_id is always present in tokens from API
+                const isOwner = clickedToken.user_id && this.userId && clickedToken.user_id === this.userId;
+                const canDelete = isOwner || (this.isDM === true);
+                
+                if (canDelete) {
+                    if (confirm(`Er du sikker på, at du vil slette denne markør?`)) {
+                        this.deleteToken(clickedToken.token_id);
+                    }
+                } else {
+                    this.app.showError('Du har ikke tilladelse til at slette denne markør');
+                }
+            }
+        });
+    }
+    
+    /**
+     * Update brush preview position and style
+     */
+    updateBrushPreview(event) {
+        if (!this.drawingCanvas || !this.drawingTool) {
+            this.hideBrushPreview();
+            return;
+        }
+        
+        const preview = document.getElementById('brush-preview');
+        if (!preview) return;
+        
+        const rect = this.drawingCanvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        
+        // Calculate size in pixels (accounting for zoom)
+        const size = this.brushSize * this.zoom;
+        
+        preview.style.display = 'block';
+        preview.style.left = (x - size / 2) + 'px';
+        preview.style.top = (y - size / 2) + 'px';
+        preview.style.width = size + 'px';
+        preview.style.height = size + 'px';
+        
+        // Update style based on tool
+        if (this.drawingTool === 'erase') {
+            preview.classList.add('erase-preview');
+            preview.classList.remove('draw-preview');
+        } else {
+            preview.classList.add('draw-preview');
+            preview.classList.remove('erase-preview');
+            preview.style.borderColor = this.drawingColor;
+        }
+    }
+    
+    /**
+     * Hide brush preview
+     */
+    hideBrushPreview() {
+        const preview = document.getElementById('brush-preview');
+        if (preview) {
+            preview.style.display = 'none';
+        }
     }
     
     /**
@@ -1278,6 +1363,9 @@ class SessionMapScratchpadModule {
                 // Player: Find their character in this session and place it directly
                 await this.placePlayerCharacterToken(x, y);
             }
+        } else if (this.tokenMode === 'monster') {
+            // Show monster instance selection modal
+            await this.showMonsterInstanceSelectionModal(x, y);
         }
     }
     
@@ -1323,66 +1411,149 @@ class SessionMapScratchpadModule {
     }
     
     /**
-     * Show monster placement modal (DM only)
+     * Show monster instance selection modal (DM only)
+     * Shows list of monster instances from initiative tracker
      */
-    showMonsterPlacementModal(x, y) {
-        const modalHtml = `
-            <div class="modal show" id="place-monster-modal" style="display: flex;">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h2><i class="fas fa-dragon"></i> Place Monster Token</h2>
-                        <button type="button" class="close" id="close-monster-modal">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                    <div class="modal__inner">
-                        <form id="place-monster-form">
-                            <div class="form-group">
-                                <label for="monster-name">Monster Name</label>
-                                <input type="text" id="monster-name" class="form-control" maxlength="50" 
-                                       placeholder="e.g., Orc, Goblin, Dragon" required>
+    async showMonsterInstanceSelectionModal(x, y) {
+        try {
+            // Get monster instances from initiative tracker
+            const sessionManagement = this.app.modules.sessionManagement;
+            if (!sessionManagement) {
+                this.app.showError('Session management module not available');
+                this.tokenMode = null;
+                return;
+            }
+            
+            // Load initiative data to get monster instances
+            const initiativeData = await sessionManagement.loadInitiativeOrder(this.currentSessionId);
+            const monsterInitiatives = (initiativeData.initiatives || []).filter(init => init.entity_type === 'monster');
+            
+            if (monsterInitiatives.length === 0) {
+                this.app.showInfo('No monsters in initiative tracker. Add monsters to initiative first.');
+                this.tokenMode = null;
+                return;
+            }
+            
+            // Get monster instances details
+            const response = await this.apiClient.get(`/api/monsters/list-instances.php?session_id=${this.currentSessionId}`);
+            const instances = response.status === 'success' ? (response.data.instances || []) : [];
+            
+            // Create modal with monster instance list
+            const modalHtml = `
+                <div class="modal show" id="place-monster-modal" style="display: flex;">
+                    <div class="modal-content" style="max-width: 600px;">
+                        <div class="modal-header">
+                            <h2><i class="fas fa-dragon"></i> Select Monster to Place</h2>
+                            <button type="button" class="close" id="close-monster-modal">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="modal__inner">
+                            <p class="text-muted">Select a monster from initiative tracker to place on the map:</p>
+                            <div class="monster-instance-list" style="max-height: 400px; overflow-y: auto;">
+                                ${monsterInitiatives.map(init => {
+                                    const instance = instances.find(i => i.instance_id === init.monster_instance_id);
+                                    const monsterName = instance ? instance.monster_name : 'Unknown';
+                                    const isBoss = instance ? instance.is_named_boss : false;
+                                    const hp = instance ? `${instance.current_hp}/${instance.max_hp}` : '—';
+                                    const ac = instance ? instance.armor_class : '—';
+                                    
+                                    return `
+                                        <div class="monster-instance-item" 
+                                             data-monster-instance-id="${init.monster_instance_id}"
+                                             data-initiative-id="${init.initiative_id}"
+                                             style="padding: var(--space-3); margin-bottom: var(--space-2); background: var(--parchment-200); border-radius: var(--radius-sm); cursor: pointer; border: 2px solid var(--wood-400);"
+                                             onmouseover="this.style.borderColor='var(--brass-400)'"
+                                             onmouseout="this.style.borderColor='var(--wood-400)'">
+                                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                                <div>
+                                                    <strong>${this.escapeHtml(init.entity_name)}</strong>
+                                                    ${isBoss ? ' <i class="fas fa-crown" style="color: var(--brass-400);"></i>' : ''}
+                                                    <div style="font-size: 0.9em; color: var(--text-soft); margin-top: var(--space-1);">
+                                                        ${this.escapeHtml(monsterName)} | AC: ${ac} | HP: ${hp}
+                                                    </div>
+                                                </div>
+                                                <button class="btn btn-sm btn-primary select-monster-btn" 
+                                                        data-monster-instance-id="${init.monster_instance_id}"
+                                                        data-initiative-id="${init.initiative_id}"
+                                                        data-entity-name="${this.escapeHtml(init.entity_name)}">
+                                                    <i class="fas fa-map-marker-alt"></i> Place
+                                                </button>
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
                             </div>
-                            <div class="form-group">
-                                <label for="monster-color">Color</label>
-                                <input type="color" id="monster-color" value="#FF0000">
-                            </div>
-                            <div class="form-actions">
-                                <button type="submit" class="btn btn-primary">Place Monster</button>
-                                <button type="button" class="btn btn-secondary" id="cancel-monster-modal">Cancel</button>
-                            </div>
-                        </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" id="cancel-monster-modal">Cancel</button>
+                        </div>
                     </div>
                 </div>
-            </div>
-        `;
-        
-        $('#place-monster-modal').remove();
-        $('body').append(modalHtml);
-        
-        $('#close-monster-modal, #cancel-monster-modal').on('click', () => {
+            `;
+            
             $('#place-monster-modal').remove();
-            this.tokenMode = null;
-        });
-        
-        $('#place-monster-modal').on('click', (e) => {
-            if (e.target === e.currentTarget) {
+            $('body').append(modalHtml);
+            
+            $('#close-monster-modal, #cancel-monster-modal').on('click', () => {
                 $('#place-monster-modal').remove();
                 this.tokenMode = null;
-            }
-        });
-        
-        $('#place-monster-form').on('submit', async (e) => {
-            e.preventDefault();
-            const monsterName = $('#monster-name').val().trim();
-            const color = $('#monster-color').val();
+            });
             
-            if (monsterName) {
-                await this.addToken(this.currentMapId, null, 'marker', x, y, color, monsterName);
-            }
+            $('#place-monster-modal').on('click', (e) => {
+                if (e.target.id === 'place-monster-modal') {
+                    $('#place-monster-modal').remove();
+                    this.tokenMode = null;
+                }
+            });
             
-            $('#place-monster-modal').remove();
+            // Handle monster instance selection
+            $('.monster-instance-item, .select-monster-btn').on('click', async (e) => {
+                e.preventDefault();
+                const $target = $(e.currentTarget);
+                const monsterInstanceId = $target.data('monster-instance-id') || $target.closest('.monster-instance-item').data('monster-instance-id');
+                const initiativeId = $target.data('initiative-id') || $target.closest('.monster-instance-item').data('initiative-id');
+                const entityName = $target.data('entity-name') || $target.closest('.monster-instance-item').find('strong').text();
+                
+                if (!monsterInstanceId) {
+                    return;
+                }
+                
+                // Get monster instance for color
+                const instance = instances.find(i => i.instance_id === monsterInstanceId);
+                const color = '#DC3545'; // Red for monsters
+                
+                // Place token
+                await this.addToken(
+                    this.currentMapId,
+                    null, // character_id
+                    'marker',
+                    x,
+                    y,
+                    color,
+                    entityName,
+                    monsterInstanceId,
+                    initiativeId
+                );
+                
+                this.app.showSuccess(`Token placed for ${entityName}`);
+                $('#place-monster-modal').remove();
+                this.tokenMode = null;
+            });
+            
+        } catch (error) {
+            console.error('Failed to show monster instance selection modal:', error);
+            this.app.showError('Failed to load monster instances: ' + error.message);
             this.tokenMode = null;
-        });
+        }
+    }
+    
+    /**
+     * Show monster placement modal (DM only) - DEPRECATED, use showMonsterInstanceSelectionModal instead
+     */
+    showMonsterPlacementModal(x, y) {
+        // Redirect to new method
+        this.showMonsterInstanceSelectionModal(x, y);
     }
     
     /**
@@ -1574,17 +1745,30 @@ class SessionMapScratchpadModule {
     /**
      * Add token to map
      */
-    async addToken(mapId, characterId, tokenType, x, y, color, label) {
+    async addToken(mapId, characterId, tokenType, x, y, color, label, monsterInstanceId = null, initiativeId = null) {
         try {
-            const response = await this.apiClient.post('/api/session/maps/tokens/add.php', {
+            const payload = {
                 map_id: mapId,
-                character_id: characterId,
                 token_type: tokenType,
                 x_position: x,
                 y_position: y,
                 color: color || '#FF0000',
                 label: label
-            });
+            };
+            
+            if (characterId) {
+                payload.character_id = characterId;
+            }
+            
+            if (monsterInstanceId) {
+                payload.monster_instance_id = monsterInstanceId;
+            }
+            
+            if (initiativeId) {
+                payload.initiative_id = initiativeId;
+            }
+            
+            const response = await this.apiClient.post('/api/session/maps/tokens/add.php', payload);
             
             if (response.status === 'success') {
                 // Update local tokens array
@@ -1643,11 +1827,43 @@ class SessionMapScratchpadModule {
     }
     
     /**
+     * Delete a token from the map
+     * 
+     * @param {number} tokenId - Token ID to delete
+     * @returns {Promise<void>}
+     */
+    async deleteToken(tokenId) {
+        try {
+            console.log('[Map Scratch-Pad] deleteToken: Deleting token', {
+                tokenId,
+                currentTokens: this.tokens.length
+            });
+            
+            await this.apiClient.delete(`/api/session/maps/tokens/delete.php?token_id=${tokenId}`);
+            
+            // Remove from local tokens array immediately for instant feedback
+            const tokenIndex = this.tokens.findIndex(t => t.token_id === tokenId);
+            if (tokenIndex >= 0) {
+                this.tokens.splice(tokenIndex, 1);
+                this.redrawTokens();
+                console.log('[Map Scratch-Pad] deleteToken: Token deleted successfully');
+            } else {
+                console.warn('[Map Scratch-Pad] deleteToken: Token not found in local array', tokenId);
+                // Reload tokens to sync with server
+                await this.loadTokens(this.currentMapId);
+            }
+        } catch (error) {
+            console.error('[Map Scratch-Pad] deleteToken: Failed to delete token:', error);
+            this.app.showError('Kunne ikke slette markør: ' + (error.message || 'Ukendt fejl'));
+        }
+    }
+    
+    /**
      * Setup toolbar event handlers
      */
     setupToolbarEvents() {
         // Remove existing event handlers to prevent duplicates
-        $('#draw-tool-btn, #erase-tool-btn, #drawing-color-picker, #brush-size-slider, #place-marker-btn, #place-character-btn, #place-monster-btn, #zoom-in-btn, #zoom-out-btn, #reset-view-btn, #clear-drawings-btn, #map-selector, #upload-map-btn, #delete-map-btn').off();
+        $('#draw-tool-btn, #erase-tool-btn, #drawing-color-picker, #brush-size-slider, #place-marker-btn, #place-character-btn, #place-monster-btn, #zoom-in-btn, #zoom-out-btn, #reset-view-btn, #clear-drawings-btn, #map-selector, #upload-map-btn, #delete-map-btn, .preset-color').off();
         
         // Ensure drawingTool is set to default 'draw' if not already set
         if (!this.drawingTool) {
@@ -1694,18 +1910,43 @@ class SessionMapScratchpadModule {
         // Color picker
         $('#drawing-color-picker').on('change', (e) => {
             this.drawingColor = e.target.value;
+            // Update brush preview color if visible
+            const preview = document.getElementById('brush-preview');
+            if (preview && preview.classList.contains('draw-preview')) {
+                preview.style.borderColor = this.drawingColor;
+            }
+        });
+        
+        // Preset colors
+        $('.preset-color').on('click', (e) => {
+            const color = $(e.currentTarget).data('color');
+            this.drawingColor = color;
+            $('#drawing-color-picker').val(color);
+            // Update brush preview color if visible
+            const preview = document.getElementById('brush-preview');
+            if (preview && preview.classList.contains('draw-preview')) {
+                preview.style.borderColor = this.drawingColor;
+            }
         });
         
         // Brush size
         $('#brush-size-slider').on('input', (e) => {
             this.brushSize = parseInt(e.target.value);
             $('#brush-size-display').text(this.brushSize + 'px');
+            // Update brush preview size if visible
+            const preview = document.getElementById('brush-preview');
+            if (preview && preview.style.display !== 'none') {
+                const size = this.brushSize * this.zoom;
+                preview.style.width = size + 'px';
+                preview.style.height = size + 'px';
+            }
         });
         
         // Token tools
         $('#place-marker-btn').on('click', () => {
             this.tokenMode = 'marker';
             this.drawingTool = null;
+            this.hideBrushPreview();
             $('#draw-tool-btn, #erase-tool-btn').addClass('btn-secondary').removeClass('btn-primary');
             // Update pointer-events on token canvas - enable it for token placement
             if (this.tokenCanvas) {
@@ -1716,6 +1957,7 @@ class SessionMapScratchpadModule {
         $('#place-character-btn').on('click', () => {
             this.tokenMode = 'character';
             this.drawingTool = null;
+            this.hideBrushPreview();
             $('#draw-tool-btn, #erase-tool-btn').addClass('btn-secondary').removeClass('btn-primary');
             $('#place-marker-btn, #place-monster-btn').addClass('btn-secondary').removeClass('btn-primary');
             $('#place-character-btn').addClass('btn-primary').removeClass('btn-secondary');
@@ -1729,6 +1971,7 @@ class SessionMapScratchpadModule {
         $('#place-monster-btn').on('click', () => {
             this.tokenMode = 'monster';
             this.drawingTool = null;
+            this.hideBrushPreview();
             $('#draw-tool-btn, #erase-tool-btn').addClass('btn-secondary').removeClass('btn-primary');
             $('#place-marker-btn, #place-character-btn').addClass('btn-secondary').removeClass('btn-primary');
             $('#place-monster-btn').addClass('btn-primary').removeClass('btn-secondary');
@@ -2094,6 +2337,14 @@ class SessionMapScratchpadModule {
                 });
             });
             
+            this.realtimeClient.on('map_token_added', (data) => {
+                console.log('[Map Scratch-Pad] RealtimeClient map_token_added event received:', data);
+                this.handleRealtimeEvent({
+                    event_type: 'map_token_added',
+                    event_data: data
+                });
+            });
+            
             this.realtimeClient.on('map_token_moved', (data) => {
                 console.log('[Map Scratch-Pad] RealtimeClient map_token_moved event received:', data);
                 this.handleRealtimeEvent({
@@ -2146,6 +2397,7 @@ class SessionMapScratchpadModule {
                 const response = await this.apiClient.get(`/api/realtime/poll.php?session_id=${this.currentSessionId}&last_event_id=${this.lastEventId}`);
                 if (response.status === 'success' && response.data.events) {
                     response.data.events.forEach(event => {
+                        console.log('[Map Scratch-Pad] Manual polling: Processing event', event.event_type);
                         this.handleRealtimeEvent(event);
                         if (event.event_id > this.lastEventId) {
                             this.lastEventId = event.event_id;
@@ -2153,7 +2405,7 @@ class SessionMapScratchpadModule {
                     });
                 }
             } catch (error) {
-                console.error('Real-time polling error:', error);
+                console.error('[Map Scratch-Pad] Real-time polling error:', error);
             }
         }, 2000); // Poll every 2 seconds
     }
@@ -2227,6 +2479,83 @@ class SessionMapScratchpadModule {
                     this.drawings = [];
                     this.redrawDrawings();
                 }
+                break;
+                
+            case 'map_token_added':
+                console.log('[Map Scratch-Pad] handleRealtimeEvent: map_token_added event received', {
+                    eventData,
+                    currentMapId: this.currentMapId,
+                    eventDataMapId: eventData?.map_id,
+                    eventDataTokenId: eventData?.token_id
+                });
+                
+                if (!eventData) {
+                    console.warn('[Map Scratch-Pad] handleRealtimeEvent: map_token_added - no eventData');
+                    break;
+                }
+                
+                if (!eventData.token_id) {
+                    console.warn('[Map Scratch-Pad] handleRealtimeEvent: map_token_added - no token_id in eventData');
+                    break;
+                }
+                
+                // Check if this event is for the current map
+                if (eventData.map_id !== this.currentMapId) {
+                    console.log('[Map Scratch-Pad] handleRealtimeEvent: map_token_added - map ID mismatch', {
+                        eventMapId: eventData.map_id,
+                        currentMapId: this.currentMapId
+                    });
+                    break;
+                }
+                
+                // Check if token already exists (avoid duplicates)
+                const existingTokenIndex = this.tokens.findIndex(t => t.token_id === eventData.token_id);
+                if (existingTokenIndex >= 0) {
+                    console.log('[Map Scratch-Pad] handleRealtimeEvent: map_token_added - token already exists, updating', {
+                        tokenId: eventData.token_id
+                    });
+                    // Update existing token with new data
+                    this.tokens[existingTokenIndex] = {
+                        token_id: eventData.token_id,
+                        map_id: eventData.map_id,
+                        character_id: eventData.character_id,
+                        character_name: eventData.character_name,
+                        user_id: eventData.user_id,
+                        username: eventData.username,
+                        token_type: eventData.token_type,
+                        x_position: eventData.x_position,
+                        y_position: eventData.y_position,
+                        color: eventData.color,
+                        label: eventData.label,
+                        portrait_url: eventData.portrait_url,
+                        is_visible: eventData.is_visible
+                    };
+                } else {
+                    console.log('[Map Scratch-Pad] handleRealtimeEvent: map_token_added - adding new token', {
+                        tokenId: eventData.token_id,
+                        characterName: eventData.character_name,
+                        label: eventData.label
+                    });
+                    // Add new token to array
+                    this.tokens.push({
+                        token_id: eventData.token_id,
+                        map_id: eventData.map_id,
+                        character_id: eventData.character_id,
+                        character_name: eventData.character_name,
+                        user_id: eventData.user_id,
+                        username: eventData.username,
+                        token_type: eventData.token_type,
+                        x_position: eventData.x_position,
+                        y_position: eventData.y_position,
+                        color: eventData.color,
+                        label: eventData.label,
+                        portrait_url: eventData.portrait_url,
+                        is_visible: eventData.is_visible
+                    });
+                }
+                
+                this.redrawTokens();
+                console.log('[Map Scratch-Pad] handleRealtimeEvent: map_token_added - tokens redrawn, total:', this.tokens.length);
                 break;
                 
             case 'map_token_moved':

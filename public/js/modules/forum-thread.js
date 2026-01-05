@@ -21,50 +21,46 @@ class ForumThreadModule {
      * Load and display a thread
      */
     async loadThread(threadId, page = 1) {
-        try {
-            this.currentThreadId = threadId;
-            this.currentPage = page;
-            
-            // Load thread info
-            const threadResponse = await this.apiClient.get('/api/forum/threads/get.php', {
-                thread_id: threadId
-            });
-            
-            if (threadResponse.status !== 'success') {
-                throw new Error(threadResponse.message || 'Failed to load thread');
-            }
-            
-            this.thread = threadResponse.data;
-            
-            // Check if user is moderator (we'll get this from app state or make a separate call)
-            // For now, we'll check permissions from thread response
-            
-            // Load posts
-            const postsResponse = await this.apiClient.get('/api/forum/posts/list.php', {
-                thread_id: threadId,
-                page: page,
-                per_page: 20
-            });
-            
-            if (postsResponse.status !== 'success') {
-                throw new Error(postsResponse.message || 'Failed to load posts');
-            }
-            
-            this.posts = postsResponse.data.posts || [];
-            const pagination = postsResponse.data.pagination || {};
-            
-            // Render thread view
-            const content = this.renderThreadView(this.thread, this.posts, pagination);
-            $('#content-area').html(content);
-            this.app.currentView = 'forum-thread';
-            
-            // Setup event handlers for this view
-            this.setupThreadEventHandlers();
-            
-        } catch (error) {
-            console.error('Failed to load thread:', error);
-            this.app.showError('Failed to load thread: ' + error.message);
+        this.currentThreadId = threadId;
+        this.currentPage = page;
+        
+        // Load thread info
+        const threadResponse = await this.apiClient.get('/api/forum/threads/get.php', {
+            thread_id: threadId
+        });
+        
+        if (!threadResponse.success || threadResponse.status !== 'success') {
+            this.app.showError(threadResponse.error || threadResponse.message || 'Failed to load thread');
+            return;
         }
+        
+        this.thread = threadResponse.data;
+        
+        // Check if user is moderator (we'll get this from app state or make a separate call)
+        // For now, we'll check permissions from thread response
+        
+        // Load posts
+        const postsResponse = await this.apiClient.get('/api/forum/posts/list.php', {
+            thread_id: threadId,
+            page: page,
+            per_page: 20
+        });
+        
+        if (!postsResponse.success || postsResponse.status !== 'success') {
+            this.app.showError(postsResponse.error || postsResponse.message || 'Failed to load posts');
+            return;
+        }
+        
+        this.posts = postsResponse.data.posts || [];
+        const pagination = postsResponse.data.pagination || {};
+        
+        // Render thread view
+        const content = this.renderThreadView(this.thread, this.posts, pagination);
+        $('#content-area').html(content);
+        this.app.currentView = 'forum-thread';
+        
+        // Setup event handlers for this view
+        this.setupThreadEventHandlers();
     }
     
     /**
@@ -293,31 +289,23 @@ class ForumThreadModule {
             return;
         }
         
-        try {
-            // Check if user is moderator
-            let isModerator = false;
-            try {
-                const modResponse = await this.apiClient.get('/api/forum/moderation/queue.php');
-                if (modResponse.status === 'success') {
-                    isModerator = true;
-                }
-            } catch (error) {
-                // User is not a moderator, that's fine
-            }
-            
-            // Get category info for display
-            const categoryResponse = await this.apiClient.get('/api/forum/categories/get.php', {
-                category_id: categoryId
-            });
-            
-            if (categoryResponse.status !== 'success') {
-                throw new Error('Failed to load category information');
-            }
-            
-            const category = categoryResponse.data;
-            
-            // Create modal HTML
-            const modalHtml = `
+        // Check if user is moderator - use cached status from app state
+        const isModerator = this.app.state.user && this.app.state.user.is_moderator === true;
+        
+        // Get category info for display
+        const categoryResponse = await this.apiClient.get('/api/forum/categories/get.php', {
+            category_id: categoryId
+        });
+        
+        if (!categoryResponse.success || categoryResponse.status !== 'success') {
+            this.app.showError('Failed to load category information');
+            return;
+        }
+        
+        const category = categoryResponse.data;
+        
+        // Create modal HTML
+        const modalHtml = `
                 <div class="modal show" id="create-thread-modal" style="display: flex;">
                     <div class="modal-content" style="max-width: 700px;">
                         <div class="modal-header">
@@ -372,81 +360,70 @@ class ForumThreadModule {
                         </div>
                     </div>
                 </div>
-            `;
-            
-            // Remove existing modal if any
+        `;
+        
+        // Remove existing modal if any
+        $('#create-thread-modal').remove();
+        
+        // Add modal to page
+        $('body').append(modalHtml);
+        
+        // Setup event handlers
+        $('#close-create-thread-modal, #cancel-create-thread-modal').on('click', () => {
             $('#create-thread-modal').remove();
-            
-            // Add modal to page
-            $('body').append(modalHtml);
-            
-            // Setup event handlers
-            $('#close-create-thread-modal, #cancel-create-thread-modal').on('click', () => {
+        });
+        
+        $('#create-thread-form').on('submit', async (e) => {
+            e.preventDefault();
+            await this.handleCreateThread(categoryId);
+        });
+        
+        // Close on background click
+        $('#create-thread-modal').on('click', (e) => {
+            if (e.target === e.currentTarget) {
                 $('#create-thread-modal').remove();
-            });
-            
-            $('#create-thread-form').on('submit', async (e) => {
-                e.preventDefault();
-                await this.handleCreateThread(categoryId);
-            });
-            
-            // Close on background click
-            $('#create-thread-modal').on('click', (e) => {
-                if (e.target === e.currentTarget) {
-                    $('#create-thread-modal').remove();
-                }
-            });
-            
-        } catch (error) {
-            console.error('Failed to show create thread modal:', error);
-            this.app.showError('Failed to load category information: ' + error.message);
-        }
+            }
+        });
     }
     
     /**
      * Handle create thread form submission
      */
     async handleCreateThread(categoryId) {
-        try {
-            const threadTitle = $('#thread-title').val().trim();
-            const postContent = $('#thread-post-content').val().trim();
-            const isPrivate = $('#thread-is-private').is(':checked');
+        const threadTitle = $('#thread-title').val().trim();
+        const postContent = $('#thread-post-content').val().trim();
+        const isPrivate = $('#thread-is-private').is(':checked');
+        
+        if (!threadTitle) {
+            this.app.showError('Thread title is required');
+            return;
+        }
+        
+        if (threadTitle.length > 255) {
+            this.app.showError('Thread title must be 255 characters or less');
+            return;
+        }
+        
+        if (!postContent) {
+            this.app.showError('Post content is required');
+            return;
+        }
+        
+        const response = await this.apiClient.post('/api/forum/threads/create.php', {
+            category_id: categoryId,
+            thread_title: threadTitle,
+            post_content: postContent,
+            is_private: isPrivate
+        });
+        
+        if (response.success && response.status === 'success') {
+            this.app.showSuccess('Thread created successfully');
+            $('#create-thread-modal').remove();
             
-            if (!threadTitle) {
-                this.app.showError('Thread title is required');
-                return;
-            }
-            
-            if (threadTitle.length > 255) {
-                this.app.showError('Thread title must be 255 characters or less');
-                return;
-            }
-            
-            if (!postContent) {
-                this.app.showError('Post content is required');
-                return;
-            }
-            
-            const response = await this.apiClient.post('/api/forum/threads/create.php', {
-                category_id: categoryId,
-                thread_title: threadTitle,
-                post_content: postContent,
-                is_private: isPrivate
-            });
-            
-            if (response.status === 'success') {
-                this.app.showSuccess('Thread created successfully');
-                $('#create-thread-modal').remove();
-                
-                // Load the newly created thread
-                await this.loadThread(response.data.thread_id);
-            } else {
-                throw new Error(response.message || 'Failed to create thread');
-            }
-            
-        } catch (error) {
-            console.error('Create thread error:', error);
-            this.app.showError('Failed to create thread: ' + error.message);
+            // Load the newly created thread
+            await this.loadThread(response.data.thread_id);
+        } else {
+            this.app.showError(response.error || response.message || 'Failed to create thread');
         }
     }
     
@@ -511,31 +488,25 @@ class ForumThreadModule {
      * Handle post reply
      */
     async handlePostReply() {
-        try {
-            const content = $('#post-content').val().trim();
-            
-            if (!content) {
-                this.app.showError('Post content cannot be empty');
-                return;
-            }
-            
-            const response = await this.apiClient.post('/api/forum/posts/create.php', {
-                thread_id: this.currentThreadId,
-                post_content: content
-            });
-            
-            if (response.status === 'success') {
-                this.app.showSuccess('Post created successfully');
-                $('#post-content').val('');
-                // Reload thread to show new post
-                await this.loadThread(this.currentThreadId, this.currentPage);
-            } else {
-                throw new Error(response.message || 'Failed to create post');
-            }
-            
-        } catch (error) {
-            console.error('Post reply error:', error);
-            this.app.showError('Failed to post reply: ' + error.message);
+        const content = $('#post-content').val().trim();
+        
+        if (!content) {
+            this.app.showError('Post content cannot be empty');
+            return;
+        }
+        
+        const response = await this.apiClient.post('/api/forum/posts/create.php', {
+            thread_id: this.currentThreadId,
+            post_content: content
+        });
+        
+        if (response.success && response.status === 'success') {
+            this.app.showSuccess('Post created successfully');
+            $('#post-content').val('');
+            // Reload thread to show new post
+            await this.loadThread(this.currentThreadId, this.currentPage);
+        } else {
+            this.app.showError(response.error || response.message || 'Failed to create post');
         }
     }
     
@@ -543,29 +514,23 @@ class ForumThreadModule {
      * Handle subscribe/unsubscribe
      */
     async handleSubscribe() {
-        try {
-            const isSubscribed = $('#subscribe-thread-btn').data('subscribed');
-            const subscribe = !isSubscribed;
-            
-            const response = await this.apiClient.post('/api/forum/threads/subscribe.php', {
-                thread_id: this.currentThreadId,
-                subscribe: subscribe
-            });
-            
-            if (response.status === 'success') {
-                $('#subscribe-thread-btn').data('subscribed', subscribe);
-                $('#subscribe-thread-btn').html(`
-                    <i class="fas fa-${subscribe ? 'bell-slash' : 'bell'}"></i>
-                    ${subscribe ? 'Unsubscribe' : 'Subscribe'}
-                `);
-                this.app.showSuccess(subscribe ? 'Subscribed to thread' : 'Unsubscribed from thread');
-            } else {
-                throw new Error(response.message || 'Failed to update subscription');
-            }
-            
-        } catch (error) {
-            console.error('Subscribe error:', error);
-            this.app.showError('Failed to update subscription: ' + error.message);
+        const isSubscribed = $('#subscribe-thread-btn').data('subscribed');
+        const subscribe = !isSubscribed;
+        
+        const response = await this.apiClient.post('/api/forum/threads/subscribe.php', {
+            thread_id: this.currentThreadId,
+            subscribe: subscribe
+        });
+        
+        if (response.success && response.status === 'success') {
+            $('#subscribe-thread-btn').data('subscribed', subscribe);
+            $('#subscribe-thread-btn').html(`
+                <i class="fas fa-${subscribe ? 'bell-slash' : 'bell'}"></i>
+                ${subscribe ? 'Unsubscribe' : 'Subscribe'}
+            `);
+            this.app.showSuccess(subscribe ? 'Subscribed to thread' : 'Unsubscribed from thread');
+        } else {
+            this.app.showError(response.error || response.message || 'Failed to update subscription');
         }
     }
     
@@ -573,17 +538,17 @@ class ForumThreadModule {
      * Show edit post modal
      */
     async showEditPostModal(postId) {
-        try {
-            // Load current post
-            const response = await this.apiClient.get('/api/forum/posts/get.php', {
-                post_id: postId
-            });
-            
-            if (response.status !== 'success') {
-                throw new Error(response.message || 'Failed to load post');
-            }
-            
-            const post = response.data;
+        // Load current post
+        const response = await this.apiClient.get('/api/forum/posts/get.php', {
+            post_id: postId
+        });
+        
+        if (!response.success || response.status !== 'success') {
+            this.app.showError(response.error || response.message || 'Failed to load post');
+            return;
+        }
+        
+        const post = response.data;
             
             // Check if user can edit (author or moderator)
             if (!post.can_edit) {
@@ -650,51 +615,40 @@ class ForumThreadModule {
                 await this.handleEditPost(postId);
             });
             
-            // Close on background click
-            $('#edit-post-modal').on('click', (e) => {
-                if (e.target === e.currentTarget) {
-                    $('#edit-post-modal').remove();
-                }
-            });
-            
-        } catch (error) {
-            console.error('Failed to show edit post modal:', error);
-            this.app.showError('Failed to load post: ' + error.message);
-        }
+        // Close on background click
+        $('#edit-post-modal').on('click', (e) => {
+            if (e.target === e.currentTarget) {
+                $('#edit-post-modal').remove();
+            }
+        });
     }
     
     /**
      * Handle edit post form submission
      */
     async handleEditPost(postId) {
-        try {
-            const postContent = $('#edit-post-content').val().trim();
-            const editReason = $('#edit-post-reason').val().trim() || null;
+        const postContent = $('#edit-post-content').val().trim();
+        const editReason = $('#edit-post-reason').val().trim() || null;
+        
+        if (!postContent) {
+            this.app.showError('Post content is required');
+            return;
+        }
+        
+        const response = await this.apiClient.put('/api/forum/posts/update.php', {
+            post_id: postId,
+            post_content: postContent,
+            edit_reason: editReason
+        });
+        
+        if (response.success && response.status === 'success') {
+            this.app.showSuccess('Post updated successfully');
+            $('#edit-post-modal').remove();
             
-            if (!postContent) {
-                this.app.showError('Post content is required');
-                return;
-            }
-            
-            const response = await this.apiClient.put('/api/forum/posts/update.php', {
-                post_id: postId,
-                post_content: postContent,
-                edit_reason: editReason
-            });
-            
-            if (response.status === 'success') {
-                this.app.showSuccess('Post updated successfully');
-                $('#edit-post-modal').remove();
-                
-                // Reload thread to show updated post
-                await this.loadThread(this.currentThreadId, this.currentPage);
-            } else {
-                throw new Error(response.message || 'Failed to update post');
-            }
-            
-        } catch (error) {
-            console.error('Edit post error:', error);
-            this.app.showError('Failed to update post: ' + error.message);
+            // Reload thread to show updated post
+            await this.loadThread(this.currentThreadId, this.currentPage);
+        } else {
+            this.app.showError(response.error || response.message || 'Failed to update post');
         }
     }
     
@@ -706,22 +660,16 @@ class ForumThreadModule {
             return;
         }
         
-        try {
-            const response = await this.apiClient.delete('/api/forum/posts/delete.php', {
-                post_id: postId
-            });
-            
-            if (response.status === 'success') {
-                this.app.showSuccess('Post deleted successfully');
-                // Reload thread
-                await this.loadThread(this.currentThreadId, this.currentPage);
-            } else {
-                throw new Error(response.message || 'Failed to delete post');
-            }
-            
-        } catch (error) {
-            console.error('Delete post error:', error);
-            this.app.showError('Failed to delete post: ' + error.message);
+        const response = await this.apiClient.delete('/api/forum/posts/delete.php', {
+            post_id: postId
+        });
+        
+        if (response.success && response.status === 'success') {
+            this.app.showSuccess('Post deleted successfully');
+            // Reload thread
+            await this.loadThread(this.currentThreadId, this.currentPage);
+        } else {
+            this.app.showError(response.error || response.message || 'Failed to delete post');
         }
     }
     
@@ -729,15 +677,15 @@ class ForumThreadModule {
      * Show edit history
      */
     async showEditHistory(postId) {
-        try {
-            // Load edit history
-            const response = await this.apiClient.get('/api/forum/posts/edit-history.php', {
-                post_id: postId
-            });
-            
-            if (response.status !== 'success') {
-                throw new Error(response.message || 'Failed to load edit history');
-            }
+        // Load edit history
+        const response = await this.apiClient.get('/api/forum/posts/edit-history.php', {
+            post_id: postId
+        });
+        
+        if (!response.success || response.status !== 'success') {
+            this.app.showError(response.error || response.message || 'Failed to load edit history');
+            return;
+        }
             
             const history = response.data;
             
@@ -822,16 +770,11 @@ class ForumThreadModule {
             });
             
             // Close on background click
-            $('#edit-history-modal').on('click', (e) => {
-                if (e.target === e.currentTarget) {
-                    $('#edit-history-modal').remove();
-                }
-            });
-            
-        } catch (error) {
-            console.error('Failed to show edit history:', error);
-            this.app.showError('Failed to load edit history: ' + error.message);
-        }
+        $('#edit-history-modal').on('click', (e) => {
+            if (e.target === e.currentTarget) {
+                $('#edit-history-modal').remove();
+            }
+        });
     }
     
     /**
@@ -843,20 +786,11 @@ class ForumThreadModule {
             return;
         }
         
-        try {
-            // Check if user is moderator
-            let isModerator = false;
-            try {
-                const modResponse = await this.apiClient.get('/api/forum/moderation/queue.php');
-                if (modResponse.status === 'success') {
-                    isModerator = true;
-                }
-            } catch (error) {
-                // User is not a moderator, that's fine
-            }
-            
-            // Check if user can edit (author or moderator)
-            if (!this.thread.can_edit) {
+        // Check if user is moderator - use cached status from app state
+        const isModerator = this.app.state.user && this.app.state.user.is_moderator === true;
+        
+        // Check if user can edit (author or moderator)
+        if (!this.thread.can_edit) {
                 this.app.showError('You do not have permission to edit this thread');
                 return;
             }
@@ -928,62 +862,51 @@ class ForumThreadModule {
             });
             
             // Close on background click
-            $('#edit-thread-modal').on('click', (e) => {
-                if (e.target === e.currentTarget) {
-                    $('#edit-thread-modal').remove();
-                }
-            });
-            
-        } catch (error) {
-            console.error('Failed to show edit thread modal:', error);
-            this.app.showError('Failed to load thread information: ' + error.message);
-        }
+        $('#edit-thread-modal').on('click', (e) => {
+            if (e.target === e.currentTarget) {
+                $('#edit-thread-modal').remove();
+            }
+        });
     }
     
     /**
      * Handle edit thread form submission
      */
     async handleEditThread() {
-        try {
-            const threadId = this.thread.thread_id;
-            const threadTitle = $('#edit-thread-title').val().trim();
-            const isPrivate = $('#edit-thread-is-private').is(':checked');
+        const threadId = this.thread.thread_id;
+        const threadTitle = $('#edit-thread-title').val().trim();
+        const isPrivate = $('#edit-thread-is-private').is(':checked');
+        
+        if (!threadTitle) {
+            this.app.showError('Thread title is required');
+            return;
+        }
+        
+        if (threadTitle.length > 255) {
+            this.app.showError('Thread title must be 255 characters or less');
+            return;
+        }
+        
+        const updateData = {
+            thread_id: threadId,
+            thread_title: threadTitle
+        };
+        
+        // Only include is_private if user is moderator (checkbox only shown to moderators)
+        if ($('#edit-thread-is-private').length > 0) {
+            updateData.is_private = isPrivate;
+        }
+        
+        const response = await this.apiClient.put('/api/forum/threads/update.php', updateData);
+        
+        if (response.success && response.status === 'success') {
+            this.app.showSuccess('Thread updated successfully');
+            $('#edit-thread-modal').remove();
             
-            if (!threadTitle) {
-                this.app.showError('Thread title is required');
-                return;
-            }
-            
-            if (threadTitle.length > 255) {
-                this.app.showError('Thread title must be 255 characters or less');
-                return;
-            }
-            
-            const updateData = {
-                thread_id: threadId,
-                thread_title: threadTitle
-            };
-            
-            // Only include is_private if user is moderator (checkbox only shown to moderators)
-            if ($('#edit-thread-is-private').length > 0) {
-                updateData.is_private = isPrivate;
-            }
-            
-            const response = await this.apiClient.put('/api/forum/threads/update.php', updateData);
-            
-            if (response.status === 'success') {
-                this.app.showSuccess('Thread updated successfully');
-                $('#edit-thread-modal').remove();
-                
-                // Reload thread to show updated information
-                await this.loadThread(threadId, this.currentPage);
-            } else {
-                throw new Error(response.message || 'Failed to update thread');
-            }
-            
-        } catch (error) {
-            console.error('Edit thread error:', error);
-            this.app.showError('Failed to update thread: ' + error.message);
+            // Reload thread to show updated information
+            await this.loadThread(threadId, this.currentPage);
+        } else {
+            this.app.showError(response.error || response.message || 'Failed to update thread');
         }
     }
     
@@ -995,30 +918,24 @@ class ForumThreadModule {
             return;
         }
         
-        try {
-            const response = await this.apiClient.delete('/api/forum/threads/delete.php', {
-                thread_id: this.currentThreadId
-            });
-            
-            if (response.status === 'success') {
-                this.app.showSuccess('Thread deleted successfully');
-                // Navigate back to category
-                if (this.thread && this.thread.category) {
-                    if (this.app.modules.forum) {
-                        await this.app.modules.forum.loadCategoryThreads(this.thread.category.category_id);
-                    } else {
-                        this.app.navigateToView('forum');
-                    }
+        const response = await this.apiClient.delete('/api/forum/threads/delete.php', {
+            thread_id: this.currentThreadId
+        });
+        
+        if (response.success && response.status === 'success') {
+            this.app.showSuccess('Thread deleted successfully');
+            // Navigate back to category
+            if (this.thread && this.thread.category) {
+                if (this.app.modules.forum) {
+                    await this.app.modules.forum.loadCategoryThreads(this.thread.category.category_id);
                 } else {
                     this.app.navigateToView('forum');
                 }
             } else {
-                throw new Error(response.message || 'Failed to delete thread');
+                this.app.navigateToView('forum');
             }
-            
-        } catch (error) {
-            console.error('Delete thread error:', error);
-            this.app.showError('Failed to delete thread: ' + error.message);
+        } else {
+            this.app.showError(response.error || response.message || 'Failed to delete thread');
         }
     }
     

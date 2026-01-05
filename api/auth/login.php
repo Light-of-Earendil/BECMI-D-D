@@ -70,10 +70,10 @@ try {
     // Determine if identifier is email or username
     $isEmail = Security::validateEmail($loginIdentifier);
     
-    // Find user by username or email
+    // Find user by username or email (include is_moderator)
     if ($isEmail) {
         $user = $db->selectOne(
-            "SELECT user_id, username, email, password_hash, is_active FROM users WHERE email = ?",
+            "SELECT user_id, username, email, password_hash, is_active, is_moderator FROM users WHERE email = ?",
             [$loginIdentifier]
         );
         error_log("LOGIN: Searching by email: $loginIdentifier");
@@ -84,7 +84,7 @@ try {
             Security::sendValidationErrorResponse(['username' => 'Invalid username format']);
         }
         $user = $db->selectOne(
-            "SELECT user_id, username, email, password_hash, is_active FROM users WHERE username = ?",
+            "SELECT user_id, username, email, password_hash, is_active, is_moderator FROM users WHERE username = ?",
             [$loginIdentifier]
         );
         error_log("LOGIN: Searching by username: $loginIdentifier");
@@ -164,6 +164,7 @@ try {
             'user_id' => $user['user_id'],
             'username' => $user['username'],
             'email' => $user['email'],
+            'is_moderator' => (bool) ($user['is_moderator'] ?? false),
             'session_id' => $sessionId,
             'csrf_token' => $csrfToken
         ],

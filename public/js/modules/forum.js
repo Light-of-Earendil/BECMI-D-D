@@ -33,14 +33,12 @@ class ForumModule {
             const html = this.renderCategoryList();
             
             // Check if user is moderator and show moderation button
-            setTimeout(async () => {
-                try {
-                    const modResponse = await this.apiClient.get('/api/forum/moderation/queue.php');
-                    if (modResponse.status === 'success') {
-                        $('#forum-moderation-btn').show();
-                    }
-                } catch (error) {
-                    // User is not a moderator, hide button
+            // Use cached moderator status from app state (no API call needed)
+            setTimeout(() => {
+                const isModerator = this.app.state.user && this.app.state.user.is_moderator === true;
+                if (isModerator) {
+                    $('#forum-moderation-btn').show();
+                } else {
                     $('#forum-moderation-btn').hide();
                 }
             }, 100);

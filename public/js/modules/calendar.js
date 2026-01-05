@@ -9,6 +9,7 @@ class CalendarModule {
         this.app = app;
         this.apiClient = app.modules.apiClient;
         this.currentDate = new Date();
+        this.eventHandlersSetup = false;
         
         console.log('Calendar Module initialized');
     }
@@ -24,14 +25,14 @@ class CalendarModule {
                     <div class="calendar-header">
                         <h1>Session Calendar</h1>
                         <div class="calendar-controls">
-                            <button class="btn btn-secondary"id="prev-month">
+                            <button class="btn btn-secondary" id="prev-month">
                                 <i class="fas fa-chevron-left"></i>
                             </button>
                             <span id="current-month">${this.getCurrentMonthYear()}</span>
-                            <button class="btn btn-secondary"id="next-month">
+                            <button class="btn btn-secondary" id="next-month">
                                 <i class="fas fa-chevron-right"></i>
                             </button>
-                            <button class="btn btn-primary"id="today-btn">Today</button>
+                            <button class="btn btn-primary" id="today-btn">Today</button>
                         </div>
                     </div>
                     
@@ -180,24 +181,35 @@ class CalendarModule {
      * Setup event handlers
      */
     setupEventHandlers() {
-        // Month navigation
-        $('#prev-month').off('click').on('click', () => {
+        // Only setup handlers once - they use event delegation so they persist
+        if (this.eventHandlersSetup) {
+            return;
+        }
+        
+        // Month navigation - using event delegation with namespaced events
+        $(document).on('click.calendar', '#prev-month', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             this.currentDate.setMonth(this.currentDate.getMonth() - 1);
             this.refreshCalendar();
         });
         
-        $('#next-month').off('click').on('click', () => {
+        $(document).on('click.calendar', '#next-month', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             this.currentDate.setMonth(this.currentDate.getMonth() + 1);
             this.refreshCalendar();
         });
         
-        $('#today-btn').off('click').on('click', () => {
+        $(document).on('click.calendar', '#today-btn', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             this.currentDate = new Date();
             this.refreshCalendar();
         });
         
         // Session click handlers
-        $(document).on('click', '.session-indicator', (e) => {
+        $(document).on('click.calendar', '.session-indicator', (e) => {
             e.stopPropagation();
             const sessionId = $(e.currentTarget).data('session-id');
             if (this.app.modules.sessionManagement) {
@@ -208,10 +220,13 @@ class CalendarModule {
         });
         
         // Day click handlers
-        $(document).on('click', '.calendar-day:not(.empty)', (e) => {
+        $(document).on('click.calendar', '.calendar-day:not(.empty)', (e) => {
             const date = $(e.currentTarget).data('date');
             this.showDayDetails(date);
         });
+        
+        this.eventHandlersSetup = true;
+        console.log('Calendar event handlers setup complete');
     }
     
     /**
@@ -221,10 +236,12 @@ class CalendarModule {
         try {
             const content = await this.render();
             $('#content-area').html(content);
-            this.setupEventHandlers();
             
             // Update month display
             $('#current-month').text(this.getCurrentMonthYear());
+            
+            // Event handlers are set up via event delegation, so they persist
+            // through DOM updates. No need to re-setup here.
             
         } catch (error) {
             console.error('Failed to refresh calendar:', error);

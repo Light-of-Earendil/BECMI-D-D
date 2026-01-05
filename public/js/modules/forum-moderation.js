@@ -17,47 +17,40 @@ class ForumModerationModule {
      * Render moderation panel
      */
     async render() {
-        try {
-            // Check if user is moderator (we'll need to check this)
-            // For now, we'll try to load the queue and handle errors
-            
-            const response = await this.apiClient.get('/api/forum/moderation/queue.php');
-            
-            if (response.status !== 'success') {
-                // User is not a moderator
-                return `<div class="card">
-                    <h2>Access Denied</h2>
-                    <p>You do not have permission to access the moderation panel.</p>
-                </div>`;
-            }
-            
-            this.isModerator = true;
-            const queue = response.data.queue || {};
-            const stats = response.data.stats || {};
-            
-            const html = this.renderModerationPanel(queue, stats);
-            
-            // Load categories list asynchronously after rendering
-            setTimeout(async () => {
-                const categoriesList = await this.renderCategoriesList();
-                $('#categories-list').html(categoriesList);
-            }, 100);
-            
-            return html;
-            
-        } catch (error) {
-            console.error('Moderation panel render error:', error);
-            if (error.message && error.message.includes('403')) {
-                return `<div class="card">
-                    <h2>Access Denied</h2>
-                    <p>You do not have permission to access the moderation panel.</p>
-                </div>`;
-            }
+        // Check if user is moderator using cached status from app state
+        const isModerator = this.app.state.user && this.app.state.user.is_moderator === true;
+        
+        if (!isModerator) {
+            // User is not a moderator - no need to make API call
             return `<div class="card">
-                <h2>Error</h2>
-                <p>Failed to load moderation panel: ${error.message}</p>
+                <h2>Access Denied</h2>
+                <p>You do not have permission to access the moderation panel.</p>
             </div>`;
         }
+        
+        // User is moderator - fetch moderation queue data
+        const response = await this.apiClient.get('/api/forum/moderation/queue.php');
+        
+        if (!response.success || response.status !== 'success') {
+            return `<div class="card">
+                <h2>Error</h2>
+                <p>Failed to load moderation queue: ${response.error || response.message || 'Unknown error'}</p>
+            </div>`;
+        }
+        
+        this.isModerator = true;
+        const queue = response.data.queue || {};
+        const stats = response.data.stats || {};
+        
+        const html = this.renderModerationPanel(queue, stats);
+        
+        // Load categories list asynchronously after rendering
+        setTimeout(async () => {
+            const categoriesList = await this.renderCategoriesList();
+            $('#categories-list').html(categoriesList);
+        }, 100);
+        
+        return html;
     }
     
     /**

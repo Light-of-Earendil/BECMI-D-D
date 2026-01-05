@@ -1,0 +1,436 @@
+// =====================================================
+// SOUNDBOARD & AUDIO SYSTEM STYLES - Wood/Parchment Theme
+// =====================================================
+
+.soundboard-section
+    margin: var(--space-6) 0
+    padding: var(--space-6)
+    background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
+    border-radius: var(--radius-md)
+    box-shadow: var(--shadow-wood)
+    position: relative
+    
+    &::before
+        content: ""
+        position: absolute
+        inset: 6px
+        border-radius: calc(var(--radius-md) - 6px)
+        box-shadow: inset 0 2px 0 var(--bevel-light), inset 0 -2px 0 rgba(0,0,0,0.55)
+        pointer-events: none
+    
+    h2
+        margin-bottom: var(--space-5)
+        font-family: "Cinzel", Georgia, serif
+        color: var(--text-strong)
+        font-size: 1.75rem
+        border-bottom: 2px solid var(--brass-500)
+        padding-bottom: var(--space-2)
+        position: relative
+        z-index: 1
+        
+        i
+            color: var(--brass-400)
+            margin-right: var(--space-2)
+
+.soundboard-container
+    width: 100%
+    position: relative
+    z-index: 1
+
+.soundboard-tabs
+    display: flex
+    gap: var(--space-2)
+    margin-bottom: var(--space-6)
+    border-bottom: 2px solid var(--wood-700)
+    padding-bottom: var(--space-2)
+    
+    .tab-btn
+        padding: var(--space-3) var(--space-5)
+        background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+        border: 2px solid var(--wood-600)
+        border-radius: var(--radius-sm)
+        cursor: pointer
+        font-family: "Cinzel", Georgia, serif
+        font-size: 1rem
+        font-weight: 600
+        color: var(--wood-900)
+        transition: all var(--t-fast) var(--ease)
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 4px rgba(0,0,0,0.2)
+        position: relative
+        
+        &::before
+            content: ""
+            position: absolute
+            inset: 2px
+            border-radius: calc(var(--radius-sm) - 2px)
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.3)
+            pointer-events: none
+        
+        i
+            margin-right: var(--space-2)
+            color: var(--brass-600)
+        
+        &:hover
+            background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+            border-color: var(--brass-500)
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 4px rgba(0,0,0,0.2), 0 0 0 2px rgba(202, 162, 74, 0.3)
+            transform: translateY(-1px)
+        
+        &:active
+            transform: translateY(0)
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.2)
+        
+        &.active
+            background: linear-gradient(180deg, var(--brass-400), var(--brass-500))
+            color: var(--text-ink)
+            border-color: var(--brass-600)
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 2px 6px rgba(0,0,0,0.3)
+            
+            i
+                color: var(--wood-900)
+
+.tab-content
+    display: none
+    
+    &.active
+        display: block
+
+.audio-controls-panel
+    .audio-upload-section,
+    .audio-player-controls,
+    .music-tracks-list,
+    .soundboard-upload-section,
+    .soundboard-volume-control,
+    .playlist-management
+        margin-bottom: var(--space-6)
+        padding: var(--space-5)
+        background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+        border-radius: var(--radius-md)
+        border: 2px solid var(--wood-600)
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 8px rgba(0,0,0,0.15)
+        position: relative
+        
+        &::before
+            content: ""
+            position: absolute
+            inset: 4px
+            border-radius: calc(var(--radius-md) - 4px)
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.2)
+            pointer-events: none
+        
+        h3
+            margin-bottom: var(--space-4)
+            font-family: "Cinzel", Georgia, serif
+            color: var(--wood-900)
+            font-size: 1.25rem
+            font-weight: 600
+            position: relative
+            z-index: 1
+            
+            i
+                color: var(--brass-600)
+                margin-right: var(--space-2)
+
+.control-buttons
+    display: flex
+    gap: var(--space-3)
+    align-items: center
+    margin-bottom: var(--space-4)
+    flex-wrap: wrap
+    
+    .btn
+        font-family: "Cinzel", Georgia, serif
+        font-weight: 600
+    
+    .checkbox-label
+        display: flex
+        align-items: center
+        gap: var(--space-2)
+        font-family: "Lora", Georgia, serif
+        color: var(--wood-900)
+        font-weight: 500
+        cursor: pointer
+        
+        input[type="checkbox"]
+            width: 18px
+            height: 18px
+            cursor: pointer
+            accent-color: var(--brass-500)
+
+.volume-controls,
+.soundboard-volume-control
+    display: flex
+    flex-direction: column
+    gap: var(--space-4)
+    
+    label
+        display: flex
+        align-items: center
+        gap: var(--space-3)
+        font-family: "Lora", Georgia, serif
+        font-weight: 600
+        color: var(--wood-900)
+        
+        span
+            min-width: 60px
+            text-align: right
+            font-family: "VT323", monospace
+            font-size: 1.1rem
+            color: var(--brass-600)
+    
+    input[type="range"]
+        flex: 1
+        max-width: 400px
+        height: 8px
+        background: linear-gradient(90deg, var(--wood-600), var(--wood-700))
+        border-radius: 4px
+        outline: none
+        cursor: pointer
+        
+        &::-webkit-slider-thumb
+            appearance: none
+            width: 20px
+            height: 20px
+            background: linear-gradient(180deg, var(--brass-400), var(--brass-600))
+            border: 2px solid var(--wood-800)
+            border-radius: 50%
+            cursor: pointer
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3)
+        
+        &::-moz-range-thumb
+            width: 20px
+            height: 20px
+            background: linear-gradient(180deg, var(--brass-400), var(--brass-600))
+            border: 2px solid var(--wood-800)
+            border-radius: 50%
+            cursor: pointer
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3)
+
+.current-track-info
+    background: linear-gradient(180deg, var(--parchment-100), var(--parchment-200))
+    border-left: 4px solid var(--brass-500)
+    padding: var(--space-4)
+    border-radius: var(--radius-sm)
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 4px rgba(0,0,0,0.1)
+    
+    strong
+        font-family: "Cinzel", Georgia, serif
+        color: var(--wood-900)
+        margin-right: var(--space-2)
+    
+    span
+        font-family: "Lora", Georgia, serif
+        color: var(--wood-800)
+        font-style: italic
+
+.track-item
+    display: flex
+    justify-content: space-between
+    align-items: center
+    padding: var(--space-4)
+    margin-bottom: var(--space-3)
+    background: linear-gradient(180deg, var(--parchment-100), var(--parchment-200))
+    border: 2px solid var(--wood-600)
+    border-radius: var(--radius-sm)
+    transition: all var(--t-fast) var(--ease)
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 4px rgba(0,0,0,0.1)
+    
+    &:hover
+        background: linear-gradient(180deg, var(--parchment-200), var(--parchment-300))
+        border-color: var(--brass-500)
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 6px rgba(0,0,0,0.15), 0 0 0 2px rgba(202, 162, 74, 0.2)
+        transform: translateY(-1px)
+    
+    .track-info
+        flex: 1
+        
+        strong
+            display: block
+            margin-bottom: var(--space-1)
+            font-family: "Cinzel", Georgia, serif
+            color: var(--wood-900)
+            font-size: 1.1rem
+        
+        .track-meta
+            font-size: 0.875rem
+            font-family: "Lora", Georgia, serif
+            color: var(--wood-700)
+    
+    .track-actions
+        display: flex
+        gap: var(--space-2)
+
+.soundboard-grid
+    display: grid
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr))
+    gap: var(--space-4)
+    margin-top: var(--space-4)
+
+.soundboard-button
+    display: flex
+    flex-direction: column
+    align-items: center
+    justify-content: center
+    padding: var(--space-6) var(--space-4)
+    background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
+    color: var(--text-strong)
+    border: 2px solid var(--wood-700)
+    border-radius: var(--radius-md)
+    cursor: pointer
+    transition: all var(--t-fast) var(--ease)
+    box-shadow: var(--shadow-wood)
+    position: relative
+    min-height: 120px
+    
+    &::before
+        content: ""
+        position: absolute
+        inset: 6px
+        border-radius: calc(var(--radius-md) - 6px)
+        box-shadow: inset 0 2px 0 var(--bevel-light), inset 0 -2px 0 rgba(0,0,0,0.55)
+        pointer-events: none
+    
+    &:hover
+        transform: translateY(-3px) scale(1.02)
+        border-color: var(--brass-500)
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4), 0 0 0 3px rgba(202, 162, 74, 0.3), inset 0 2px 0 var(--bevel-light), inset 0 -2px 0 rgba(0,0,0,0.55)
+        background: linear-gradient(180deg, var(--wood-500), var(--wood-700))
+    
+    &:active
+        transform: translateY(-1px) scale(1.01)
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3), inset 0 2px 0 var(--bevel-light), inset 0 -2px 0 rgba(0,0,0,0.55)
+    
+    i
+        font-size: 2.5rem
+        margin-bottom: var(--space-3)
+        color: var(--brass-400)
+        text-shadow: 0 0 8px rgba(202, 162, 74, 0.4)
+        position: relative
+        z-index: 1
+    
+    span
+        font-size: 0.875rem
+        text-align: center
+        font-weight: 600
+        font-family: "Cinzel", Georgia, serif
+        color: var(--text-soft)
+        position: relative
+        z-index: 1
+        line-height: 1.3
+
+.playlist-management
+    .playlist-create-section
+        margin-bottom: var(--space-6)
+        padding: var(--space-5)
+        background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+        border-radius: var(--radius-md)
+        border: 2px solid var(--wood-600)
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 8px rgba(0,0,0,0.15)
+        
+        h3
+            margin-bottom: var(--space-4)
+            font-family: "Cinzel", Georgia, serif
+            color: var(--wood-900)
+        
+        input
+            margin-right: var(--space-3)
+            font-family: "Lora", Georgia, serif
+
+.playlist-item
+    padding: var(--space-5)
+    margin-bottom: var(--space-4)
+    background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+    border: 2px solid var(--wood-600)
+    border-radius: var(--radius-md)
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 4px rgba(0,0,0,0.1)
+    transition: all var(--t-fast) var(--ease)
+    
+    &:hover
+        background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+        border-color: var(--brass-500)
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 6px rgba(0,0,0,0.15), 0 0 0 2px rgba(202, 162, 74, 0.2)
+    
+    .playlist-header
+        display: flex
+        justify-content: space-between
+        align-items: center
+        margin-bottom: var(--space-3)
+        
+        strong
+            font-family: "Cinzel", Georgia, serif
+            color: var(--wood-900)
+            font-size: 1.1rem
+        
+        .playlist-track-count
+            font-size: 0.875rem
+            font-family: "Lora", Georgia, serif
+            color: var(--wood-700)
+            font-style: italic
+    
+    .playlist-tracks-list
+        margin: 1rem 0
+        padding: 0.75rem
+        background: linear-gradient(180deg, var(--parchment-100), var(--parchment-200))
+        border-radius: 4px
+        max-height: 200px
+        overflow-y: auto
+        border: 1px solid var(--wood-600)
+        
+        .playlist-track-item
+            display: flex
+            align-items: center
+            gap: var(--space-2)
+            padding: var(--space-2) var(--space-3)
+            margin-bottom: var(--space-1)
+            background: linear-gradient(180deg, var(--parchment-200), var(--parchment-300))
+            border: 1px solid var(--wood-600)
+            border-radius: 4px
+            
+.track-order
+    font-family: "VT323", monospace
+    font-size: 1rem
+    color: var(--brass-600)
+    font-weight: bold
+    min-width: 30px
+        
+.track-name
+    flex: 1
+    font-family: "Lora", Georgia, serif
+    color: #2a1409
+    font-size: 0.95rem
+    font-weight: 600
+    text-shadow: none
+
+.playlist-actions
+    display: flex
+    gap: var(--space-2)
+        
+.track-select-item
+    padding: 0.5rem
+    margin-bottom: 0.25rem
+    border: 1px solid var(--wood-600)
+    border-radius: 4px
+    background: linear-gradient(180deg, var(--parchment-200), var(--parchment-300))
+    
+    &.in-playlist
+        opacity: 0.6
+        background: rgba(0,0,0,0.1)
+    
+    label
+        display: flex
+        align-items: center
+        gap: 0.5rem
+        cursor: pointer
+        
+        span
+            flex: 1
+            font-family: "Lora", Georgia, serif
+            color: var(--wood-900)
+        
+        .badge
+            background: var(--brass-500)
+            color: var(--wood-900)
+            padding: 0.25rem 0.5rem
+            border-radius: 4px
+            font-size: 0.75rem
+            font-weight: 600

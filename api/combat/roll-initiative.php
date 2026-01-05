@@ -123,9 +123,13 @@ try {
         );
         
         if ($firstInitiative) {
-            $db->insert(
+            $db->execute(
                 "INSERT INTO combat_current_turn (session_id, current_initiative_id, round_number)
-                 VALUES (?, ?, 1)",
+                 VALUES (?, ?, 1)
+                 ON DUPLICATE KEY UPDATE 
+                 current_initiative_id = VALUES(current_initiative_id),
+                 round_number = 1,
+                 updated_at = CURRENT_TIMESTAMP",
                 [$sessionId, $firstInitiative['initiative_id']]
             );
         }

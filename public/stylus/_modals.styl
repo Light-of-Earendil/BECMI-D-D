@@ -97,6 +97,31 @@
   &.active
     nav-link-active()
 
+.nav-dropdown
+  dropdown-base()
+
+  > .nav-link
+    nav-link-base()
+
+    i
+      margin-left: var(--space-1)
+      font-size: 0.75rem
+      transition: transform var(--t-fast) var(--ease)
+
+  &:hover > .nav-link i
+    transform: rotate(180deg)
+
+  .dropdown-menu
+    dropdown-menu()
+    left: 0
+    right: auto
+
+    li
+      list-style: none
+
+      a
+        dropdown-item()
+
 .user-menu
   position: relative
   cursor: pointer

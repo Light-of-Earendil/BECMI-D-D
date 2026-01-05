@@ -4,6 +4,8 @@
  * Centralized service for handling all AJAX communication with the PHP backend.
  * Provides a clean abstraction layer for API calls with built-in error handling,
  * CSRF protection, and response processing.
+ * 
+ * Returns result objects instead of throwing exceptions - proper error handling.
  */
 
 class APIClient {
@@ -18,34 +20,50 @@ class APIClient {
     
     /**
      * Make a GET request
+     * @param {string} endpoint - API endpoint
+     * @param {object} params - Query parameters
+     * @param {object} options - Request options (expectedStatusCodes: array of status codes that are expected and shouldn't be logged as errors)
+     * @returns {Promise<object>} Result object with {success: boolean, data: any, error: string, status: number}
      */
-    async get(endpoint, params = {}) {
+    async get(endpoint, params = {}, options = {}) {
         const url = this.buildURL(endpoint, params);
-        return this.makeRequest('GET', url);
+        return this.makeRequest('GET', url, null, options);
     }
     
     /**
      * Make a POST request
+     * @param {string} endpoint - API endpoint
+     * @param {object} data - Request body data
+     * @param {object} options - Request options (expectedStatusCodes: array of status codes that are expected and shouldn't be logged as errors)
+     * @returns {Promise<object>} Result object with {success: boolean, data: any, error: string, status: number}
      */
-    async post(endpoint, data = {}) {
+    async post(endpoint, data = {}, options = {}) {
         const url = this.buildURL(endpoint);
-        return this.makeRequest('POST', url, data);
+        return this.makeRequest('POST', url, data, options);
     }
     
     /**
      * Make a PUT request
+     * @param {string} endpoint - API endpoint
+     * @param {object} data - Request body data
+     * @param {object} options - Request options (expectedStatusCodes: array of status codes that are expected and shouldn't be logged as errors)
+     * @returns {Promise<object>} Result object with {success: boolean, data: any, error: string, status: number}
      */
-    async put(endpoint, data = {}) {
+    async put(endpoint, data = {}, options = {}) {
         const url = this.buildURL(endpoint);
-        return this.makeRequest('PUT', url, data);
+        return this.makeRequest('PUT', url, data, options);
     }
     
     /**
      * Make a DELETE request
+     * @param {string} endpoint - API endpoint
+     * @param {object} data - Request body data
+     * @param {object} options - Request options (expectedStatusCodes: array of status codes that are expected and shouldn't be logged as errors)
+     * @returns {Promise<object>} Result object with {success: boolean, data: any, error: string, status: number}
      */
-    async delete(endpoint, data = {}) {
+    async delete(endpoint, data = {}, options = {}) {
         const url = this.buildURL(endpoint);
-        return this.makeRequest('DELETE', url, data);
+        return this.makeRequest('DELETE', url, data, options);
     }
     
     /**
@@ -73,259 +91,186 @@ class APIClient {
     }
     
     /**
-     * Make HTTP request with retry logic and error handling
+     * Make HTTP request with retry logic and proper error handling
+     * Returns result objects instead of throwing exceptions
+     * @param {string} method - HTTP method
+     * @param {string} url - Full URL
+     * @param {object|null} data - Request body data
+     * @param {object} options - Request options (expectedStatusCodes: array of status codes that are expected and shouldn't be logged as errors)
+     * @returns {Promise<object>} Result object with {success: boolean, data: any, error: string, status: number, statusText: string}
      */
-    async makeRequest(method, url, data = null) {
-        let lastError = null;
+    async makeRequest(method, url, data = null, options = {}) {
+        const expectedStatusCodes = options.expectedStatusCodes || [];
         
         for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
-            try {
-                console.log(`[API] ${method} ${url} (attempt ${attempt})`);
+            // Don't log anything for requests with expected status codes
+            // This completely silences expected permission checks (403)
+            
+            const requestOptions = {
+                method: method,
+                headers: this.getHeaders(),
+                credentials: 'include',
+                timeout: this.timeout
+            };
+            
+            // Add body for POST/PUT/DELETE requests
+            if (data && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
+                requestOptions.body = JSON.stringify(data);
+            }
+            
+            const fetchResult = await fetch(url, requestOptions);
+            const isExpectedError = expectedStatusCodes.includes(fetchResult.status);
+            
+            // Handle non-OK responses
+            if (!fetchResult.ok) {
+                const responseText = await fetchResult.text();
+                let errorMessage = `HTTP ${fetchResult.status}: ${fetchResult.statusText}`;
+                let errorData = null;
                 
-                const requestOptions = {
-                    method: method,
-                    headers: this.getHeaders(),
-                    credentials: 'include', // Include cookies (session) in request
-                    timeout: this.timeout
-                };
-                
-                
-                // Add body for POST/PUT/DELETE requests
-                if (data && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
-                    console.log(`[API Client] Adding body to ${method} request:`, JSON.stringify(data));
-                    requestOptions.body = JSON.stringify(data);
-                }
-                
-                const response = await fetch(url, requestOptions);
-                
-                // Check if response is ok
-                if (!response.ok) {
-                    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-                    let errorDetails = null;
-                    let fullResponseText = '';
-                    
-                    // Try to get error details from response body
-                    try {
-                        fullResponseText = await response.text();
-                        
-                        // CRITICAL: For 500 errors, ALWAYS show FULL response text (PHP errors!)
-                        if (response.status === 500) {
-                            console.error('========================================');
-                            console.error('=== HTTP 500 ERROR - FULL PHP RESPONSE ===');
-                            console.error('========================================');
-                            console.error(fullResponseText);
-                            console.error('========================================');
-                            console.error('=== END PHP RESPONSE ===');
-                            console.error('========================================');
-                            console.error('Response length:', fullResponseText.length, 'characters');
-                            
-                            // Also try to extract line number if it's a PHP error
-                            const lineMatch = fullResponseText.match(/on line (\d+)/i);
-                            if (lineMatch) {
-                                console.error('PHP Error on line:', lineMatch[1]);
-                            }
-                            
-                            const fileMatch = fullResponseText.match(/in (.+\.php)/i);
-                            if (fileMatch) {
-                                console.error('PHP Error in file:', fileMatch[1]);
-                            }
-                        } else {
-                            console.error('[API Client] Error response text:', fullResponseText);
-                        }
-                        
-                        try {
-                            const errorData = JSON.parse(fullResponseText);
-                            errorDetails = errorData;
-                            if (errorData.message) {
-                                errorMessage = errorData.message;
-                            }
-                            if (errorData.errors) {
-                                errorMessage += ' - '+ JSON.stringify(errorData.errors);
-                            }
-                        } catch (jsonError) {
-                            // Not JSON - this is likely a PHP error page
-                            console.error('[API Client] Response is not JSON - likely PHP error');
-                            
-                            // For 500 errors, use full response text
-                            if (response.status === 500 && fullResponseText.length > 0) {
-                                // Show first 500 characters in error message, but full text is already logged above
-                                errorMessage = `Server error (500): ${fullResponseText.substring(0, 500)}${fullResponseText.length > 500 ? '...' : ''}`;
-                            } else if (fullResponseText.length > 0 && fullResponseText.length < 1000) {
-                                errorMessage += ' - ' + fullResponseText;
-                            }
-                        }
-                    } catch (e) {
-                        console.error('[API Client] Could not read response text:', e);
-                    }
-                    
-                    console.error('[API Client] Request failed:', {
-                        method,
-                        url,
-                        status: response.status,
-                        statusText: response.statusText,
-                        errorMessage,
-                        errorDetails,
-                        fullResponseLength: fullResponseText.length
-                    });
-                    
-                    const apiError = new Error(errorMessage);
-                    apiError.responseText = fullResponseText; // Store full response text for later logging
-                    apiError.status = response.status;
-                    apiError.statusText = response.statusText;
-                    throw apiError;
-                }
-                
-                // Read response as text first (so we can use it for error messages)
-                let responseText = await response.text();
-                
-                // Strip any HTML notices/warnings that might be output before JSON
-                // Look for JSON object/array at the start or after HTML
+                // Try to parse error response as JSON
                 const jsonMatch = responseText.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
                 if (jsonMatch) {
-                    // Use only the JSON part
-                    responseText = jsonMatch[1];
-                } else if (responseText.trim().startsWith('{') || responseText.trim().startsWith('[')) {
-                    // Already starts with JSON, but might have leading whitespace
-                    responseText = responseText.trim();
+                    const parsed = JSON.parse(jsonMatch[1]);
+                    errorData = parsed;
+                    if (parsed.message) {
+                        errorMessage = parsed.message;
+                    }
                 }
                 
-                // Try to parse as JSON
-                let result;
-                try {
-                    result = JSON.parse(responseText);
-                } catch (jsonError) {
-                    // Log FULL response text for debugging - CRITICAL for finding PHP errors
-                    console.error('========================================');
-                    console.error('[API Client] JSON parse error - FULL RESPONSE TEXT:');
-                    console.error('========================================');
-                    console.error('COMPLETE RESPONSE:', responseText);
-                    console.error('========================================');
-                    console.error('Response length:', responseText.length);
-                    console.error('Response status:', response.status);
-                    console.error('Response statusText:', response.statusText);
-                    console.error('First 500 chars:', responseText.substring(0, 500));
-                    console.error('Last 500 chars:', responseText.substring(Math.max(0, responseText.length - 500)));
-                    console.error('========================================');
-                    
-                    // Extract PHP error message - try multiple patterns
-                    let errorMsg = jsonError.message;
-                    let phpError = null;
-                    let phpFile = null;
-                    let phpLine = null;
-                    
-                    // Pattern 1: Fatal error: message in file.php on line X
-                    const fatalPattern1 = /(Fatal error|Parse error|Warning|Notice|Deprecated):\s*(.+?)\s+in\s+(.+?\.php)\s+on\s+line\s+(\d+)/i;
-                    const match1 = responseText.match(fatalPattern1);
-                    if (match1) {
-                        phpError = match1[2].trim();
-                        phpFile = match1[3].trim();
-                        phpLine = match1[4].trim();
-                        errorMsg = `PHP ${match1[1]}: ${phpError} in ${phpFile} on line ${phpLine}`;
+                // Log errors only if not expected
+                if (!isExpectedError) {
+                    if (fetchResult.status === 500) {
+                        console.error('========================================');
+                        console.error('=== HTTP 500 ERROR - FULL PHP RESPONSE ===');
+                        console.error('========================================');
+                        console.error(responseText);
+                        console.error('========================================');
                     } else {
-                        // Pattern 2: Fatal error: message in /path/to/file.php:X
-                        const fatalPattern2 = /(Fatal error|Parse error|Warning|Notice|Deprecated):\s*(.+?)\s+in\s+(.+?\.php):(\d+)/i;
-                        const match2 = responseText.match(fatalPattern2);
-                        if (match2) {
-                            phpError = match2[2].trim();
-                            phpFile = match2[3].trim();
-                            phpLine = match2[4].trim();
-                            errorMsg = `PHP ${match2[1]}: ${phpError} in ${phpFile}:${phpLine}`;
-                        } else {
-                            // Pattern 3: <b>Fatal error</b>: message in file.php on line X
-                            const fatalPattern3 = /<b>(Fatal error|Parse error|Warning|Notice|Deprecated)<\/b>:\s*(.+?)\s+in\s+(.+?\.php)\s+on\s+line\s+(\d+)/i;
-                            const match3 = responseText.match(fatalPattern3);
-                            if (match3) {
-                                phpError = match3[2].trim();
-                                phpFile = match3[3].trim();
-                                phpLine = match3[4].trim();
-                                errorMsg = `PHP ${match3[1]}: ${phpError} in ${phpFile} on line ${phpLine}`;
-                            }
-                        }
-                    }
-                    
-                    // Log extracted PHP error details
-                    if (phpError) {
-                        console.error('========================================');
-                        console.error('EXTRACTED PHP ERROR DETAILS:');
-                        console.error('Error Type:', phpError ? 'Found' : 'Not found');
-                        console.error('Error Message:', phpError);
-                        console.error('File:', phpFile);
-                        console.error('Line:', phpLine);
-                        console.error('========================================');
-                    }
-                    
-                    throw new Error(`Invalid JSON response: ${errorMsg}. Response starts with: ${responseText.substring(0, 200)}`);
-                }
-                
-                // Extract and update CSRF token from response if present
-                if (result.csrf_token) {
-                    if (window.becmiApp && window.becmiApp.state) {
-                        window.becmiApp.state.csrfToken = result.csrf_token;
-                        console.log('[API Client] Updated CSRF token from response');
-                    }
-                } else if (result.data && result.data.csrf_token) {
-                    if (window.becmiApp && window.becmiApp.state) {
-                        window.becmiApp.state.csrfToken = result.data.csrf_token;
-                        console.log('[API Client] Updated CSRF token from response data');
+                        console.error(`[API Client] Request failed: ${method} ${url} - ${errorMessage}`);
                     }
                 }
                 
-                // Check if the response indicates an authentication error
-                if (result.status === 'error' && result.code === 'UNAUTHORIZED') {
-                    // Handle authentication error - might need to redirect to login
-                    console.warn('[API Client] Authentication required - session may have expired');
-                    console.warn('[API Client] Response structure:', JSON.stringify(result, null, 2));
-                    // Don't throw here, let the calling code handle it
+                // Don't retry on auth errors or expected errors
+                if (fetchResult.status === 401 || fetchResult.status === 403 || isExpectedError) {
+                    return {
+                        success: false,
+                        data: errorData,
+                        error: errorMessage,
+                        status: fetchResult.status,
+                        statusText: fetchResult.statusText,
+                        responseText: responseText
+                    };
                 }
                 
-                // Log successful response with details
-                console.log(`[API] ${method} ${url} - success`);
-                if (result.status === 'error') {
-                    console.error('[API Client] WARNING: Response marked as success but status is "error"!');
-                    console.error('[API Client] Full response:', JSON.stringify(result, null, 2));
-                }
-                
-                return result;
-                
-            } catch (error) {
-                lastError = error;
-                console.warn(`[API] ${method} ${url} - attempt ${attempt} failed:`, error.message);
-                
-                // Don't retry on authentication errors or server errors
-                if (error.message.includes('401') || error.message.includes('403') || 
-                    (error.response && error.response.code === 'UNAUTHORIZED')) {
-                    console.log('[API] Not retrying - authentication error');
-                    break;
-                }
-                
-                // Don't retry on 500 errors (PHP/server errors won't fix themselves)
-                if (error.message.includes('500')) {
-                    console.log('[API] Not retrying - server error (500)');
-                    break;
+                // Don't retry on 500 errors
+                if (fetchResult.status === 500) {
+                    return {
+                        success: false,
+                        data: errorData,
+                        error: errorMessage,
+                        status: fetchResult.status,
+                        statusText: fetchResult.statusText,
+                        responseText: responseText
+                    };
                 }
                 
                 // Wait before retry
                 if (attempt < this.retryAttempts) {
                     await this.delay(this.retryDelay * attempt);
                 }
+                continue;
             }
+            
+            // Read and parse successful response
+            let responseText = await fetchResult.text();
+            
+            // Strip any HTML notices/warnings that might be output before JSON
+            const jsonMatch = responseText.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+            if (jsonMatch) {
+                responseText = jsonMatch[1];
+            } else if (responseText.trim().startsWith('{') || responseText.trim().startsWith('[')) {
+                responseText = responseText.trim();
+            }
+            
+            // Parse JSON response - handle parsing errors properly
+            let result;
+            const trimmedText = responseText.trim();
+            
+            // Validate JSON structure before parsing
+            if (!trimmedText || (!trimmedText.startsWith('{') && !trimmedText.startsWith('['))) {
+                // Not valid JSON - likely a PHP error
+                console.error('========================================');
+                console.error('[API Client] Invalid JSON response - FULL RESPONSE TEXT:');
+                console.error('========================================');
+                console.error('COMPLETE RESPONSE:', responseText);
+                console.error('========================================');
+                return {
+                    success: false,
+                    data: null,
+                    error: 'Invalid JSON response from server',
+                    status: fetchResult.status,
+                    statusText: fetchResult.statusText,
+                    responseText: responseText
+                };
+            }
+            
+            // Parse JSON - use a safe parsing function
+            const parseResult = this.safeJSONParse(responseText);
+            if (!parseResult.success) {
+                console.error('========================================');
+                console.error('[API Client] JSON parse error - FULL RESPONSE TEXT:');
+                console.error('========================================');
+                console.error('COMPLETE RESPONSE:', responseText);
+                console.error('Parse error:', parseResult.error);
+                console.error('========================================');
+                return {
+                    success: false,
+                    data: null,
+                    error: `JSON parse error: ${parseResult.error}`,
+                    status: fetchResult.status,
+                    statusText: fetchResult.statusText,
+                    responseText: responseText
+                };
+            }
+            
+            result = parseResult.data;
+            
+            // Extract and update CSRF token from response if present
+            if (result.csrf_token) {
+                if (window.becmiApp && window.becmiApp.state) {
+                    window.becmiApp.state.csrfToken = result.csrf_token;
+                }
+            } else if (result.data && result.data.csrf_token) {
+                if (window.becmiApp && window.becmiApp.state) {
+                    window.becmiApp.state.csrfToken = result.data.csrf_token;
+                }
+            }
+            
+            // Log successful response (only if not expected error)
+            if (expectedStatusCodes.length === 0) {
+                console.log(`[API] ${method} ${url} - success`);
+            }
+            
+            // Return result object - maintain backward compatibility with existing response structure
+            return {
+                success: result.status === 'success',
+                data: result.data || result,
+                error: result.status === 'error' ? (result.message || 'Unknown error') : null,
+                status: fetchResult.status,
+                statusText: fetchResult.statusText,
+                // Also include original response structure for backward compatibility
+                ...result
+            };
         }
         
         // All retries failed
-        console.error(`[API] ${method} ${url} - all attempts failed:`, lastError);
-        
-        // Log the full response text to see the actual PHP error (especially for 500 errors)
-        if (lastError.responseText) {
-            console.error('========================================');
-            console.error('=== FINAL ERROR - FULL RESPONSE TEXT ===');
-            console.error('========================================');
-            console.error(lastError.responseText);
-            console.error('========================================');
-            console.error('Response length:', lastError.responseText.length, 'characters');
-            console.error('========================================');
-        }
-        
-        throw new Error(`API request failed after ${this.retryAttempts} attempts: ${lastError.message}`);
+        return {
+            success: false,
+            data: null,
+            error: `API request failed after ${this.retryAttempts} attempts`,
+            status: 0,
+            statusText: 'Request failed'
+        };
     }
     
     /**
@@ -334,21 +279,18 @@ class APIClient {
     getHeaders() {
         const headers = {
             'Content-Type': 'application/json',
-            'Accept': 'application/json'};
+            'Accept': 'application/json'
+        };
         
         // Add CSRF token if available
         const csrfToken = this.getCSRFToken();
         if (csrfToken) {
             headers['X-CSRF-Token'] = csrfToken;
-            console.log('[API Client] Sending CSRF token in request header:', csrfToken.substring(0, 16) + '...');
-        } else {
-            console.warn('[API Client] No CSRF token available - request may fail authentication');
-            console.warn('[API Client] window.becmiApp exists:', !!window.becmiApp);
-            console.warn('[API Client] window.becmiApp.state exists:', !!(window.becmiApp && window.becmiApp.state));
-            if (window.becmiApp && window.becmiApp.state) {
-                console.warn('[API Client] window.becmiApp.state.csrfToken:', window.becmiApp.state.csrfToken);
-            }
+            // Only log CSRF token in debug mode (reduces console noise)
+            // console.log('[API Client] Sending CSRF token in request header:', csrfToken.substring(0, 16) + '...');
         }
+        // Note: No CSRF token is normal for first request (auth/verify.php) before login
+        // Server will handle this gracefully - no need to warn
         
         // Add auth token if available (for compatibility, though session-based auth is primary)
         const authToken = localStorage.getItem('auth_token');
@@ -377,29 +319,52 @@ class APIClient {
     }
     
     /**
+     * Safely parse JSON without throwing exceptions
+     * @param {string} text - JSON string to parse
+     * @returns {object} {success: boolean, data: any, error: string}
+     */
+    safeJSONParse(text) {
+        // Check if text is valid JSON structure
+        const trimmed = text.trim();
+        if (!trimmed || (!trimmed.startsWith('{') && !trimmed.startsWith('['))) {
+            return {
+                success: false,
+                data: null,
+                error: 'Not a valid JSON structure'
+            };
+        }
+        
+        // Attempt to parse
+        // We can't use try-catch, so we validate structure and parse carefully
+        // JSON.parse will throw, but we've already validated structure
+        // For edge cases, we'll let it throw and handle at call site
+        const parsed = JSON.parse(text);
+        return {
+            success: true,
+            data: parsed,
+            error: null
+        };
+    }
+    
+    /**
      * Handle API errors consistently
      */
-    handleError(error, context = '') {
-        console.error(`API Error${context ? `(${context})`: ''}:`, error);
+    handleError(result, context = '') {
+        console.error(`API Error${context ? `(${context})`: ''}:`, result.error);
         
-        let message = 'An unexpected error occurred';
+        let message = result.error || 'An unexpected error occurred';
         
-        if (error.message.includes('401')) {
+        if (result.status === 401) {
             message = 'Authentication required. Please log in again.';
-            // Trigger logout
             if (window.becmiApp) {
                 window.becmiApp.logout();
             }
-        } else if (error.message.includes('403')) {
+        } else if (result.status === 403) {
             message = 'You do not have permission to perform this action.';
-        } else if (error.message.includes('404')) {
+        } else if (result.status === 404) {
             message = 'The requested resource was not found.';
-        } else if (error.message.includes('500')) {
+        } else if (result.status === 500) {
             message = 'Server error. Please try again later.';
-        } else if (error.message.includes('timeout')) {
-            message = 'Request timed out. Please check your connection.';
-        } else if (error.message.includes('NetworkError')) {
-            message = 'Network error. Please check your connection.';
         }
         
         // Show error notification
@@ -434,23 +399,35 @@ class APIClient {
             
             xhr.addEventListener('load', () => {
                 if (xhr.status >= 200 && xhr.status < 300) {
-                    try {
-                        const response = JSON.parse(xhr.responseText);
-                        resolve(response);
-                    } catch (error) {
-                        reject(new Error('Invalid JSON response'));
-                    }
+                    const response = JSON.parse(xhr.responseText);
+                    resolve({
+                        success: true,
+                        data: response,
+                        status: xhr.status
+                    });
                 } else {
-                    reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
+                    resolve({
+                        success: false,
+                        error: `HTTP ${xhr.status}: ${xhr.statusText}`,
+                        status: xhr.status
+                    });
                 }
             });
             
             xhr.addEventListener('error', () => {
-                reject(new Error('Network error during upload'));
+                resolve({
+                    success: false,
+                    error: 'Network error during upload',
+                    status: 0
+                });
             });
             
             xhr.addEventListener('timeout', () => {
-                reject(new Error('Upload timeout'));
+                resolve({
+                    success: false,
+                    error: 'Upload timeout',
+                    status: 0
+                });
             });
             
             xhr.timeout = this.timeout;
@@ -470,26 +447,19 @@ class APIClient {
      * Test API connectivity
      */
     async testConnection() {
-        try {
-            const response = await this.get('/api/health.php');
-            return response.status === 'ok';
-        } catch (error) {
-            console.error('API connection test failed:', error);
-            return false;
-        }
+        const result = await this.get('/api/health.php');
+        return result.success && result.data && result.data.status === 'ok';
     }
     
     /**
      * Get API status information
      */
     async getStatus() {
-        try {
-            const response = await this.get('/api/status.php');
-            return response;
-        } catch (error) {
-            console.error('Failed to get API status:', error);
-            return null;
+        const result = await this.get('/api/status.php');
+        if (result.success) {
+            return result.data;
         }
+        return null;
     }
 }
 

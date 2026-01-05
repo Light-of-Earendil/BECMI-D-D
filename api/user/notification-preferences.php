@@ -6,6 +6,15 @@
  * POST: Update user's notification preferences
  */
 
+// Disable output compression and clear buffers to prevent JSON parse errors
+if (function_exists('apache_setenv')) {
+    @apache_setenv('no-gzip', 1);
+}
+@ini_set('zlib.output_compression', 0);
+while (ob_get_level()) {
+    ob_end_clean();
+}
+
 require_once '../../app/core/database.php';
 require_once '../../app/core/security.php';
 
@@ -13,7 +22,7 @@ require_once '../../app/core/security.php';
 Security::init();
 
 // Set content type
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 
 try {
     // Require authentication
@@ -60,7 +69,7 @@ try {
         
     } else if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Update preferences
-        $data = Security::getJsonInput();
+        $data = Security::validateJSONInput();
         
         // Build UPDATE query for provided fields
         $updates = [];
@@ -78,6 +87,9 @@ try {
         ];
         
         // SECURITY: Use explicit whitelist and backticks for field names
+        // Put userId first for INSERT, then field values for UPDATE
+        $params = [$userId];
+        
         foreach ($allowedFields as $field) {
             if (isset($data[$field])) {
                 // Use backticks for safety and explicit field validation
@@ -89,8 +101,6 @@ try {
         if (empty($updates)) {
             Security::sendErrorResponse('No valid preferences provided', 400);
         }
-        
-        $params[] = $userId;
         
         $db->execute(
             "INSERT INTO user_notification_preferences (user_id) VALUES (?)

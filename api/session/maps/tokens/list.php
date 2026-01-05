@@ -54,6 +54,8 @@ try {
             t.token_id,
             t.map_id,
             t.character_id,
+            t.monster_instance_id,
+            t.initiative_id,
             t.user_id,
             t.token_type,
             t.x_position,
@@ -65,9 +67,11 @@ try {
             t.created_at,
             t.updated_at,
             c.character_name,
+            mi.instance_name as monster_instance_name,
             u.username
          FROM session_map_tokens t
          LEFT JOIN characters c ON t.character_id = c.character_id
+         LEFT JOIN monster_instances mi ON t.monster_instance_id = mi.instance_id
          JOIN users u ON t.user_id = u.user_id
          WHERE t.map_id = ? AND t.is_visible = TRUE
          ORDER BY t.created_at ASC",
@@ -80,6 +84,9 @@ try {
             'map_id' => (int) $token['map_id'],
             'character_id' => $token['character_id'] ? (int) $token['character_id'] : null,
             'character_name' => $token['character_name'] ? $token['character_name'] : null,
+            'monster_instance_id' => $token['monster_instance_id'] ? (int) $token['monster_instance_id'] : null,
+            'monster_instance_name' => $token['monster_instance_name'] ? $token['monster_instance_name'] : null,
+            'initiative_id' => $token['initiative_id'] ? (int) $token['initiative_id'] : null,
             'user_id' => (int) $token['user_id'],
             'username' => $token['username'] ? $token['username'] : '',
             'token_type' => $token['token_type'] ? $token['token_type'] : 'marker',

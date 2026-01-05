@@ -297,33 +297,92 @@ try {
         );
     }
     
-    // Update game time based on travel time
+    // Update game time based on travel time (on campaign level)
     $gameTime = null;
     try {
-        // Get current game time from map
-        $currentGameTime = $db->selectOne(
-            "SELECT game_time FROM hex_maps WHERE map_id = ?",
+        // Get campaign_id from map (either directly or via session)
+        $mapWithCampaign = $db->selectOne(
+            "SELECT hm.campaign_id, gs.campaign_id as session_campaign_id
+             FROM hex_maps hm
+             LEFT JOIN game_sessions gs ON hm.session_id = gs.session_id
+             WHERE hm.map_id = ?",
             [$mapId]
         );
         
-        if ($currentGameTime && $currentGameTime['game_time']) {
-            // Parse existing game time
-            $gameTime = new DateTime($currentGameTime['game_time']);
+        $campaignId = $mapWithCampaign['campaign_id'] ?? $mapWithCampaign['session_campaign_id'] ?? null;
+        
+        if ($campaignId) {
+            // Get current game time from campaign (new format: seconds since start)
+            try {
+                $campaignTime = $db->selectOne(
+                    "SELECT campaign_start_datetime, game_time_seconds 
+                     FROM campaigns 
+                     WHERE campaign_id = ?",
+                    [$campaignId]
+                );
+                
+                if ($campaignTime) {
+                    $startDatetime = $campaignTime['campaign_start_datetime'];
+                    $currentSeconds = (int) ($campaignTime['game_time_seconds'] ?? 0);
+                    
+                    // Calculate travel time in seconds
+                    $travelSeconds = 0;
+                    if ($travelTimeHours > 0) {
+                        $travelSeconds = round($travelTimeHours * 3600);
+                    }
+                    
+                    // Add travel time to current seconds
+                    $newSeconds = $currentSeconds + $travelSeconds;
+                    
+                    // Update game time in campaign
+                    $db->update(
+                        "UPDATE campaigns SET game_time_seconds = ? WHERE campaign_id = ?",
+                        [$newSeconds, $campaignId]
+                    );
+                    
+                    // Calculate current game world datetime for response
+                    if ($startDatetime) {
+                        $startDate = new DateTime($startDatetime);
+                        $gameTime = clone $startDate;
+                        $gameTime->modify('+' . $newSeconds . ' seconds');
+                    } else {
+                        $gameTime = null;
+                    }
+                } else {
+                    $gameTime = null;
+                }
+            } catch (Exception $e) {
+                // If new columns don't exist, try old format for backward compatibility
+                if (strpos($e->getMessage(), 'campaign_start_datetime') !== false || 
+                    strpos($e->getMessage(), 'game_time_seconds') !== false || 
+                    strpos($e->getMessage(), 'Unknown column') !== false) {
+                    // Fallback to old game_time format
+                    $currentGameTime = $db->selectOne(
+                        "SELECT game_time FROM campaigns WHERE campaign_id = ?",
+                        [$campaignId]
+                    );
+                    
+                    if ($currentGameTime && $currentGameTime['game_time']) {
+                        $gameTime = new DateTime($currentGameTime['game_time']);
+                        if ($travelTimeHours > 0) {
+                            $gameTime->modify('+' . round($travelTimeHours * 3600) . ' seconds');
+                        }
+                        $db->update(
+                            "UPDATE campaigns SET game_time = ? WHERE campaign_id = ?",
+                            [$gameTime->format('Y-m-d H:i:s'), $campaignId]
+                        );
+                    } else {
+                        $gameTime = null;
+                    }
+                } else {
+                    throw $e;
+                }
+            }
         } else {
-            // Initialize game time to current date/time if not set
-            $gameTime = new DateTime();
+            // No campaign linked - can't track game time
+            error_log('Warning: Map is not linked to a campaign, cannot update game time');
+            $gameTime = null;
         }
-        
-        // Add travel time (convert hours to seconds)
-        if ($travelTimeHours > 0) {
-            $gameTime->modify('+' . round($travelTimeHours * 3600) . ' seconds');
-        }
-        
-        // Update game time in database
-        $db->update(
-            "UPDATE hex_maps SET game_time = ? WHERE map_id = ?",
-            [$gameTime->format('Y-m-d H:i:s'), $mapId]
-        );
     } catch (Exception $e) {
         // If game_time column doesn't exist yet, log warning but don't fail
         error_log('Warning: Could not update game time: ' . $e->getMessage());

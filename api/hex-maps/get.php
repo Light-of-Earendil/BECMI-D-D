@@ -104,29 +104,64 @@ try {
     $db = getDB();
     
     // Get map and verify access
-    // Try to include game_time column, but handle gracefully if it doesn't exist yet
+    // Get game_time from campaign instead of map
     try {
         $map = $db->selectOne(
             "SELECT hm.map_id, hm.map_name, hm.map_description, hm.created_by_user_id,
-                    hm.session_id, hm.width_hexes, hm.height_hexes, hm.hex_size_pixels,
-                    hm.background_image_url, hm.is_active, hm.game_time, hm.scale, hm.created_at, hm.updated_at,
+                    hm.campaign_id, hm.session_id, hm.width_hexes, hm.height_hexes, hm.hex_size_pixels,
+                    hm.background_image_url, hm.is_active, hm.scale, hm.created_at, hm.updated_at,
                     u.username as created_by_username,
                     gs.session_title as session_title,
-                    gs.dm_user_id as session_dm_user_id
+                    gs.dm_user_id as session_dm_user_id,
+                    gs.campaign_id as session_campaign_id,
+                    c.game_time as campaign_game_time
              FROM hex_maps hm
              LEFT JOIN users u ON hm.created_by_user_id = u.user_id
              LEFT JOIN game_sessions gs ON hm.session_id = gs.session_id
+             LEFT JOIN campaigns c ON COALESCE(hm.campaign_id, gs.campaign_id) = c.campaign_id
              WHERE hm.map_id = ?",
             [$mapId]
         );
+        
+        // Use campaign game_time if available
+        if ($map && isset($map['campaign_game_time'])) {
+            $map['game_time'] = $map['campaign_game_time'];
+        } else {
+            $map['game_time'] = null;
+        }
     } catch (Exception $e) {
-        // If game_time or scale column doesn't exist yet, select without them
-        if (strpos($e->getMessage(), 'game_time') !== false || strpos($e->getMessage(), 'scale') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
+        // If scale or campaign_id columns don't exist yet, try simpler query
+        if (strpos($e->getMessage(), 'scale') !== false || strpos($e->getMessage(), 'campaign_id') !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
             try {
                 $map = $db->selectOne(
                     "SELECT hm.map_id, hm.map_name, hm.map_description, hm.created_by_user_id,
                             hm.session_id, hm.width_hexes, hm.height_hexes, hm.hex_size_pixels,
-                            hm.background_image_url, hm.is_active, hm.game_time, hm.created_at, hm.updated_at,
+                            hm.background_image_url, hm.is_active, hm.created_at, hm.updated_at,
+                            u.username as created_by_username,
+                            gs.session_title as session_title,
+                            gs.dm_user_id as session_dm_user_id,
+                            gs.campaign_id as session_campaign_id,
+                            c.game_time as campaign_game_time
+                     FROM hex_maps hm
+                     LEFT JOIN users u ON hm.created_by_user_id = u.user_id
+                     LEFT JOIN game_sessions gs ON hm.session_id = gs.session_id
+                     LEFT JOIN campaigns c ON gs.campaign_id = c.campaign_id
+                     WHERE hm.map_id = ?",
+                    [$mapId]
+                );
+                
+                if ($map && isset($map['campaign_game_time'])) {
+                    $map['game_time'] = $map['campaign_game_time'];
+                } else {
+                    $map['game_time'] = null;
+                }
+                $map['scale'] = null;
+            } catch (Exception $e2) {
+                // Fallback to basic query
+                $map = $db->selectOne(
+                    "SELECT hm.map_id, hm.map_name, hm.map_description, hm.created_by_user_id,
+                            hm.session_id, hm.width_hexes, hm.height_hexes, hm.hex_size_pixels,
+                            hm.background_image_url, hm.is_active, hm.created_at, hm.updated_at,
                             u.username as created_by_username,
                             gs.session_title as session_title,
                             gs.dm_user_id as session_dm_user_id
@@ -136,34 +171,8 @@ try {
                      WHERE hm.map_id = ?",
                     [$mapId]
                 );
-                // Set missing fields to null if columns don't exist
-                if (strpos($e->getMessage(), 'game_time') !== false) {
-                    $map['game_time'] = null;
-                }
-                if (strpos($e->getMessage(), 'scale') !== false) {
-                    $map['scale'] = null;
-                }
-            } catch (Exception $e2) {
-                // If both game_time and scale don't exist, try without both
-                if (strpos($e2->getMessage(), 'game_time') !== false || strpos($e2->getMessage(), 'scale') !== false || strpos($e2->getMessage(), 'Unknown column') !== false) {
-                    $map = $db->selectOne(
-                        "SELECT hm.map_id, hm.map_name, hm.map_description, hm.created_by_user_id,
-                                hm.session_id, hm.width_hexes, hm.height_hexes, hm.hex_size_pixels,
-                                hm.background_image_url, hm.is_active, hm.created_at, hm.updated_at,
-                                u.username as created_by_username,
-                                gs.session_title as session_title,
-                                gs.dm_user_id as session_dm_user_id
-                         FROM hex_maps hm
-                         LEFT JOIN users u ON hm.created_by_user_id = u.user_id
-                         LEFT JOIN game_sessions gs ON hm.session_id = gs.session_id
-                         WHERE hm.map_id = ?",
-                        [$mapId]
-                    );
-                    $map['game_time'] = null;
-                    $map['scale'] = null;
-                } else {
-                    throw $e2;
-                }
+                $map['game_time'] = null;
+                $map['scale'] = null;
             }
         } else {
             throw $e;
@@ -219,11 +228,39 @@ try {
         'hex_size_pixels' => (int) $map['hex_size_pixels'],
         'background_image_url' => $map['background_image_url'],
         'is_active' => (bool) $map['is_active'],
-        'game_time' => isset($map['game_time']) ? $map['game_time'] : null,
+        'game_time' => isset($map['game_time']) ? $map['game_time'] : null, // For backward compatibility
+        'campaign_game_time_seconds' => null, // Will be set below if campaign exists
+        'current_game_datetime' => null, // Will be set below if campaign exists
         'scale' => isset($map['scale']) && $map['scale'] !== null ? (float) $map['scale'] : null,
         'created_at' => $map['created_at'],
         'updated_at' => $map['updated_at']
     ];
+    
+    // If campaign exists, get game time from campaign
+    $campaignId = $map['campaign_id'] ?? $map['session_campaign_id'] ?? null;
+    if ($campaignId) {
+        try {
+            $campaignTime = $db->selectOne(
+                "SELECT campaign_start_datetime, game_time_seconds 
+                 FROM campaigns 
+                 WHERE campaign_id = ?",
+                [$campaignId]
+            );
+            
+            if ($campaignTime && $campaignTime['campaign_start_datetime']) {
+                $mapData['campaign_game_time_seconds'] = (int) ($campaignTime['game_time_seconds'] ?? 0);
+                
+                // Calculate current game world datetime
+                $startDate = new DateTime($campaignTime['campaign_start_datetime']);
+                $currentGameDatetime = clone $startDate;
+                $currentGameDatetime->modify('+' . (int) ($campaignTime['game_time_seconds'] ?? 0) . ' seconds');
+                $mapData['current_game_datetime'] = $currentGameDatetime->format('Y-m-d H:i:s');
+                $mapData['game_time'] = $mapData['current_game_datetime']; // For backward compatibility
+            }
+        } catch (Exception $e) {
+            // If columns don't exist, just continue without campaign game time
+        }
+    }
     
     $response = ['map' => $mapData];
     

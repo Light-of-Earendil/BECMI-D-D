@@ -97,7 +97,7 @@ try {
     $session = $db->selectOne(
         "SELECT session_id, dm_user_id, session_title, session_description,
                 meet_link, session_datetime, duration_minutes, status, max_players,
-                created_at, updated_at
+                campaign_id, created_at, updated_at
          FROM game_sessions
          WHERE session_id = ?",
         [$sessionId]
@@ -437,6 +437,7 @@ try {
             'duration_minutes' => (int) $session['duration_minutes'],
             'status' => $session['status'],
             'max_players' => (int) $session['max_players'],
+            'campaign_id' => $session['campaign_id'] ? (int) $session['campaign_id'] : null,
             'created_at' => $session['created_at'],
             'updated_at' => $session['updated_at']
         ],

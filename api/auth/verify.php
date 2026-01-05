@@ -42,9 +42,9 @@ try {
     // Get database connection
     $db = getDB();
     
-    // Get user information
+    // Get user information including moderator status
     $user = $db->selectOne(
-        "SELECT user_id, username, email, first_name, last_name, created_at, last_login, is_active FROM users WHERE user_id = ?",
+        "SELECT user_id, username, email, first_name, last_name, created_at, last_login, is_active, is_moderator FROM users WHERE user_id = ?",
         [$userId]
     );
     
@@ -77,7 +77,8 @@ try {
             'first_name' => $user['first_name'],
             'last_name' => $user['last_name'],
             'created_at' => $user['created_at'],
-            'last_login' => $user['last_login']
+            'last_login' => $user['last_login'],
+            'is_moderator' => (bool) ($user['is_moderator'] ?? false)
         ],
         'csrf_token' => Security::getCSRFToken(),
         'session_expires' => $session['expires_at'] ?? null
