@@ -16,15 +16,13 @@ class CharacterSheetModule {
     
     /**
      * Escape HTML to prevent XSS
+     * @deprecated Use global escapeHtml() function from utils.js instead
      * 
      * @param {string} text - Text to escape
      * @returns {string} Escaped text
      */
     escapeHtml(text) {
-        if (!text) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return escapeHtml(text);
     }
     
     /**

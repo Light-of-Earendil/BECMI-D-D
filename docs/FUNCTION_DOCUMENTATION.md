@@ -2,7 +2,7 @@
 
 This document provides comprehensive documentation for all JavaScript and PHP functions in the BECMI VTT system.
 
-**Last Updated:** 2025-01-XX  
+**Last Updated:** 2026-01-06  
 **Documentation Standard:** JSDoc (JavaScript) / PHPDoc (PHP)
 
 ---
@@ -4556,6 +4556,339 @@ private function sendEmail($to, $subject, $body)
 **Headers:**
 - From: BECMI Manager <no-reply@becmi.snilld-api.dk>
 - Content-Type: text/html; charset=UTF-8
+
+---
+
+## PHP Core Classes
+
+### Database Class
+
+**File:** `app/core/database.php`  
+**Class:** `Database`  
+**Purpose:** Singleton database connection manager with type-safe query methods.
+
+**Last Updated:** 2026-01-06 (Type declarations added)
+
+#### getInstance()
+
+```php
+public static function getInstance(): Database
+```
+
+**Description:** Get singleton database instance.
+
+**Parameters:** None
+
+**Returns:** `Database` - Database instance
+
+**Called From:** `getDB()` helper function
+
+---
+
+#### getConnection()
+
+```php
+public function getConnection(): PDO
+```
+
+**Description:** Get PDO connection object.
+
+**Parameters:** None
+
+**Returns:** `PDO` - PDO connection
+
+**Side Effects:** Creates connection if not already connected
+
+---
+
+#### execute(sql, params)
+
+```php
+public function execute(string $sql, array $params = []): PDOStatement
+```
+
+**Description:** Execute a prepared statement.
+
+**Parameters:**
+- `$sql` (string) - SQL query with placeholders
+- `$params` (array) - Query parameters
+
+**Returns:** `PDOStatement` - Prepared statement result
+
+**Throws:** `Exception` - If query fails
+
+**Security:** Uses PDO prepared statements with `ATTR_EMULATE_PREPARES => false`
+
+**Called From:** All query methods (select, insert, update, delete)
+
+---
+
+#### select(sql, params)
+
+```php
+public function select(string $sql, array $params = []): array
+```
+
+**Description:** Execute SELECT query and return all results.
+
+**Parameters:**
+- `$sql` (string) - SELECT query
+- `$params` (array) - Query parameters
+
+**Returns:** `array` - Array of result rows
+
+**Example:**
+```php
+$characters = $db->select(
+    "SELECT character_id, character_name, level FROM characters WHERE user_id = ?",
+    [$userId]
+);
+```
+
+---
+
+#### selectOne(sql, params)
+
+```php
+public function selectOne(string $sql, array $params = []): ?array
+```
+
+**Description:** Execute SELECT query and return single row.
+
+**Parameters:**
+- `$sql` (string) - SELECT query
+- `$params` (array) - Query parameters
+
+**Returns:** `array|null` - Single row or null if not found
+
+**Example:**
+```php
+$user = $db->selectOne(
+    "SELECT user_id, username, email FROM users WHERE user_id = ?",
+    [$userId]
+);
+```
+
+---
+
+#### insert(sql, params)
+
+```php
+public function insert(string $sql, array $params = []): string|int
+```
+
+**Description:** Execute INSERT query and return last insert ID.
+
+**Parameters:**
+- `$sql` (string) - INSERT query
+- `$params` (array) - Query parameters
+
+**Returns:** `string|int` - Last insert ID
+
+**Example:**
+```php
+$characterId = $db->insert(
+    "INSERT INTO characters (user_id, character_name, class) VALUES (?, ?, ?)",
+    [$userId, $name, $class]
+);
+```
+
+---
+
+#### update(sql, params)
+
+```php
+public function update(string $sql, array $params = []): int
+```
+
+**Description:** Execute UPDATE query and return affected rows.
+
+**Parameters:**
+- `$sql` (string) - UPDATE query
+- `$params` (array) - Query parameters
+
+**Returns:** `int` - Number of affected rows
+
+---
+
+#### delete(sql, params)
+
+```php
+public function delete(string $sql, array $params = []): int
+```
+
+**Description:** Execute DELETE query and return affected rows.
+
+**Parameters:**
+- `$sql` (string) - DELETE query
+- `$params` (array) - Query parameters
+
+**Returns:** `int` - Number of affected rows
+
+---
+
+#### beginTransaction()
+
+```php
+public function beginTransaction(): bool
+```
+
+**Description:** Begin a database transaction.
+
+**Parameters:** None
+
+**Returns:** `bool` - True on success
+
+**Throws:** `Exception` - If transaction fails to start
+
+**Error Handling:** Logs error and throws exception on failure
+
+**Called From:** Multi-step operations (character creation, monster instance creation)
+
+---
+
+#### commit()
+
+```php
+public function commit(): bool
+```
+
+**Description:** Commit current transaction.
+
+**Parameters:** None
+
+**Returns:** `bool` - True on success
+
+---
+
+#### rollback()
+
+```php
+public function rollback(): bool
+```
+
+**Description:** Rollback current transaction.
+
+**Parameters:** None
+
+**Returns:** `bool` - True on success
+
+---
+
+#### Helper Function: getDB()
+
+```php
+function getDB(): Database
+```
+
+**Description:** Helper function to get database instance.
+
+**Parameters:** None
+
+**Returns:** `Database` - Database instance
+
+**Usage:**
+```php
+$db = getDB();
+$user = $db->selectOne("SELECT * FROM users WHERE user_id = ?", [$userId]);
+```
+
+---
+
+### Constants
+
+**File:** `app/core/constants.php`  
+**Purpose:** Centralized application constants to replace magic numbers.
+
+**Last Updated:** 2026-01-06
+
+#### Constants Defined
+
+- `MAX_FILE_SIZE` (int) - 5MB file upload limit (5 * 1024 * 1024)
+- `RATE_LIMIT_ATTEMPTS` (int) - Maximum login attempts (15)
+- `RATE_LIMIT_WINDOW` (int) - Rate limit time window in seconds (300 = 5 minutes)
+- `PAGINATION_DEFAULT_LIMIT` (int) - Default pagination limit (20)
+- `PAGINATION_MAX_LIMIT` (int) - Maximum pagination limit (100)
+- `SESSION_TIMEOUT` (int) - Session timeout in seconds (1800 = 30 minutes)
+- `MAX_BULK_CREATE_COUNT` (int) - Maximum bulk creation count (50)
+
+**Usage:**
+```php
+require_once '../../app/core/constants.php';
+$maxSize = MAX_FILE_SIZE;
+if (!Security::checkRateLimit($key, RATE_LIMIT_ATTEMPTS, RATE_LIMIT_WINDOW)) {
+    // Rate limit exceeded
+}
+```
+
+**Files Using Constants:**
+- `api/forum/posts/upload-image.php` - Uses `MAX_FILE_SIZE`
+- `api/auth/login.php` - Uses `RATE_LIMIT_ATTEMPTS`, `RATE_LIMIT_WINDOW`
+- `api/monsters/create-instance.php` - Uses `MAX_BULK_CREATE_COUNT`
+
+---
+
+## JavaScript Core Utilities
+
+### Utils Module
+
+**File:** `public/js/core/utils.js`  
+**Purpose:** Centralized utility functions used across the application.
+
+**Last Updated:** 2026-01-06
+
+#### escapeHtml(text)
+
+```javascript
+function escapeHtml(text)
+```
+
+**Description:** Escape HTML to prevent XSS attacks.
+
+**Parameters:**
+- `text` (string) - Text to escape
+
+**Returns:** `string` - Escaped HTML-safe text
+
+**Example:**
+```javascript
+const safeText = escapeHtml(userInput);
+$('#content').html(safeText);
+```
+
+**Security:** Prevents XSS by converting special characters to HTML entities
+
+**Used By:** All JavaScript modules (via global function)
+
+**Replaces:** Duplicated `escapeHtml()` methods in 10+ modules
+
+---
+
+#### formatRelativeTime(dateString)
+
+```javascript
+function formatRelativeTime(dateString)
+```
+
+**Description:** Format date as relative time (e.g., "2 hours ago").
+
+**Parameters:**
+- `dateString` (string) - ISO date string
+
+**Returns:** `string` - Formatted relative time
+
+**Example:**
+```javascript
+const timeAgo = formatRelativeTime('2026-01-06T10:00:00Z');
+// Returns: "2 hours ago" or "just now" or date string
+```
+
+**Output Format:**
+- < 60 seconds: "just now"
+- < 60 minutes: "X minute(s) ago"
+- < 24 hours: "X hour(s) ago"
+- < 7 days: "X day(s) ago"
+- Otherwise: Formatted date string
 
 ---
 

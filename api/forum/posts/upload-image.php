@@ -95,8 +95,8 @@ try {
     $postMaxSize = ini_get('post_max_size');
     
     // Validate file size (5MB max)
-    // SECURITY: Use named constant instead of magic number
-    $maxSize = 5 * 1024 * 1024; // 5MB - MAX_FILE_SIZE constant
+    require_once '../../app/core/constants.php';
+    $maxSize = MAX_FILE_SIZE;
     if ($file['size'] > $maxSize) {
         $fileSizeMB = round($file['size'] / 1024 / 1024, 2);
         Security::sendErrorResponse("File too large. Maximum size is 5MB. Your file is {$fileSizeMB}MB. (PHP limit: {$uploadMaxFilesize}, POST limit: {$postMaxSize})", 400);

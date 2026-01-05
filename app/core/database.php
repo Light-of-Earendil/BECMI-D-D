@@ -21,8 +21,9 @@ class Database {
     
     /**
      * Get singleton instance
+     * @return Database
      */
-    public static function getInstance() {
+    public static function getInstance(): Database {
         if (self::$instance === null) {
             try {
                 self::$instance = new self();
@@ -87,8 +88,9 @@ class Database {
     
     /**
      * Get PDO connection
+     * @return PDO
      */
-    public function getConnection() {
+    public function getConnection(): PDO {
         if ($this->connection === null) {
             $this->connect();
         }
@@ -97,8 +99,12 @@ class Database {
     
     /**
      * Execute a prepared statement
+     * @param string $sql SQL query
+     * @param array $params Query parameters
+     * @return PDOStatement
+     * @throws Exception
      */
-    public function execute($sql, $params = []) {
+    public function execute(string $sql, array $params = []): PDOStatement {
         try {
             $stmt = $this->connection->prepare($sql);
             $stmt->execute($params);
@@ -113,83 +119,114 @@ class Database {
     
     /**
      * Execute a SELECT query and return results
+     * @param string $sql SQL query
+     * @param array $params Query parameters
+     * @return array
      */
-    public function select($sql, $params = []) {
+    public function select(string $sql, array $params = []): array {
         $stmt = $this->execute($sql, $params);
         return $stmt->fetchAll();
     }
     
     /**
      * Execute a SELECT query and return results (alias for select)
+     * @param string $sql SQL query
+     * @param array $params Query parameters
+     * @return array
      */
-    public function fetchAll($sql, $params = []) {
+    public function fetchAll(string $sql, array $params = []): array {
         return $this->select($sql, $params);
     }
     
     /**
      * Execute a SELECT query and return single row
+     * @param string $sql SQL query
+     * @param array $params Query parameters
+     * @return array|null
      */
-    public function selectOne($sql, $params = []) {
+    public function selectOne(string $sql, array $params = []): ?array {
         $stmt = $this->execute($sql, $params);
         return $stmt->fetch();
     }
     
     /**
      * Execute a SELECT query and return single row (alias for selectOne)
+     * @param string $sql SQL query
+     * @param array $params Query parameters
+     * @return array|null
      */
-    public function fetchRow($sql, $params = []) {
+    public function fetchRow(string $sql, array $params = []): ?array {
         return $this->selectOne($sql, $params);
     }
     
     /**
      * Execute an INSERT query and return last insert ID
+     * @param string $sql SQL query
+     * @param array $params Query parameters
+     * @return string|int
      */
-    public function insert($sql, $params = []) {
+    public function insert(string $sql, array $params = []): string|int {
         $this->execute($sql, $params);
         return $this->connection->lastInsertId();
     }
     
     /**
      * Get last insert ID
+     * @return string|int
      */
-    public function lastInsertId() {
+    public function lastInsertId(): string|int {
         return $this->connection->lastInsertId();
     }
     
     /**
      * Execute an INSERT query and return last insert ID (alias for insert)
+     * @param string $sql SQL query
+     * @param array $params Query parameters
+     * @return string|int
      */
-    public function create($sql, $params = []) {
+    public function create(string $sql, array $params = []): string|int {
         return $this->insert($sql, $params);
     }
     
     /**
      * Execute an UPDATE query and return affected rows
+     * @param string $sql SQL query
+     * @param array $params Query parameters
+     * @return int
      */
-    public function update($sql, $params = []) {
+    public function update(string $sql, array $params = []): int {
         $stmt = $this->execute($sql, $params);
         return $stmt->rowCount();
     }
     
     /**
      * Execute an UPDATE query and return affected rows (alias for update)
+     * @param string $sql SQL query
+     * @param array $params Query parameters
+     * @return int
      */
-    public function modify($sql, $params = []) {
+    public function modify(string $sql, array $params = []): int {
         return $this->update($sql, $params);
     }
     
     /**
      * Execute a DELETE query and return affected rows
+     * @param string $sql SQL query
+     * @param array $params Query parameters
+     * @return int
      */
-    public function delete($sql, $params = []) {
+    public function delete(string $sql, array $params = []): int {
         $stmt = $this->execute($sql, $params);
         return $stmt->rowCount();
     }
     
     /**
      * Execute a DELETE query and return affected rows (alias for delete)
+     * @param string $sql SQL query
+     * @param array $params Query parameters
+     * @return int
      */
-    public function remove($sql, $params = []) {
+    public function remove(string $sql, array $params = []): int {
         return $this->delete($sql, $params);
     }
     
@@ -209,29 +246,33 @@ class Database {
     
     /**
      * Commit a transaction
+     * @return bool
      */
-    public function commit() {
+    public function commit(): bool {
         return $this->connection->commit();
     }
     
     /**
      * Rollback a transaction
+     * @return bool
      */
-    public function rollback() {
+    public function rollback(): bool {
         return $this->connection->rollback();
     }
     
     /**
      * Check if currently in a transaction
+     * @return bool
      */
-    public function inTransaction() {
+    public function inTransaction(): bool {
         return $this->connection->inTransaction();
     }
     
     /**
      * Get database statistics
+     * @return array|null
      */
-    public function getStats() {
+    public function getStats(): ?array {
         try {
             $stats = [];
             
@@ -260,8 +301,9 @@ class Database {
     
     /**
      * Test database connection
+     * @return bool
      */
-    public function testConnection() {
+    public function testConnection(): bool {
         try {
             $result = $this->selectOne("SELECT 1 as test");
             return $result['test'] === 1;
@@ -285,7 +327,8 @@ class Database {
 
 /**
  * Helper function to get database instance
+ * @return Database
  */
-function getDB() {
+function getDB(): Database {
     return Database::getInstance();
 }

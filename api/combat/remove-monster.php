@@ -78,7 +78,9 @@ try {
     
     // Get initiative entry
     $initiative = $db->selectOne(
-        "SELECT * FROM combat_initiatives 
+        "SELECT initiative_id, session_id, character_id, monster_instance_id, entity_name, 
+                entity_type, initiative_roll, dexterity, is_active, created_at 
+         FROM combat_initiatives 
          WHERE initiative_id = ? AND session_id = ? AND entity_type = 'monster'",
         [$initiativeId, $sessionId]
     );

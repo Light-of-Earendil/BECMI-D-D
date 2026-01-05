@@ -75,9 +75,13 @@ BECMI VTT/
 │   ├── index.html            # Main SPA shell
 │   ├── index.php             # Entry point
 │   ├── js/                   # JavaScript modules
-│   │   ├── core/            # Core application (app, api-client, state-manager, event-bus)
-│   │   ├── modules/         # Feature modules (character, session, dm-dashboard, etc.)
-│   │   └── utils/           # Utility functions
+│   │   ├── core/            # Core application
+│   │   │   ├── app.js       # Main application
+│   │   │   ├── api-client.js # API communication
+│   │   │   ├── state-manager.js # State management
+│   │   │   ├── event-bus.js # Event system
+│   │   │   └── utils.js     # Centralized utilities (escapeHtml, formatRelativeTime)
+│   │   └── modules/         # Feature modules (character, session, dm-dashboard, etc.)
 │   ├── css/                  # Compiled CSS (from Stylus)
 │   ├── stylus/               # Stylus source files (modular architecture)
 │   │   ├── main.styl        # Main entry point
@@ -105,7 +109,10 @@ BECMI VTT/
 │   └── user/                # User preferences, search
 │
 ├── app/                      # Application logic
-│   ├── core/                # Database connection, security utilities
+│   ├── core/                # Core utilities
+│   │   ├── database.php    # Database connection (type-safe methods)
+│   │   ├── security.php    # Security utilities (auth, CSRF, validation)
+│   │   └── constants.php   # Application constants (magic number replacements)
 │   └── services/            # Business logic classes
 │       ├── becmi-rules.php  # BECMI rules engine
 │       ├── event-broadcaster.php  # Real-time event broadcasting
@@ -177,9 +184,18 @@ BECMI VTT/
      - `DB_PORT` - Database port (default: 3306)
      - `DB_NAME` - Database name (default: becmi_vtt)
      - `DB_USER` - Database username (default: root)
-     - `DB_PASS` - Database password (no default - must be set)
-     - `TOGETHER_AI_API_KEY` - Together AI API key (no default - must be set)
+     - `DB_PASS` - Database password (required - fallback: 'everquest' for development only)
+     - `TOGETHER_AI_API_KEY` - Together AI API key (optional - fallback: empty string)
    - **Note**: Configuration files use `getenv()` to read environment variables with fallback values for development
+   - **Important**: Fallback values are temporary - environment variables must be set on production server
+   - **Constants**: Application constants defined in `app/core/constants.php`:
+     - `MAX_FILE_SIZE` - 5MB file upload limit
+     - `RATE_LIMIT_ATTEMPTS` - 15 login attempts
+     - `RATE_LIMIT_WINDOW` - 300 seconds (5 minutes)
+     - `PAGINATION_DEFAULT_LIMIT` - 20 items
+     - `PAGINATION_MAX_LIMIT` - 100 items
+     - `SESSION_TIMEOUT` - 1800 seconds (30 minutes)
+     - `MAX_BULK_CREATE_COUNT` - 50 items
    - Configure email settings in `app/services/email-service.php`
    - Set up cron job for session reminders (see below)
 
@@ -504,6 +520,10 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - Better logging for debugging
 - **Security improvements** ⭐ NEW (January 2026)
   - Database credentials and API keys moved to environment variables
+  - Type declarations added to Database class
+  - Constants system implemented for magic numbers
+  - Centralized utility functions (escapeHtml)
+  - All SELECT * queries replaced with explicit columns
   - Transaction error handling improved
   - Explicit column lists in critical queries (reduced SELECT * usage)
   - Dynamic query building secured with proper escaping (backticks)

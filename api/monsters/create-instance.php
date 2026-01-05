@@ -50,9 +50,10 @@ try {
     // Get JSON input
     $input = Security::validateJSONInput();
     
+    require_once '../../app/core/constants.php';
     $monsterId = isset($input['monster_id']) ? (int) $input['monster_id'] : 0;
     $sessionId = isset($input['session_id']) ? (int) $input['session_id'] : 0;
-    $count = isset($input['count']) ? max(1, min(50, (int) $input['count'])) : 1; // Bulk creation
+    $count = isset($input['count']) ? max(1, min(MAX_BULK_CREATE_COUNT, (int) $input['count'])) : 1; // Bulk creation
     
     if ($monsterId <= 0) {
         Security::sendValidationErrorResponse(['monster_id' => 'Valid monster ID is required']);
@@ -84,7 +85,11 @@ try {
     
     // Get monster template
     $monster = $db->selectOne(
-        "SELECT * FROM monsters WHERE monster_id = ?",
+        "SELECT monster_id, name, armor_class, hit_dice, move_ground, move_flying, move_swimming, 
+                attacks, damage, no_appearing, save_as, morale, treasure_type, intelligence, 
+                alignment, xp_value, description, image_url, monster_type, terrain, load, 
+                created_at, updated_at 
+         FROM monsters WHERE monster_id = ?",
         [$monsterId]
     );
     

@@ -56,10 +56,9 @@ try {
     error_log("LOGIN ATTEMPT: Identifier: $loginIdentifier, Password length: " . strlen($password));
     
     // Check rate limiting (more lenient for development)
-    // SECURITY: Use named constants instead of magic numbers
-    // RATE_LIMIT_ATTEMPTS = 15, RATE_LIMIT_WINDOW = 300 (5 minutes)
+    require_once '../../app/core/constants.php';
     $rateLimitKey = "login_" . Security::getClientIP();
-    if (!Security::checkRateLimit($rateLimitKey, 15, 300)) { // 15 attempts per 5 minutes
+    if (!Security::checkRateLimit($rateLimitKey, RATE_LIMIT_ATTEMPTS, RATE_LIMIT_WINDOW)) {
         Security::logSecurityEvent('rate_limit_exceeded', ['action' => 'login']);
         Security::sendErrorResponse('Too many login attempts. Please try again later.', 429);
     }

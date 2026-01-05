@@ -62,12 +62,29 @@
 
 ### 5. Configure Database Connection
 
-1. Edit `config/database.php` if needed
-2. Default XAMPP settings should work:
-   - Host: localhost
-   - Username: root
-   - Password: (empty)
-   - Database: becmi_vtt
+1. **Option A: Environment Variables (Recommended for Production)**
+   - Set environment variables:
+     - `DB_HOST` (default: localhost)
+     - `DB_PORT` (default: 3306)
+     - `DB_NAME` (default: becmi_vtt)
+     - `DB_USER` (default: root)
+     - `DB_PASS` (required - no default)
+   - Configuration file `config/database.php` will automatically use these
+
+2. **Option B: Direct Configuration (Development Only)**
+   - Edit `config/database.php` if needed
+   - Default XAMPP settings should work:
+     - Host: localhost
+     - Username: root
+     - Password: (empty) - **Note**: Fallback value 'everquest' is for development only
+     - Database: becmi_vtt
+   - **Warning**: Do not commit credentials to version control
+
+3. **Together AI API Key (Optional)**
+   - Set environment variable: `TOGETHER_AI_API_KEY`
+   - Or edit `config/together-ai.php` (development only)
+   - Required for character portrait generation feature
+   - **Note**: Fallback is empty string (feature will fail gracefully if not set)
 
 ### 6. Set File Permissions
 

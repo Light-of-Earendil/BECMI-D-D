@@ -129,7 +129,10 @@ try {
     
     // Get updated instance
     $updated = $db->selectOne(
-        "SELECT * FROM monster_instances WHERE instance_id = ?",
+        "SELECT instance_id, session_id, monster_id, instance_name, is_named_boss, current_hp, 
+                max_hp, armor_class, dexterity, equipment, treasure, spells, notes, is_active, 
+                created_at, updated_at 
+         FROM monster_instances WHERE instance_id = ?",
         [$instanceId]
     );
     

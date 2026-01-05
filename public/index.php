@@ -325,6 +325,7 @@
     <!-- JavaScript Libraries -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <!-- BECMI Rules Engine must be loaded before app.js -->
+    <script src="js/core/utils.js?t=<?php echo time(); ?>"></script>
     <script src="js/becmi/rules-engine.js?t=<?php echo time(); ?>"></script>
     <script src="js/becmi/calculations.js?t=<?php echo time(); ?>"></script>
     <script src="js/becmi/class-data.js?t=<?php echo time(); ?>"></script>
