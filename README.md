@@ -28,10 +28,13 @@ This system provides a complete virtual tabletop experience for BECMI D&D campai
 ### For Dungeon Masters:
 - **Session Management**: Create, schedule, and manage game sessions
 - **Player Management**: Invite players, view all character sheets, track online status
+- **Campaign Management**: Create and organize multiple campaigns with game time tracking
 - **Combat Tools**: Initiative tracker with BECMI 1d6 system
+- **Monster Management**: Browse monster database, create instances, track HP in combat
 - **XP Management**: Award experience points to individual players or entire party
 - **Item Distribution**: Give items (including magical items) to players
 - **Hex Map Editor**: Create and manage hex-based campaign maps with markers, tiles, and fog of war
+- **Audio System**: Upload and manage background music, create playlists, soundboard integration
 - **DM Dashboard**: Real-time overview of all active sessions and players
 - **Video Conferencing**: Add Google Meet links to sessions for remote play
 
@@ -84,11 +87,13 @@ BECMI VTT/
 │   │   └── _features.styl   # Feature-specific styles
 │   └── images/               # Static images and equipment assets
 │
-├── api/                       # PHP API endpoints (40+ endpoints)
+├── api/                       # PHP API endpoints (60+ endpoints)
 │   ├── auth/                # Authentication (login, register, password reset)
+│   ├── audio/               # Audio system (upload, playlists, soundboard, control)
+│   ├── campaigns/           # Campaign management (CRUD, game time tracking, time-based effects)
 │   ├── character/           # Character CRUD, HP, XP, level-up, skills, weapon mastery
-│   ├── session/             # Session management, invitations, DM dashboard
 │   ├── combat/              # Initiative tracking
+│   ├── monsters/            # Monster database and instance management
 │   ├── spells/              # Spell management (list, memorize, cast, rest)
 │   ├── inventory/           # Equipment management (add, remove, equip, identify)
 │   ├── items/               # Item catalog (list, categories, magical variants)
@@ -96,6 +101,7 @@ BECMI VTT/
 │   ├── realtime/            # Long-polling endpoint
 │   ├── skills/              # General skills system
 │   ├── forum/               # Forum system (categories, threads, posts, moderation, search)
+│   ├── time-based-effects/  # Time-based spell/ability effects
 │   └── user/                # User preferences, search
 │
 ├── app/                      # Application logic
@@ -113,9 +119,19 @@ BECMI VTT/
 │
 ├── database/                  # Database schema and migrations
 │   ├── schema.sql           # Base schema
-│   └── migrations/          # Migration files (022+ migrations)
+│   └── migrations/          # Migration files (034+ migrations)
 │       ├── 021_add_meet_link_to_sessions.sql  # Video conferencing support
-│       └── 022_email_queue_system.sql  # Email queue system
+│       ├── 022_email_queue_system.sql  # Email queue system
+│       ├── 024_campaigns_system.sql  # Campaign management
+│       ├── 025_campaign_game_time.sql  # Game time tracking
+│       ├── 026_campaign_game_time_redesign.sql  # Game time redesign
+│       ├── 027_time_based_effects.sql  # Time-based effects
+│       ├── 028_audio_system.sql  # Audio system
+│       ├── 030_monsters_table.sql  # Monster database
+│       ├── 031_monster_instances_table.sql  # Monster instances
+│       ├── 032_link_initiatives_to_monster_instances.sql  # Initiative integration
+│       ├── 033_extend_tokens_for_monsters.sql  # Hex map token extension
+│       └── 034_add_image_url_to_monsters.sql  # Monster images
 │
 ├── cron/                     # Scheduled tasks
 │   ├── send-session-reminders.php  # Email reminder cron job
@@ -248,6 +264,29 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 - ✅ Player movement tracking
 - ✅ Map borders, roads, paths, rivers
 - ✅ Configurable hex scale
+- ✅ Monster token integration
+
+### Audio System (100% Complete) ⭐ NEW
+- ✅ Audio upload and management
+- ✅ Playlist creation and management
+- ✅ Soundboard integration for instant audio cues
+- ✅ Audio control (play, pause, volume) during sessions
+- ✅ Background music support
+
+### Campaign Management System (100% Complete) ⭐ NEW
+- ✅ Campaign CRUD operations
+- ✅ Advanced game time tracking (days, weeks, months, years)
+- ✅ Time-based effects system for spells and abilities
+- ✅ Campaign-specific session organization
+- ✅ Game time advancement API
+
+### Monster System (100% Complete) ⭐ NEW
+- ✅ Monster database with stats and images
+- ✅ Monster instance creation for combat encounters
+- ✅ HP tracking for monster instances
+- ✅ Integration with initiative tracker
+- ✅ Hex map token linking
+- ✅ Monster browser UI
 
 ### Video Conferencing (100% Complete)
 - ✅ Google Meet link integration
@@ -398,7 +437,6 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 
 ### Future Enhancements
 - Chat system for sessions
-- Monster database and combat tracking
 - Virtual dice roller with animations
 - Enhanced battle map tools
 - Character portrait uploads
@@ -493,3 +531,33 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - Full CRUD API endpoints (25+ endpoints)
 - Frontend modules: forum.js, forum-thread.js, forum-moderation.js
 - Complete documentation in `docs/FORUM_SYSTEM.md`
+
+### Audio System ⭐ NEW (January 2026)
+- Complete audio management system with upload support
+- Playlist creation and management for different moods and scenes
+- Soundboard integration for instant audio cues during sessions
+- Full audio control (play, pause, volume) during sessions
+- Background music support for immersive gameplay
+- Audio file management (upload, delete, list)
+- Frontend module: audio-manager.js
+- Complete API endpoints (8+ endpoints)
+
+### Campaign Management System ⭐ NEW (January 2026)
+- Campaign CRUD operations (create, update, delete, list, get)
+- Advanced game time tracking system (days, weeks, months, years)
+- Time-based effects system for spells and abilities with automatic expiration
+- Campaign-specific session organization
+- Game time advancement API with validation
+- Frontend module: campaign-management.js
+- Complete API endpoints (8+ endpoints)
+- Database migrations: 024, 025, 026, 027
+
+### Monster System ⭐ NEW (January 2026)
+- Monster database with comprehensive stats and image support
+- Monster instance creation for combat encounters
+- HP tracking for monster instances directly in initiative tracker
+- Integration with hex map tokens for visual representation
+- Monster browser UI for easy selection and management
+- Frontend module: monster-browser.js
+- Complete API endpoints (7+ endpoints)
+- Database migrations: 030, 031, 032, 033, 034
