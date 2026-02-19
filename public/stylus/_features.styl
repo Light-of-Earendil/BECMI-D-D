@@ -49,6 +49,167 @@
   gap: var(--space-4)
   flex-wrap: wrap
 
+.invitations-section
+  margin-bottom: var(--space-6)
+
+  h3
+    font-family: "Cinzel", Georgia, serif
+    font-size: 1.5rem
+    color: var(--text-strong)
+    margin-bottom: var(--space-4)
+    display: flex
+    align-items: center
+    gap: var(--space-2)
+
+    i
+      color: var(--brass-500)
+
+.invitation-card-modern
+  background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
+  border-radius: var(--radius-lg)
+  padding: var(--space-5)
+  margin-bottom: var(--space-4)
+  border: 2px solid var(--brass-500)
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3), 0 0 0 1px rgba(202, 162, 74, 0.2) inset
+  transition: all 0.3s ease
+  position: relative
+  overflow: hidden
+
+  &::before
+    content: ''
+    position: absolute
+    top: 0
+    left: 0
+    right: 0
+    height: 4px
+    background: linear-gradient(90deg, var(--brass-400), var(--brass-600))
+
+  &:hover
+    transform: translateY(-2px)
+    box-shadow: 0 6px 16px rgba(0,0,0,0.4), 0 0 0 1px rgba(202, 162, 74, 0.3) inset
+    border-color: var(--brass-400)
+
+  &.processing
+    opacity: 0.7
+    pointer-events: none
+
+    .btn
+      cursor: wait
+
+.invitation-card-content
+  display: flex
+  gap: var(--space-5)
+  align-items: flex-start
+
+.invitation-date-badge
+  flex-shrink: 0
+  width: 80px
+  height: 80px
+  background: linear-gradient(135deg, var(--brass-400), var(--brass-600))
+  border-radius: var(--radius-md)
+  display: flex
+  flex-direction: column
+  align-items: center
+  justify-content: center
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3)
+  border: 2px solid var(--brass-300)
+
+  .date-day
+    font-size: 2rem
+    font-weight: 700
+    color: var(--text-ink)
+    line-height: 1
+    font-family: "Cinzel", Georgia, serif
+    text-shadow: 0 1px 2px rgba(255,255,255,0.3)
+
+  .date-month
+    font-size: 0.875rem
+    font-weight: 600
+    color: var(--text-ink)
+    text-transform: uppercase
+    letter-spacing: 0.5px
+    margin-top: -4px
+    text-shadow: 0 1px 2px rgba(255,255,255,0.3)
+
+  .date-tba
+    font-size: 1rem
+    font-weight: 600
+    color: var(--text-ink)
+    text-align: center
+    text-shadow: 0 1px 2px rgba(255,255,255,0.3)
+
+.invitation-main-content
+  flex: 1
+  display: flex
+  flex-direction: column
+  gap: var(--space-3)
+
+.invitation-header-modern
+  display: flex
+  justify-content: space-between
+  align-items: center
+
+.invitation-badge
+  display: inline-flex
+  align-items: center
+  gap: var(--space-2)
+  padding: var(--space-1) var(--space-3)
+  background: rgba(202, 162, 74, 0.3)
+  border: 1px solid var(--brass-400)
+  border-radius: var(--radius-full)
+  font-size: 0.75rem
+  font-weight: 600
+  color: var(--text-strong)
+  text-transform: uppercase
+  letter-spacing: 0.5px
+
+  i
+    font-size: 0.875rem
+
+.invitation-title
+  font-family: "Cinzel", Georgia, serif
+  font-size: 1.5rem
+  color: var(--text-strong)
+  margin: 0
+  line-height: 1.3
+
+.invitation-details
+  display: flex
+  flex-direction: column
+  gap: var(--space-2)
+  padding: var(--space-3)
+  background: rgba(0,0,0,0.2)
+  border-radius: var(--radius-md)
+  border-left: 3px solid var(--brass-500)
+
+.invitation-detail-item
+  display: flex
+  align-items: center
+  gap: var(--space-2)
+  font-size: 0.95rem
+
+  i
+    color: var(--brass-400)
+    width: 20px
+    text-align: center
+
+  .detail-label
+    color: var(--text-soft)
+    font-weight: 500
+
+  .detail-value
+    color: var(--text-strong)
+    font-weight: 600
+    margin-left: auto
+
+.invitation-actions-modern
+  display: flex
+  gap: var(--space-3)
+  margin-top: var(--space-2)
+
+  .btn
+    flex: 1
+
 // Character Creation
 .method-buttons
   margin: 50px 0
@@ -1808,6 +1969,24 @@ input.hp-input
   gap: var(--space-3)
 
 .spells-spellbook
+  .spellbook-header
+    display: flex
+    justify-content: space-between
+    align-items: center
+    margin-bottom: var(--space-3)
+    
+    h4
+      font-family: "Cinzel", Georgia, serif
+      color: var(--text-strong)
+      font-size: 1.25rem
+      margin-bottom: 0
+      display: flex
+      align-items: center
+      gap: var(--space-2)
+
+      i
+        color: var(--brass-400)
+  
   h4
     font-family: "Cinzel", Georgia, serif
     color: var(--text-strong)
@@ -1979,6 +2158,73 @@ input.hp-input
 .help-text
   font-size: 0.875rem
   color: var(--wood-600)
+
+// ==========================================================================
+// Add Spell Modal Styling
+// ==========================================================================
+
+.add-spell-selection
+  max-height: 60vh
+  overflow-y: auto
+  padding: var(--space-2)
+
+.add-spell-level-group
+  margin-bottom: var(--space-4)
+
+  h6
+    font-family: "Cinzel", Georgia, serif
+    color: var(--text-strong)
+    font-size: 1rem
+    margin-bottom: var(--space-2)
+    padding-left: var(--space-2)
+    border-left: 3px solid var(--brass-400)
+
+.spell-selection-grid
+  display: grid
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr))
+  gap: var(--space-3)
+
+.spell-selection-card
+  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+  border-radius: var(--radius-md)
+  padding: var(--space-3)
+  border: 2px solid rgba(0,0,0,0.2)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 8px rgba(0,0,0,0.15)
+  transition: all var(--t-fast) var(--ease)
+
+  &:hover
+    transform: translateY(-2px)
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 16px rgba(0,0,0,0.25)
+    border-color: var(--brass-400)
+
+.spell-selection-header
+  display: flex
+  justify-content: space-between
+  align-items: center
+  margin-bottom: var(--space-2)
+
+  h5
+    font-family: "Cinzel", Georgia, serif
+    color: var(--wood-900)
+    font-size: 1rem
+    font-weight: 600
+    margin: 0
+
+.spell-selection-details
+  p
+    font-family: 'Lora', Georgia, 'Times New Roman', serif
+    font-size: 0.875rem
+    color: var(--wood-700)
+    margin-bottom: var(--space-1)
+
+    strong
+      color: var(--wood-900)
+
+  .spell-description
+    margin-top: var(--space-2)
+    font-size: 0.8125rem
+    color: var(--wood-600)
+    line-height: 1.5
 
 // ==========================================================================
 // Calendar Styling
@@ -4798,4 +5044,3 @@ button#upload-map-btn
 .stat-value
   color: var(--wood-900)
   font-family: "VT323", monospace
-

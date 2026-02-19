@@ -23,8 +23,79 @@
  * }
  */
 
-require_once '../../app/core/database.php';
-require_once '../../app/core/security.php';
+// Enable error logging but disable display
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
+error_reporting(E_ALL);
+
+// Increase execution time for this script (email sending can be slow)
+ini_set('max_execution_time', 60); // 60 seconds instead of default 30
+set_time_limit(60);
+
+// Register error handler to catch fatal errors
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error !== NULL && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        // Clear any output
+        while (ob_get_level() > 0) {
+            @ob_end_clean();
+        }
+        
+        // Send JSON error response
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(500);
+        }
+        
+        $errorMessage = 'Fatal PHP error';
+        if (isset($error['message'])) {
+            $errorMessage = mb_convert_encoding($error['message'], 'UTF-8', 'UTF-8');
+            $errorMessage = preg_replace('/[\x00-\x1F\x7F]/', '', $errorMessage);
+            if (strlen($errorMessage) > 200) {
+                $errorMessage = substr($errorMessage, 0, 197) . '...';
+            }
+        }
+        
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Fatal PHP error: ' . $errorMessage,
+            'file' => isset($error['file']) ? basename($error['file']) : 'unknown',
+            'line' => isset($error['line']) ? $error['line'] : 0,
+            'code' => 'FATAL_ERROR'
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+});
+
+// Start output buffering to prevent any output before JSON
+if (!ob_get_level()) {
+    ob_start();
+}
+
+// Disable output compression
+if (function_exists('apache_setenv')) {
+    @apache_setenv('no-gzip', 1);
+}
+@ini_set('zlib.output_compression', 0);
+
+try {
+    require_once '../../app/core/database.php';
+    require_once '../../app/core/security.php';
+} catch (Exception $e) {
+    while (ob_get_level() > 0) {
+        @ob_end_clean();
+    }
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(500);
+    }
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Failed to load required files: ' . $e->getMessage(),
+        'code' => 'LOAD_ERROR'
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
 
 /**
  * Send invitation email to player
@@ -142,8 +213,15 @@ function sendInvitationEmail($playerUser, $session, $dmUserId) {
 // Initialize security
 Security::init();
 
-// Set content type
-header('Content-Type: application/json');
+// Clear any output that might have been generated during initialization
+while (ob_get_level() > 0) {
+    @ob_end_clean();
+}
+
+// Set content type after clearing buffers
+if (!headers_sent()) {
+    header('Content-Type: application/json; charset=utf-8');
+}
 
 try {
     // Only allow POST requests
@@ -192,7 +270,7 @@ try {
     
     // Verify session exists and user is the DM
     $session = $db->selectOne(
-        "SELECT session_id, dm_user_id, session_title, max_players, status
+        "SELECT session_id, dm_user_id, session_title, session_description, session_datetime, max_players, status
          FROM game_sessions 
          WHERE session_id = ?",
         [$sessionId]
@@ -288,22 +366,53 @@ try {
     
     error_log("INVITE PLAYER: User {$dmUserId} invited player {$playerUserId} ({$playerUser['username']}) to session {$sessionId} ({$session['session_title']})");
     
-    // Send email notification to player
-    sendInvitationEmail($playerUser, $session, $dmUserId);
-    
-    // Return success with player info
-    Security::sendSuccessResponse([
+    // Prepare response data
+    $responseData = [
         'session_id' => $sessionId,
         'user_id' => $playerUserId,
         'username' => $playerUser['username'],
         'email' => $playerUser['email'],
         'status' => 'invited',
         'invited_at' => date('Y-m-d H:i:s')
-    ], "Player {$playerUser['username']} invited successfully");
+    ];
+    
+    // Register email sending in shutdown function BEFORE sending response
+    // This ensures email is sent after response, preventing timeout
+    register_shutdown_function(function() use ($playerUser, $session, $dmUserId) {
+        try {
+            // Set timeout for email sending in shutdown
+            @set_time_limit(30);
+            sendInvitationEmail($playerUser, $session, $dmUserId);
+        } catch (Exception $emailError) {
+            error_log("INVITATION EMAIL ERROR: Failed to send invitation email: " . $emailError->getMessage());
+        }
+    });
+    
+    // Send response - this will exit, but shutdown function will run after
+    Security::sendSuccessResponse($responseData, "Player {$playerUser['username']} invited successfully");
     
 } catch (Exception $e) {
     error_log("INVITE PLAYER ERROR: " . $e->getMessage());
     error_log("INVITE PLAYER ERROR STACK TRACE: " . $e->getTraceAsString());
-    Security::sendErrorResponse('Failed to invite player: ' . $e->getMessage(), 500);
+    
+    // Sanitize error message to prevent JSON encoding issues
+    $errorMessage = 'Failed to invite player';
+    $exceptionMessage = $e->getMessage();
+    
+    // Only include exception message if it's safe for JSON
+    if (!empty($exceptionMessage)) {
+        // Remove any control characters and ensure it's valid UTF-8
+        $exceptionMessage = mb_convert_encoding($exceptionMessage, 'UTF-8', 'UTF-8');
+        $exceptionMessage = preg_replace('/[\x00-\x1F\x7F]/', '', $exceptionMessage);
+        
+        // Limit length to prevent issues
+        if (strlen($exceptionMessage) > 200) {
+            $exceptionMessage = substr($exceptionMessage, 0, 197) . '...';
+        }
+        
+        $errorMessage .= ': ' . $exceptionMessage;
+    }
+    
+    Security::sendErrorResponse($errorMessage, 500);
 }
 

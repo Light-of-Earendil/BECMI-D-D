@@ -97,8 +97,6 @@ class EventBroadcaster {
                 return false;
             }
             
-            @error_log("EventBroadcaster::broadcastEvent: session_id=$sessionId, event_type=$eventType, event_data_length=" . strlen($eventDataJson));
-            
             // Insert event into session_events table
             $this->db->execute(
                 "INSERT INTO session_events 
@@ -111,9 +109,6 @@ class EventBroadcaster {
                     $createdByUserId
                 ]
             );
-            
-            $eventId = $this->db->lastInsertId();
-            @error_log("EventBroadcaster::broadcastEvent: Event inserted with ID: $eventId");
             
             // CRITICAL: Clear any output that might have been generated
             if (ob_get_level() > 0) {
@@ -168,7 +163,6 @@ class EventBroadcaster {
      */
     public function getEvents($sessionId, $lastEventId = 0) {
         try {
-            error_log("EventBroadcaster::getEvents: session_id=$sessionId, lastEventId=$lastEventId");
             $events = $this->db->select(
                 "SELECT event_id, event_type, event_data, created_at
                  FROM session_events
@@ -177,12 +171,10 @@ class EventBroadcaster {
                  LIMIT 50",
                 [$sessionId, $lastEventId]
             );
-            error_log("EventBroadcaster::getEvents: Found " . count($events) . " events");
             
             // Decode JSON event_data for each event
             $formattedEvents = array_map(function($event) {
                 $decodedData = json_decode($event['event_data'], true);
-                @error_log("EventBroadcaster::getEvents: Returning event_id={$event['event_id']}, event_type={$event['event_type']}, data_keys=" . (is_array($decodedData) ? implode(',', array_keys($decodedData)) : 'not_array'));
                 return [
                     'event_id' => (int) $event['event_id'],
                     'event_type' => $event['event_type'],
@@ -365,4 +357,3 @@ function broadcastEvent($sessionId, $eventType, $eventData, $userId = null) {
     $broadcaster = new EventBroadcaster();
     return $broadcaster->broadcastEvent($sessionId, $eventType, $eventData, $userId);
 }
-

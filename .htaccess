@@ -10,9 +10,15 @@
     
     # Redirect root (/) to /public/index.php
     RewriteRule ^/?$ /public/index.php [L,R=301]
+
+    # Normalize legacy HTML entrypoint to PHP entrypoint
+    RewriteRule ^public/index\.html$ /public/index.php [L,R=301]
     
     # Rewrite /images/ to /public/images/
     RewriteRule ^images/(.*)$ /public/images/$1 [L]
+    
+    # Rewrite /audio/ to /public/audio/
+    RewriteRule ^audio/(.*)$ /public/audio/$1 [L]
     
     # Don't redirect if already accessing /public/, /api/, or actual files
     RewriteCond %{REQUEST_URI} !^/public/
@@ -20,8 +26,8 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
     
-    # Redirect everything else to /public/index.html
-    RewriteRule ^(.*)$ /public/index.html [L,R=301]
+    # Redirect everything else to /public/index.php
+    RewriteRule ^(.*)$ /public/index.php [L,R=301]
 </IfModule>
 
 # ============================================

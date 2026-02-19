@@ -146,7 +146,9 @@ class Database {
      */
     public function selectOne(string $sql, array $params = []): ?array {
         $stmt = $this->execute($sql, $params);
-        return $stmt->fetch();
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        // PDO::fetch() returns false when no row is found, but we need null for type hint
+        return $result === false ? null : $result;
     }
     
     /**

@@ -10,12 +10,13 @@ class RealtimeClient {
         this.sessionId = sessionId;
         this.app = app;
         this.lastEventId = 0;
-        this.pollInterval = 5000; // 5 seconds between polls
+        this.pollInterval = 150; // small handoff delay between long-poll requests
         this.isPolling = false;
         this.pollTimeout = null;
+        this.activeRequest = null;
         this.eventHandlers = {};
         this.isConnected = false;
-        this.pollTimeoutMs = 5000; // Reduced from 10 to 5 seconds
+        this.pollTimeoutMs = 25000; // true long-poll timeout
         
         console.log(`Real-time client initialized for session ${sessionId}`);
     }
@@ -51,6 +52,11 @@ class RealtimeClient {
             clearTimeout(this.pollTimeout);
             this.pollTimeout = null;
         }
+
+        if (this.activeRequest) {
+            this.activeRequest.abort();
+            this.activeRequest = null;
+        }
         
         console.log('Stopped real-time polling');
         this.trigger('disconnected', {});
@@ -63,20 +69,30 @@ class RealtimeClient {
         if (!this.isPolling) {
             return;
         }
-        
+
+        let timeoutHandle = null;
         try {
             console.log(`Polling for events (last_event_id: ${this.lastEventId})...`);
-            
+
+            const pollTimeoutSeconds = Math.max(5, Math.floor(this.pollTimeoutMs / 1000));
+            const controller = new AbortController();
+            timeoutHandle = setTimeout(() => controller.abort(), this.pollTimeoutMs + 1000);
+            this.activeRequest = controller;
+
             const response = await fetch(
-                `/api/realtime/poll.php?session_id=${this.sessionId}&last_event_id=${this.lastEventId}&timeout=5`,
+                `/api/realtime/poll.php?session_id=${this.sessionId}&last_event_id=${this.lastEventId}&timeout=${pollTimeoutSeconds}`,
                 {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-                    }
+                    },
+                    signal: controller.signal
                 }
             );
+            clearTimeout(timeoutHandle);
+            timeoutHandle = null;
+            this.activeRequest = null;
             
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
@@ -121,24 +137,36 @@ class RealtimeClient {
             }
             
         } catch (error) {
-            console.error('Polling error:', error);
-            
-            // Increment error count
-            this.errorCount = (this.errorCount || 0) + 1;
-            
-            // If too many consecutive errors, stop polling and notify
-            if (this.errorCount >= 3) {
-                this.stop();
-                this.trigger('connection_error', { error: error.message });
-                
-                if (this.app.modules.notifications) {
-                    this.app.modules.notifications.show('Lost connection to server. Refresh to reconnect.', 'error');
+            if (error.name === 'AbortError') {
+                // Expected when client stops or request times out.
+                if (this.isPolling) {
+                    this.errorCount = 0;
                 }
-                return;
+            } else {
+                console.error('Polling error:', error);
+
+                // Increment error count
+                this.errorCount = (this.errorCount || 0) + 1;
+
+                // If too many consecutive errors, stop polling and notify
+                if (this.errorCount >= 3) {
+                    this.stop();
+                    this.trigger('connection_error', { error: error.message });
+
+                    if (this.app.modules.notifications) {
+                        this.app.modules.notifications.show('Lost connection to server. Refresh to reconnect.', 'error');
+                    }
+                    return;
+                }
+            }
+        } finally {
+            this.activeRequest = null;
+            if (timeoutHandle !== null) {
+                clearTimeout(timeoutHandle);
             }
         }
         
-        // Schedule next poll if still active
+        // Schedule next poll after a short handoff delay.
         if (this.isPolling) {
             this.pollTimeout = setTimeout(() => this.poll(), this.pollInterval);
         }
@@ -229,4 +257,3 @@ class RealtimeClient {
 
 // Export to window for use in other modules
 window.RealtimeClient = RealtimeClient;
-

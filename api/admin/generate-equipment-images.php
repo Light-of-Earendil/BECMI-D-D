@@ -77,7 +77,7 @@ try {
     
     if (!isset($together_AI_api_key) || empty($together_AI_api_key)) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'message' => 'TOGETHER_API_KEY not configured']);
+        echo json_encode(['success' => false, 'message' => 'TOGETHER_AI_API_KEY not configured']);
         exit();
     }
     

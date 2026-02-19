@@ -4,13 +4,14 @@
  * This file initializes the application and sets up global event handlers.
  */
 
-// Override console methods globally to add timestamps
+// Override console methods globally to add timestamps and gate noisy debug logs.
 (function() {
     const originalLog = console.log;
     const originalError = console.error;
     const originalWarn = console.warn;
     const originalInfo = console.info;
     const originalDebug = console.debug;
+    const noOp = () => {};
     
     const addTimestamp = (originalFn) => {
         return function(...args) {
@@ -18,12 +19,20 @@
             originalFn.apply(console, [`[${timestamp}]`, ...args]);
         };
     };
-    
-    console.log = addTimestamp(originalLog);
+
+    const queryParams = new URLSearchParams(window.location.search);
+    const debugFromQuery = queryParams.get('debug');
+    const debugFromStorage = localStorage.getItem('becmi_debug');
+    const debugEnabled = debugFromQuery === '1' || debugFromStorage === '1';
+
+    window.__BECMI_DEBUG__ = debugEnabled;
+
+    // Keep warnings/errors visible; silence console.log/info/debug unless debug is enabled.
+    console.log = debugEnabled ? addTimestamp(originalLog) : noOp;
     console.error = addTimestamp(originalError);
     console.warn = addTimestamp(originalWarn);
-    console.info = addTimestamp(originalInfo);
-    console.debug = addTimestamp(originalDebug);
+    console.info = debugEnabled ? addTimestamp(originalInfo) : noOp;
+    console.debug = debugEnabled ? addTimestamp(originalDebug) : noOp;
 })();
 
 // Wait for DOM to be ready

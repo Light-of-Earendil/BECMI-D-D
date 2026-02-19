@@ -178,10 +178,21 @@ class AuthModule {
      */
     async handleForgotPassword(event) {
         const form = event.target;
-        const email = $('#forgot-email').val();
+        const email = ($('#forgot-email').val() || '').trim();
 
         try {
             this.clearFormFeedback(form);
+
+            if (!email) {
+                this.showFormError(form, 'Enter your email to receive a reset link.');
+                return;
+            }
+
+            if (!this.validateEmail(email)) {
+                this.showFormError(form, 'Enter a valid email address.');
+                return;
+            }
+
             this.setFormLoading(form, true);
 
             const response = await this.apiClient.post('/api/auth/request-password-reset.php', { email });
@@ -189,7 +200,8 @@ class AuthModule {
             if (response.status === 'success') {
                 this.showFormSuccess(form, response.message || 'If the email exists, a reset link has been sent.');
             } else {
-                this.showFormError(form, response.message || 'Unable to request password reset.');
+                const emailFieldError = response?.data?.errors?.email;
+                this.showFormError(form, emailFieldError || response.message || 'Unable to request password reset.');
             }
         } catch (error) {
             console.error('Forgot password error:', error);
@@ -726,6 +738,5 @@ class AuthModule {
 
 // Export to window for use in app.js
 window.AuthModule = AuthModule;
-
 
 

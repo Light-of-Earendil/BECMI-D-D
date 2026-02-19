@@ -256,7 +256,7 @@ class DashboardModule {
             html += `
                 <div class="invitations-section">
                     <h3><i class="fas fa-bell"></i> Pending Invitations (${pendingInvitations.length})</h3>
-                    <div class="session-list">
+                    <div class="invitation-cards-list">
                         ${pendingInvitations.map(session => this.renderInvitationCard(session)).join('')}
                     </div>
                 </div>
@@ -309,29 +309,59 @@ class DashboardModule {
                 hour: '2-digit',
                 minute: '2-digit'
             }) : 'TBA';
+        
+        const dateObj = session.session_datetime ? new Date(session.session_datetime) : null;
+        const day = dateObj ? dateObj.getDate() : '';
+        const month = dateObj ? dateObj.toLocaleDateString('en', { month: 'short' }) : '';
             
         return `
-            <div class="invitation-card" data-session-id="${session.session_id}">
-                <div class="invitation-header">
-                    <div class="invitation-icon">
-                        <i class="fas fa-envelope-open"></i>
+            <div class="invitation-card-modern" data-session-id="${session.session_id}">
+                <div class="invitation-card-content">
+                    <div class="invitation-date-badge">
+                        ${dateObj ? `
+                            <div class="date-day">${day}</div>
+                            <div class="date-month">${month}</div>
+                        ` : '<div class="date-tba">TBA</div>'}
                     </div>
-                    <div class="invitation-info">
-                        <h4>${session.session_title}</h4>
-                        <p><strong>DM:</strong> ${session.dm_username}</p>
-                        <p><strong>Date:</strong> ${sessionDate}</p>
+                    
+                    <div class="invitation-main-content">
+                        <div class="invitation-header-modern">
+                            <div class="invitation-badge">
+                                <i class="fas fa-envelope"></i>
+                                <span>Invitation</span>
+                            </div>
+                        </div>
+                        
+                        <h3 class="invitation-title">${session.session_title}</h3>
+                        
+                        <div class="invitation-details">
+                            <div class="invitation-detail-item">
+                                <i class="fas fa-user-crown"></i>
+                                <span class="detail-label">Dungeon Master:</span>
+                                <span class="detail-value">${session.dm_username}</span>
+                            </div>
+                            <div class="invitation-detail-item">
+                                <i class="fas fa-calendar-alt"></i>
+                                <span class="detail-label">Date & Time:</span>
+                                <span class="detail-value">${sessionDate}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="invitation-actions-modern">
+                            <button class="btn btn-success" 
+                                    data-action="accept-invitation" 
+                                    data-session-id="${session.session_id}">
+                                <i class="fas fa-check-circle"></i>
+                                <span>Accept Invitation</span>
+                            </button>
+                            <button class="btn btn-danger" 
+                                    data-action="decline-invitation" 
+                                    data-session-id="${session.session_id}">
+                                <i class="fas fa-times-circle"></i>
+                                <span>Decline</span>
+                            </button>
+                        </div>
                     </div>
-                </div>
-                <div class="invitation-actions">
-                    <button class="btn btn-success btn-sm" data-action="accept-invitation" data-session-id="${session.session_id}">
-                        <i class="fas fa-check"></i> Accept
-                    </button>
-                    <button class="btn btn-danger btn-sm" data-action="decline-invitation" data-session-id="${session.session_id}">
-                        <i class="fas fa-times"></i> Decline
-                    </button>
-                </div>
-                <div class="invitation-notice">
-                    <i class="fas fa-info-circle"></i> You've been invited to join this session
                 </div>
             </div>
         `;

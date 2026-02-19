@@ -537,6 +537,169 @@
   z-index: calc(var(--z-modal) + 1)
   padding: var(--space-4)
 
+// Invite Player Modal
+.invite-form
+  padding: var(--space-4)
+
+  .form-group
+    margin-bottom: var(--space-5)
+
+  label
+    display: block
+    font-weight: 600
+    margin-bottom: var(--space-2)
+    color: var(--text-strong)
+    font-size: 0.95rem
+
+  #player-search
+    width: 100%
+    padding: var(--space-3)
+    border: 2px solid var(--wood-600)
+    border-radius: var(--radius-md)
+    background: var(--parchment-100)
+    font-size: 1rem
+    transition: all 0.2s ease
+
+    &:focus
+      outline: none
+      border-color: var(--brass-500)
+      background: var(--parchment-50)
+      box-shadow: 0 0 0 3px rgba(202, 162, 74, 0.1)
+
+  .help-text
+    margin-top: var(--space-1)
+    font-size: 0.875rem
+    color: var(--text-soft)
+    font-style: italic
+
+.search-results
+  margin: var(--space-4) 0
+  min-height: 50px
+
+.user-results h4
+  font-family: "Cinzel", Georgia, serif
+  font-size: 1.25rem
+  color: var(--text-strong)
+  margin-bottom: var(--space-3)
+  padding-bottom: var(--space-2)
+  border-bottom: 2px solid var(--brass-500)
+
+.user-list
+  display: flex
+  flex-direction: column
+  gap: var(--space-3)
+
+.user-card
+  display: flex
+  align-items: center
+  gap: var(--space-4)
+  padding: var(--space-4)
+  background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
+  border-radius: var(--radius-md)
+  border: 2px solid var(--wood-700)
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2)
+  transition: all 0.3s ease
+
+  &:hover
+    transform: translateY(-2px)
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3)
+    border-color: var(--brass-500)
+
+  &.inviting
+    opacity: 0.7
+    pointer-events: none
+
+.user-avatar
+  width: 50px
+  height: 50px
+  border-radius: 50%
+  background: linear-gradient(135deg, var(--brass-400), var(--brass-600))
+  display: flex
+  align-items: center
+  justify-content: center
+  color: var(--wood-900)
+  font-size: 1.5rem
+  flex-shrink: 0
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2)
+
+.user-info
+  flex: 1
+  display: flex
+  flex-direction: column
+  gap: var(--space-1)
+
+.user-name
+  font-weight: 600
+  font-size: 1.1rem
+  color: var(--text-strong)
+  font-family: "Cinzel", Georgia, serif
+
+.user-email
+  font-size: 0.9rem
+  color: var(--text-soft)
+
+.user-member
+  font-size: 0.8rem
+  color: var(--text-soft)
+  font-style: italic
+
+.user-actions
+  flex-shrink: 0
+
+.btn-invite
+  min-width: 120px
+  padding: var(--space-2) var(--space-4)
+  font-weight: 600
+  transition: all 0.2s ease
+
+  &:disabled
+    opacity: 0.8
+    cursor: not-allowed
+
+  &.btn-success
+    background: var(--success-500)
+    border-color: var(--success-600)
+
+.current-players-list
+  list-style: none
+  padding: 0
+  margin: 0
+  display: flex
+  flex-direction: column
+  gap: var(--space-2)
+
+  li
+    display: flex
+    align-items: center
+    gap: var(--space-3)
+    padding: var(--space-3)
+    background: rgba(0,0,0,0.1)
+    border-radius: var(--radius-sm)
+    border-left: 3px solid var(--brass-500)
+
+    strong
+      flex: 1
+      color: var(--text-strong)
+
+.character-count
+  font-size: 0.85rem
+  color: var(--text-soft)
+  font-style: italic
+
+.empty-text
+  text-align: center
+  color: var(--text-soft)
+  font-style: italic
+  padding: var(--space-4)
+
+.search-results .loading
+  text-align: center
+  padding: var(--space-4)
+  color: var(--text-soft)
+
+  i
+    margin-right: var(--space-2)
+
 // Auth Forms
 .auth-form
   padding: var(--space-6)
@@ -749,3 +912,6 @@
   font-size: 0.875rem
   margin-top: var(--space-2)
 
+.ability-adjuster
+    display: inline-block
+    max-width: 120px

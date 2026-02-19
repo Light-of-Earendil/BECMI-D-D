@@ -102,7 +102,14 @@ try {
         
         $formattedTracks = array_map(function($track) {
             $filePath = $track['file_path'];
-            $fileUrl = (strpos($filePath, '/') === 0) ? $filePath : '/' . $filePath;
+            // Ensure path starts with / and doesn't have public/ prefix
+            $fileUrl = $filePath;
+            if (strpos($filePath, 'public/') === 0) {
+                $fileUrl = substr($filePath, 7); // Remove 'public/' prefix
+            }
+            if (strpos($fileUrl, '/') !== 0) {
+                $fileUrl = '/' . $fileUrl;
+            }
             
             return [
                 'playlist_track_id' => (int) $track['playlist_track_id'],

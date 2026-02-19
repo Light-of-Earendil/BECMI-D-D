@@ -45,11 +45,21 @@ class DMDashboardModule {
                 this.currentSessionId = sessionId;
                 console.log(`Dashboard loaded: ${this.dashboardData.party_stats.total_characters} characters`);
                 return this.dashboardData;
+            } else if (response.status === 403) {
+                // User is not DM - this is expected in some cases, handle gracefully
+                const error = new Error(response.message || 'You do not have permission to view this dashboard. Only the DM can access this view.');
+                error.isPermissionError = true;
+                throw error;
             } else {
                 throw new Error(response.message || 'Failed to load dashboard');
             }
         } catch (error) {
-            console.error('Failed to load DM dashboard:', error);
+            // Only log as error if it's not a permission error (403)
+            if (!error.isPermissionError) {
+                console.error('Failed to load DM dashboard:', error);
+            } else {
+                console.warn('DM dashboard access denied (user is not DM):', error.message);
+            }
             throw error;
         }
     }
@@ -1557,9 +1567,19 @@ class DMDashboardModule {
      * @param {number} sessionId - Session ID
      */
     startRealtimeClient(sessionId) {
+        // Keep current client if already attached to this session.
+        if (this.realtimeClient && this.realtimeClient.sessionId === sessionId) {
+            if (!this.realtimeClient.isPolling) {
+                this.realtimeClient.start();
+            }
+            console.log('Real-time client already active for session', sessionId);
+            return;
+        }
+
         // Stop existing client if any
         if (this.realtimeClient) {
             this.realtimeClient.stop();
+            this.realtimeClient = null;
         }
         
         // Create new realtime client
@@ -2039,4 +2059,3 @@ class DMDashboardModule {
 
 // Export to window for use in app.js
 window.DMDashboardModule = DMDashboardModule;
-

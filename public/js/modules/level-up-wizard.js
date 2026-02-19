@@ -634,6 +634,16 @@ class LevelUpWizard {
                 this.updateWizardDisplay();
             }
         });
+        
+        // Load spells when step 4 is shown
+        if (this.currentStep === 4) {
+            this.loadAvailableSpells();
+        }
+        
+        // Spell level filter change
+        $(document).off('change', '#spell-level-filter').on('change', '#spell-level-filter', () => {
+            this.loadAvailableSpells();
+        });
     }
     
     /**
@@ -648,6 +658,14 @@ class LevelUpWizard {
         
         // Re-setup step handlers
         this.setupStepHandlers();
+        
+        // Load data for specific steps
+        if (this.currentStep === 4) {
+            // Small delay to ensure DOM is ready
+            setTimeout(() => {
+                this.loadAvailableSpells();
+            }, 100);
+        }
     }
     
     /**
@@ -876,6 +894,139 @@ class LevelUpWizard {
             'spells': 'Spells'
         };
         return names[save] || save;
+    }
+    
+    /**
+     * Load available spells for level-up selection
+     */
+    async loadAvailableSpells() {
+        const character = this.currentCharacter;
+        const spellType = character.class === 'cleric' ? 'cleric' : 'magic_user';
+        const spellLevel = parseInt($('#spell-level-filter').val()) || 1;
+        
+        const $spellsList = $('#available-spells-list');
+        if ($spellsList.length === 0) {
+            return; // Element doesn't exist yet
+        }
+        
+        try {
+            // Show loading state
+            $spellsList.html('<div class="loading-spinner">Loading available spells...</div>');
+            
+            // Get current character spells to filter out already known spells
+            const currentSpellsResponse = await this.app.apiClient.get(
+                `/api/spells/get-character-spells.php?character_id=${character.character_id}&t=${Date.now()}`
+            );
+            
+            const currentSpellIds = [];
+            if (currentSpellsResponse.status === 'success' && currentSpellsResponse.data.spells) {
+                currentSpellIds.push(...currentSpellsResponse.data.spells.map(s => s.spell_id));
+            }
+            
+            // Load available spells
+            const response = await this.app.apiClient.get(
+                `/api/spells/list.php?spell_type=${spellType}&spell_level=${spellLevel}&t=${Date.now()}`
+            );
+            
+            if (response.status === 'success' && response.data.spells) {
+                const availableSpells = response.data.spells.filter(spell => !currentSpellIds.includes(spell.spell_id));
+                
+                if (availableSpells.length === 0) {
+                    $spellsList.html('<p class="text-muted">No new spells available at this level.</p>');
+                    return;
+                }
+                
+                // Get selected spells from wizard data
+                const selectedSpellIds = this.wizardData.new_spells || [];
+                
+                // Render spell list
+                const spellsHtml = availableSpells.map(spell => {
+                    const isSelected = selectedSpellIds.includes(spell.spell_id);
+                    return `
+                        <div class="spell-selection-card ${isSelected ? 'selected' : ''}" data-spell-id="${spell.spell_id}">
+                            <div class="spell-selection-header">
+                                <h5>${spell.spell_name}</h5>
+                                <button type="button" class="btn btn-sm ${isSelected ? 'btn-success' : 'btn-primary'} toggle-spell-btn" 
+                                        data-spell-id="${spell.spell_id}"
+                                        data-spell-name="${spell.spell_name}">
+                                    ${isSelected ? '<i class="fas fa-check"></i> Selected' : '<i class="fas fa-plus"></i> Add'}
+                                </button>
+                            </div>
+                            <div class="spell-selection-details">
+                                <p><strong>Range:</strong> ${spell.range || 'N/A'}</p>
+                                <p><strong>Duration:</strong> ${spell.duration || 'N/A'}</p>
+                                <p class="spell-description">${spell.description || ''}</p>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+                $spellsList.html(`<div class="spell-selection-grid">${spellsHtml}</div>`);
+                
+                // Setup toggle handlers
+                $(document).off('click', '.toggle-spell-btn').on('click', '.toggle-spell-btn', (e) => {
+                    e.preventDefault();
+                    const $btn = $(e.currentTarget);
+                    const spellId = parseInt($btn.data('spell-id'));
+                    const spellName = $btn.data('spell-name');
+                    
+                    if (!this.wizardData.new_spells) {
+                        this.wizardData.new_spells = [];
+                    }
+                    
+                    const index = this.wizardData.new_spells.indexOf(spellId);
+                    if (index > -1) {
+                        // Remove spell
+                        this.wizardData.new_spells.splice(index, 1);
+                        $btn.closest('.spell-selection-card').removeClass('selected');
+                        $btn.removeClass('btn-success').addClass('btn-primary');
+                        $btn.html('<i class="fas fa-plus"></i> Add');
+                    } else {
+                        // Add spell (limit to 2 spells per level)
+                        if (this.wizardData.new_spells.length >= 2) {
+                            if (this.app.modules.notifications) {
+                                this.app.modules.notifications.show('You can only learn 1-2 new spells per level', 'warning');
+                            }
+                            return;
+                        }
+                        this.wizardData.new_spells.push(spellId);
+                        $btn.closest('.spell-selection-card').addClass('selected');
+                        $btn.removeClass('btn-primary').addClass('btn-success');
+                        $btn.html('<i class="fas fa-check"></i> Selected');
+                    }
+                    
+                    // Update selected spells display
+                    this.updateSelectedSpellsDisplay();
+                });
+                
+            } else {
+                $spellsList.html('<p class="error">Failed to load spells</p>');
+            }
+        } catch (error) {
+            console.error('Failed to load available spells:', error);
+            $spellsList.html('<p class="error">Error loading spells: ' + error.message + '</p>');
+        }
+    }
+    
+    /**
+     * Update selected spells display
+     */
+    updateSelectedSpellsDisplay() {
+        const selectedSpellIds = this.wizardData.new_spells || [];
+        const $display = $('#selected-spells-display');
+        
+        if (selectedSpellIds.length === 0) {
+            $display.html('<em>No spells selected</em>');
+            return;
+        }
+        
+        // Get spell names from the UI
+        const selectedSpells = selectedSpellIds.map(spellId => {
+            const $card = $(`.spell-selection-card[data-spell-id="${spellId}"]`);
+            return $card.find('h5').text();
+        });
+        
+        $display.html(selectedSpells.map(name => `<span class="selected-spell-badge">${name}</span>`).join(''));
     }
     
     /**

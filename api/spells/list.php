@@ -35,8 +35,8 @@ try {
     $db = getDB();
     
     // Build query
-    $query = "SELECT spell_id, spell_name, spell_level, spell_type, spell_school,
-                     casting_time, range_feet, duration, description, components,
+    $query = "SELECT spell_id, spell_name, spell_level, spell_type,
+                     range_text, duration_text, description, components,
                      reversible, reverse_name
               FROM spells
               WHERE 1=1";
@@ -74,14 +74,12 @@ try {
             'spell_name' => $spell['spell_name'],
             'spell_level' => (int) $spell['spell_level'],
             'spell_type' => $spell['spell_type'],
-            'spell_school' => $spell['spell_school'],
-            'casting_time' => $spell['casting_time'],
-            'range' => $spell['range_feet'],
-            'duration' => $spell['duration'],
+            'range' => $spell['range_text'] ?? null,
+            'duration' => $spell['duration_text'] ?? null,
             'description' => $spell['description'],
-            'components' => $spell['components'],
+            'components' => $spell['components'] ?? null,
             'reversible' => (bool) $spell['reversible'],
-            'reverse_name' => $spell['reverse_name']
+            'reverse_name' => $spell['reverse_name'] ?? null
         ];
     }, $spells);
     

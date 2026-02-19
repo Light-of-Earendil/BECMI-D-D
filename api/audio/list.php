@@ -5,7 +5,7 @@
  * Lists all audio tracks for a session, optionally filtered by type
  * 
  * Request: GET
- * Query: session_id (required), track_type (optional: 'music' or 'sound')
+ * Query: session_id (required), track_type (optional: 'music', 'sound', or 'ambiance')
  * 
  * Response: {
  *   "status": "success",
@@ -62,8 +62,8 @@ try {
     }
     
     // Validate track_type if provided
-    if ($trackType && !in_array($trackType, ['music', 'sound'])) {
-        Security::sendValidationErrorResponse(['track_type' => 'Track type must be "music" or "sound"']);
+    if ($trackType && !in_array($trackType, ['music', 'sound', 'ambiance'])) {
+        Security::sendValidationErrorResponse(['track_type' => 'Track type must be "music", "sound", or "ambiance"']);
     }
     
     // Verify session exists and user has access

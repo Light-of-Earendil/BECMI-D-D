@@ -51,8 +51,8 @@ try {
         $errors['session_id'] = 'Valid session ID is required';
     }
     
-    if (!isset($data['action']) || !in_array($data['action'], ['play', 'pause', 'stop', 'volume', 'loop'])) {
-        $errors['action'] = 'Valid action is required (play, pause, stop, volume, or loop)';
+    if (!isset($data['action']) || !in_array($data['action'], ['play', 'pause', 'stop', 'volume', 'loop', 'playlist_loop'])) {
+        $errors['action'] = 'Valid action is required (play, pause, stop, volume, loop, or playlist_loop)';
     }
     
     if (!empty($errors)) {
@@ -240,7 +240,15 @@ try {
             $eventData['sound_volume'] = $soundVolume;
         }
         
-        if (!isset($data['volume']) && !isset($data['music_volume']) && !isset($data['sound_volume'])) {
+        if (isset($data['ambiance_volume'])) {
+            $ambianceVolume = (float) $data['ambiance_volume'];
+            if ($ambianceVolume < 0 || $ambianceVolume > 1) {
+                Security::sendValidationErrorResponse(['ambiance_volume' => 'Ambiance volume must be between 0 and 1']);
+            }
+            $eventData['ambiance_volume'] = $ambianceVolume;
+        }
+        
+        if (!isset($data['volume']) && !isset($data['music_volume']) && !isset($data['sound_volume']) && !isset($data['ambiance_volume'])) {
             Security::sendValidationErrorResponse(['volume' => 'At least one volume parameter is required for volume action']);
         }
     }
@@ -250,6 +258,33 @@ try {
             Security::sendValidationErrorResponse(['loop' => 'Loop value is required for loop action']);
         }
         $eventData['loop'] = (bool) $data['loop'];
+    }
+    
+    if ($action === 'playlist_loop') {
+        // Validate playlist_loop action
+        if (!isset($data['playlist_id'])) {
+            Security::sendValidationErrorResponse(['playlist_id' => 'Playlist ID is required for playlist_loop action']);
+        }
+        if (!isset($data['is_playlist_looping'])) {
+            Security::sendValidationErrorResponse(['is_playlist_looping' => 'is_playlist_looping value is required for playlist_loop action']);
+        }
+        
+        $playlistId = (int) $data['playlist_id'];
+        // Verify playlist exists and belongs to session
+        $playlist = $db->selectOne(
+            "SELECT playlist_id, playlist_name
+             FROM session_audio_playlists
+             WHERE playlist_id = ? AND session_id = ?",
+            [$playlistId, $sessionId]
+        );
+        
+        if (!$playlist) {
+            Security::sendErrorResponse('Playlist not found or does not belong to this session', 404);
+        }
+        
+        $eventData['playlist_id'] = $playlistId;
+        $eventData['playlist_name'] = $playlist['playlist_name'];
+        $eventData['is_playlist_looping'] = (bool) $data['is_playlist_looping'];
     }
     
     // Broadcast event

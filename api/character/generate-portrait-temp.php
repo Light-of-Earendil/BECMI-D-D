@@ -31,6 +31,12 @@ try {
     // Require authentication
     Security::requireAuth();
     
+    // Validate Together AI API key is configured
+    if (empty($together_AI_api_key)) {
+        error_log("Together AI API key not configured - TOGETHER_AI_API_KEY environment variable is missing or empty");
+        Security::sendErrorResponse('Portrait generation is not configured. Please contact the administrator.', 503);
+    }
+    
     // Get POST data
     $data = json_decode(file_get_contents('php://input'), true);
     

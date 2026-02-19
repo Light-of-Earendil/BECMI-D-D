@@ -13,7 +13,6 @@ class SessionManagementModule {
         this.lastDashboardLoad = null;
         this.gameTimeRealtimeClient = null;
         this.playerInitiativePollInterval = null;
-        this.playerInitiativePollInterval = null;
         
         console.log('Session Management Module initialized');
     }
@@ -479,12 +478,25 @@ class SessionManagementModule {
             this.showInvitePlayerModal(sessionId);
         });
         
-        $(document).on('click', '[data-action="remove-player"]', (e) => {
+        $(document).on('click', '[data-action="remove-player"]', async (e) => {
             e.preventDefault();
-            const sessionId = $(e.currentTarget).data('session-id');
-            const userId = $(e.currentTarget).data('user-id');
-            const username = $(e.currentTarget).data('username');
-            this.removePlayer(sessionId, userId, username);
+            const $button = $(e.currentTarget);
+            const sessionId = $button.data('session-id');
+            const userId = $button.data('user-id');
+            const username = $button.data('username');
+            
+            // Show loading state immediately
+            const originalHtml = $button.html();
+            $button.prop('disabled', true);
+            $button.html('<i class="fas fa-spinner fa-spin"></i> Removing...');
+            
+            try {
+                await this.removePlayer(sessionId, userId, username, $button);
+            } catch (error) {
+                // Re-enable button on error
+                $button.prop('disabled', false);
+                $button.html(originalHtml);
+            }
         });
         
         // Add/Edit Meet Link buttons
@@ -494,16 +506,48 @@ class SessionManagementModule {
             this.editSession(sessionId); // Opens edit modal where they can add/edit meet link
         });
         
-        $(document).on('click', '[data-action="accept-invitation"]', (e) => {
+        $(document).on('click', '[data-action="accept-invitation"]', async (e) => {
             e.preventDefault();
-            const sessionId = $(e.currentTarget).data('session-id');
-            this.acceptInvitation(sessionId);
+            const $button = $(e.currentTarget);
+            const sessionId = $button.data('session-id');
+            const $card = $button.closest('.invitation-card-modern, .invitation-card');
+            
+            // Show loading state
+            const originalHtml = $button.html();
+            $button.prop('disabled', true);
+            $button.html('<i class="fas fa-spinner fa-spin"></i> Accepting...');
+            $card.addClass('processing');
+            
+            try {
+                await this.acceptInvitation(sessionId, $button, $card);
+            } catch (error) {
+                // Re-enable button on error
+                $button.prop('disabled', false);
+                $button.html(originalHtml);
+                $card.removeClass('processing');
+            }
         });
         
-        $(document).on('click', '[data-action="decline-invitation"]', (e) => {
+        $(document).on('click', '[data-action="decline-invitation"]', async (e) => {
             e.preventDefault();
-            const sessionId = $(e.currentTarget).data('session-id');
-            this.declineInvitation(sessionId);
+            const $button = $(e.currentTarget);
+            const sessionId = $button.data('session-id');
+            const $card = $button.closest('.invitation-card-modern, .invitation-card');
+            
+            // Show loading state
+            const originalHtml = $button.html();
+            $button.prop('disabled', true);
+            $button.html('<i class="fas fa-spinner fa-spin"></i> Declining...');
+            $card.addClass('processing');
+            
+            try {
+                await this.declineInvitation(sessionId, $button, $card);
+            } catch (error) {
+                // Re-enable button on error
+                $button.prop('disabled', false);
+                $button.html(originalHtml);
+                $card.removeClass('processing');
+            }
         });
         
         // Assign character to session
@@ -1102,7 +1146,7 @@ class SessionManagementModule {
             
             // Initialize audio manager for players (to receive synchronized audio)
             // This must be done before game time realtime client so we can reuse it
-            this.initializePlayerAudioManager(sessionId);
+            await this.initializePlayerAudioManager(sessionId);
             
             // Load game time if session has campaign_id
             if (this.currentSession.campaign_id) {
@@ -1632,11 +1676,21 @@ class SessionManagementModule {
             
             if (response.status === 'success') {
                 return response.data;
+            } else if (response.status === 403) {
+                // User is not DM - this is expected in some cases, handle gracefully
+                const error = new Error(response.message || 'You do not have permission to view this dashboard. Only the DM can access this view.');
+                error.isPermissionError = true;
+                throw error;
             } else {
                 throw new Error(response.message || 'Failed to load dashboard');
             }
         } catch (error) {
-            console.error('Failed to load DM dashboard:', error);
+            // Only log as error if it's not a permission error (403)
+            if (!error.isPermissionError) {
+                console.error('Failed to load DM dashboard:', error);
+            } else {
+                console.warn('DM dashboard access denied (user is not DM):', error.message);
+            }
             throw error;
         }
     }
@@ -1825,7 +1879,7 @@ class SessionManagementModule {
             const playersData = await this.loadSessionPlayers(sessionId);
             const existingPlayerIds = playersData.players.map(p => p.user_id);
             
-            // Show search interface
+            // Show search interface with improved styling
             $('#invite-player-content').html(`
                 <div class="invite-form">
                     <input type="hidden" id="invite-session-id" value="${sessionId}">
@@ -1922,17 +1976,22 @@ class SessionManagementModule {
                         <div class="user-list">
                             ${users.map(user => `
                                 <div class="user-card" data-user-id="${user.user_id}">
-                                    <div class="user-info">
-                                        <strong>${user.username}</strong>
-                                        <span class="user-email">${user.email_display}</span>
-                                        <span class="user-member">Member since ${user.member_since}</span>
+                                    <div class="user-avatar">
+                                        <i class="fas fa-user"></i>
                                     </div>
-                                    <button class="btn btn-sm btn-primary" 
-                                            data-action="invite-user" 
-                                            data-user-id="${user.user_id}"
-                                            data-username="${user.username}">
-                                        <i class="fas fa-user-plus"></i> Invite
-                                    </button>
+                                    <div class="user-info">
+                                        <div class="user-name">${user.username}</div>
+                                        <div class="user-email">${user.email_display}</div>
+                                        <div class="user-member">Member since ${user.member_since}</div>
+                                    </div>
+                                    <div class="user-actions">
+                                        <button class="btn btn-primary btn-invite" 
+                                                data-action="invite-user" 
+                                                data-user-id="${user.user_id}"
+                                                data-username="${user.username}">
+                                            <i class="fas fa-user-plus"></i> <span>Invite</span>
+                                        </button>
+                                    </div>
                                 </div>
                             `).join('')}
                         </div>
@@ -1941,10 +2000,24 @@ class SessionManagementModule {
                 
                 // Setup invite button handlers
                 $('[data-action="invite-user"]').on('click', async (e) => {
-                    const userId = parseInt($(e.currentTarget).data('user-id'));
-                    const username = $(e.currentTarget).data('username');
-                    await this.invitePlayer(sessionId, userId);
-                    $('#invite-player-modal').hide();
+                    const $button = $(e.currentTarget);
+                    const userId = parseInt($button.data('user-id'));
+                    const username = $button.data('username');
+                    const $userCard = $button.closest('.user-card');
+                    
+                    // Disable button and show loading state
+                    $button.prop('disabled', true);
+                    $button.html('<i class="fas fa-spinner fa-spin"></i> Sending invitation...');
+                    $userCard.addClass('inviting');
+                    
+                    try {
+                        await this.invitePlayer(sessionId, userId, username, $button);
+                    } catch (error) {
+                        // Re-enable button on error
+                        $button.prop('disabled', false);
+                        $button.html('<i class="fas fa-user-plus"></i> Invite');
+                        $userCard.removeClass('inviting');
+                    }
                 });
                 
             } else {
@@ -1962,8 +2035,10 @@ class SessionManagementModule {
      * 
      * @param {number} sessionId - ID of session
      * @param {number} userId - ID of user to invite
+     * @param {string} username - Username of player being invited
+     * @param {jQuery} $button - The invite button element (optional)
      */
-    async invitePlayer(sessionId, userId) {
+    async invitePlayer(sessionId, userId, username = null, $button = null) {
         try {
             const response = await this.apiClient.post('/api/session/invite-player.php', {
                 session_id: sessionId,
@@ -1971,17 +2046,83 @@ class SessionManagementModule {
             });
             
             if (response.status === 'success') {
-                this.app.showSuccess(`Player invited successfully`);
-                $('#invite-player-modal').hide();
+                // Show success state on button
+                if ($button) {
+                    $button.html('<i class="fas fa-check"></i> Invited!');
+                    $button.removeClass('btn-primary').addClass('btn-success');
+                    $button.prop('disabled', true);
+                    
+                    // Remove user card from search results after a short delay
+                    setTimeout(() => {
+                        const $userCard = $button.closest('.user-card');
+                        $userCard.fadeOut(300, function() {
+                            $(this).remove();
+                            // Update search results count
+                            const $userList = $('.user-list');
+                            const remainingUsers = $userList.find('.user-card').length;
+                            if (remainingUsers === 0) {
+                                $('#search-results').html('<p class="empty-text">All users have been invited</p>');
+                            } else {
+                                $('.user-results h4').text(`Search Results (${remainingUsers}):`);
+                            }
+                        });
+                    }, 1500);
+                }
                 
-                // Reload session details
+                // Show success notification
+                this.app.showSuccess(`${username || 'Player'} has been invited successfully!`);
+                
+                // Reload current players list in modal
+                const playersData = await this.loadSessionPlayers(sessionId);
+                this.updateCurrentPlayersList(playersData.players);
+                
+                // Reload session details in main view
                 await this.loadSession(sessionId);
             } else {
+                // Show error state on button
+                if ($button) {
+                    $button.prop('disabled', false);
+                    $button.html('<i class="fas fa-user-plus"></i> Invite');
+                    $button.closest('.user-card').removeClass('inviting');
+                }
                 this.app.showError(response.message || 'Failed to invite player');
             }
         } catch (error) {
             console.error('Failed to invite player:', error);
-            this.app.showError('Failed to invite player: ' + error.message);
+            
+            // Re-enable button on error
+            if ($button) {
+                $button.prop('disabled', false);
+                $button.html('<i class="fas fa-user-plus"></i> Invite');
+                $button.closest('.user-card').removeClass('inviting');
+            }
+            
+            this.app.showError('Failed to invite player: ' + (error.message || 'Unknown error'));
+        }
+    }
+    
+    /**
+     * Update current players list in invite modal
+     * 
+     * @param {array} players - Array of player objects
+     */
+    updateCurrentPlayersList(players) {
+        const $currentPlayersSection = $('.current-players-list').parent();
+        if ($currentPlayersSection.length) {
+            $currentPlayersSection.html(`
+                <h4>Current Players (${players.length})</h4>
+                ${players.length > 0 ? `
+                    <ul class="current-players-list">
+                        ${players.map(p => `
+                            <li>
+                                <strong>${p.username}</strong>
+                                <span class="player-status ${p.status}">${p.status}</span>
+                                ${p.character_count > 0 ? `<span class="character-count">${p.character_count} chars</span>` : ''}
+                            </li>
+                        `).join('')}
+                    </ul>
+                ` : '<p class="empty-text">No players invited yet</p>'}
+            `);
         }
     }
     
@@ -1991,11 +2132,25 @@ class SessionManagementModule {
      * @param {number} sessionId - ID of session
      * @param {number} userId - ID of user to remove
      * @param {string} username - Username of player
+     * @param {jQuery} $button - The remove button element (optional)
      */
-    async removePlayer(sessionId, userId, username) {
+    async removePlayer(sessionId, userId, username, $button = null) {
         if (!confirm(`Are you sure you want to remove ${username} from this session?`)) {
+            // Re-enable button if user cancels
+            if ($button) {
+                $button.prop('disabled', false);
+                const originalHtml = $button.closest('[data-user-id]').find('[data-action="remove-player"]').first().data('original-html');
+                if (originalHtml) {
+                    $button.html(originalHtml);
+                } else {
+                    $button.html('<i class="fas fa-user-times"></i> Remove');
+                }
+            }
             return;
         }
+        
+        // Find player card element for visual feedback
+        const $playerCard = $button ? $button.closest('.dm-player-card, tr[data-user-id="' + userId + '"]') : null;
         
         try {
             const response = await this.apiClient.post('/api/session/remove-player.php', {
@@ -2004,16 +2159,77 @@ class SessionManagementModule {
             });
             
             if (response.status === 'success') {
-                this.app.showSuccess(`Player ${username} removed from session`);
+                // Show success state on button
+                if ($button) {
+                    $button.html('<i class="fas fa-check"></i> Removed!');
+                    $button.removeClass('btn-danger').addClass('btn-success');
+                }
                 
-                // Reload session details
+                // Fade out and remove player card
+                if ($playerCard && $playerCard.length) {
+                    $playerCard.fadeOut(400, function() {
+                        $(this).remove();
+                        
+                        // Update player counts if they exist
+                        const $playersSection = $('.players-section');
+                        if ($playersSection.length) {
+                            const remainingPlayers = $playersSection.find('.dm-player-card').length;
+                            if (remainingPlayers === 0) {
+                                // Show empty state
+                                $playersSection.html(`
+                                    <h2><i class="fas fa-users"></i> Players & Characters</h2>
+                                    <div class="empty-state">
+                                        <i class="fas fa-user-slash"></i>
+                                        <p>No players invited yet</p>
+                                        <button class="btn btn-primary" data-action="invite-player" data-session-id="${sessionId}">
+                                            <i class="fas fa-user-plus"></i> Invite Your First Player
+                                        </button>
+                                    </div>
+                                `);
+                            }
+                        }
+                        
+                        // Update player stats if they exist
+                        const $playerStats = $('.player-stats');
+                        if ($playerStats.length) {
+                            // Reload players to update counts
+                            this.loadSessionPlayers(sessionId);
+                        }
+                    });
+                }
+                
+                // Show success notification
+                this.app.showSuccess(`${username} has been removed from the session`);
+                
+                // Reload session details to update all views
                 await this.loadSession(sessionId);
+                
+                // Also reload players list if it exists separately
+                await this.loadSessionPlayers(sessionId);
+                
+                // If DM dashboard is open, reload it
+                if (this.app.modules && this.app.modules.dmDashboard) {
+                    // DM dashboard will be updated by loadSession above
+                }
+                
             } else {
+                // Re-enable button on error
+                if ($button) {
+                    $button.prop('disabled', false);
+                    $button.html('<i class="fas fa-user-times"></i> Remove');
+                }
                 this.app.showError(response.message || 'Failed to remove player');
             }
         } catch (error) {
             console.error('Failed to remove player:', error);
-            this.app.showError('Failed to remove player: ' + error.message);
+            
+            // Re-enable button on error
+            if ($button) {
+                $button.prop('disabled', false);
+                $button.html('<i class="fas fa-user-times"></i> Remove');
+            }
+            
+            this.app.showError('Failed to remove player: ' + (error.message || 'Unknown error'));
         }
     }
     
@@ -2021,25 +2237,71 @@ class SessionManagementModule {
      * Accept session invitation
      * 
      * @param {number} sessionId - ID of session
+     * @param {jQuery} $button - The accept button element (optional)
+     * @param {jQuery} $card - The invitation card element (optional)
      */
-    async acceptInvitation(sessionId) {
+    async acceptInvitation(sessionId, $button = null, $card = null) {
         try {
             const response = await this.apiClient.post('/api/session/accept-invitation.php', {
                 session_id: sessionId
             });
             
             if (response.status === 'success') {
-                this.app.showSuccess('Invitation accepted successfully');
+                // Show success state on button
+                if ($button) {
+                    $button.html('<i class="fas fa-check-circle"></i> Accepted!');
+                    $button.removeClass('btn-success').addClass('btn-success');
+                    $button.prop('disabled', true);
+                }
+                
+                // Fade out and remove card after a short delay
+                if ($card && $card.length) {
+                    setTimeout(() => {
+                        $card.fadeOut(400, function() {
+                            $(this).remove();
+                            // Update invitation count if it exists
+                            const $invitationsSection = $('.invitations-section');
+                            if ($invitationsSection.length) {
+                                const remainingInvitations = $invitationsSection.find('.invitation-card-modern, .invitation-card').length;
+                                if (remainingInvitations === 0) {
+                                    $invitationsSection.remove();
+                                } else {
+                                    $invitationsSection.find('h3').html(`<i class="fas fa-bell"></i> Pending Invitations (${remainingInvitations})`);
+                                }
+                            }
+                        });
+                    }, 1500);
+                }
+                
+                this.app.showSuccess('Invitation accepted successfully!');
                 
                 // Reload user data and session
                 await this.app.loadUserData();
                 await this.loadSession(sessionId);
             } else {
+                // Re-enable button on error
+                if ($button) {
+                    $button.prop('disabled', false);
+                    $button.html('<i class="fas fa-check-circle"></i> <span>Accept Invitation</span>');
+                }
+                if ($card) {
+                    $card.removeClass('processing');
+                }
                 this.app.showError(response.message || 'Failed to accept invitation');
             }
         } catch (error) {
             console.error('Failed to accept invitation:', error);
-            this.app.showError('Failed to accept invitation: ' + error.message);
+            
+            // Re-enable button on error
+            if ($button) {
+                $button.prop('disabled', false);
+                $button.html('<i class="fas fa-check-circle"></i> <span>Accept Invitation</span>');
+            }
+            if ($card) {
+                $card.removeClass('processing');
+            }
+            
+            this.app.showError('Failed to accept invitation: ' + (error.message || 'Unknown error'));
         }
     }
     
@@ -2047,9 +2309,19 @@ class SessionManagementModule {
      * Decline session invitation
      * 
      * @param {number} sessionId - ID of session
+     * @param {jQuery} $button - The decline button element (optional)
+     * @param {jQuery} $card - The invitation card element (optional)
      */
-    async declineInvitation(sessionId) {
+    async declineInvitation(sessionId, $button = null, $card = null) {
         if (!confirm('Are you sure you want to decline this invitation?')) {
+            // Re-enable button if user cancels
+            if ($button) {
+                $button.prop('disabled', false);
+                $button.html('<i class="fas fa-times-circle"></i> <span>Decline</span>');
+            }
+            if ($card) {
+                $card.removeClass('processing');
+            }
             return;
         }
         
@@ -2059,17 +2331,61 @@ class SessionManagementModule {
             });
             
             if (response.status === 'success') {
+                // Show success state on button
+                if ($button) {
+                    $button.html('<i class="fas fa-times-circle"></i> Declined');
+                    $button.removeClass('btn-danger').addClass('btn-secondary');
+                    $button.prop('disabled', true);
+                }
+                
+                // Fade out and remove card after a short delay
+                if ($card && $card.length) {
+                    setTimeout(() => {
+                        $card.fadeOut(400, function() {
+                            $(this).remove();
+                            // Update invitation count if it exists
+                            const $invitationsSection = $('.invitations-section');
+                            if ($invitationsSection.length) {
+                                const remainingInvitations = $invitationsSection.find('.invitation-card-modern, .invitation-card').length;
+                                if (remainingInvitations === 0) {
+                                    $invitationsSection.remove();
+                                } else {
+                                    $('.invitations-section h3').html(`<i class="fas fa-bell"></i> Pending Invitations (${remainingInvitations})`);
+                                }
+                            }
+                        });
+                    }, 1500);
+                }
+                
                 this.app.showSuccess('Invitation declined');
                 
                 // Reload user data
                 await this.app.loadUserData();
                 this.app.navigateToView('sessions');
             } else {
+                // Re-enable button on error
+                if ($button) {
+                    $button.prop('disabled', false);
+                    $button.html('<i class="fas fa-times-circle"></i> <span>Decline</span>');
+                }
+                if ($card) {
+                    $card.removeClass('processing');
+                }
                 this.app.showError(response.message || 'Failed to decline invitation');
             }
         } catch (error) {
             console.error('Failed to decline invitation:', error);
-            this.app.showError('Failed to decline invitation: ' + error.message);
+            
+            // Re-enable button on error
+            if ($button) {
+                $button.prop('disabled', false);
+                $button.html('<i class="fas fa-times-circle"></i> <span>Decline</span>');
+            }
+            if ($card) {
+                $card.removeClass('processing');
+            }
+            
+            this.app.showError('Failed to decline invitation: ' + (error.message || 'Unknown error'));
         }
     }
     
@@ -2334,6 +2650,9 @@ class SessionManagementModule {
                         <button class="tab-btn" data-tab="sounds">
                             <i class="fas fa-volume-up"></i> Sound Effects
                         </button>
+                        <button class="tab-btn" data-tab="ambiance">
+                            <i class="fas fa-tree"></i> Ambiance
+                        </button>
                         <button class="tab-btn" data-tab="playlists">
                             <i class="fas fa-list"></i> Playlists
                         </button>
@@ -2407,6 +2726,31 @@ class SessionManagementModule {
                         
                         <div class="soundboard-grid" id="soundboard-grid">
                             <div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i> Loading sounds...</div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-content" data-tab-content="ambiance">
+                        <div class="ambiance-upload-section">
+                            <h3><i class="fas fa-upload"></i> Upload Ambiance</h3>
+                            <input type="file" id="ambiance-upload-input" accept="audio/mpeg,audio/mp3" style="display: none;">
+                            <button class="btn btn-primary" id="upload-ambiance-btn" data-session-id="${sessionId}">
+                                <i class="fas fa-upload"></i> Upload MP3
+                            </button>
+                            <input type="text" id="ambiance-track-name" placeholder="Ambiance name" class="form-control" style="display: inline-block; width: 200px; margin-left: 10px;">
+                        </div>
+                        
+                        <div class="ambiance-controls">
+                            <div class="ambiance-volume-control">
+                                <label>Ambiance Volume: <span id="ambiance-volume-value">100</span>%</label>
+                                <input type="range" id="ambiance-volume-slider" min="0" max="100" value="100" data-session-id="${sessionId}">
+                            </div>
+                            <button class="btn btn-danger stop-ambiance-btn" id="stop-ambiance-btn" data-session-id="${sessionId}" style="margin-left: 20px;">
+                                <i class="fas fa-stop"></i> Stop Ambiance
+                            </button>
+                        </div>
+                        
+                        <div class="ambiance-grid" id="ambiance-grid">
+                            <div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i> Loading ambiance...</div>
                         </div>
                     </div>
                     
@@ -3130,7 +3474,9 @@ class SessionManagementModule {
                 </div>
             ` : ''}
             
-            ${initiatives.map((init, index) => `
+            ${initiatives.map((init, index) => {
+                const isMonster = init.entity_type === 'monster';
+                return `
                 <div class="initiative-entry ${init.is_current_turn ? 'current-turn' : ''}" data-initiative-id="${init.initiative_id}">
                     <div class="initiative-order-number">${index + 1}</div>
                     <div class="initiative-roll-display">
@@ -3160,7 +3506,8 @@ class SessionManagementModule {
                                     </div>
                                 ` : '<div class="initiative-hp-display"><div class="hp-text-display">—</div></div>'}
                 </div>
-            `).join('')}
+            `;
+            }).join('')}
         ` : `
             <div class="initiative-empty">
                 <i class="fas fa-dice-d6 fa-3x"></i>
@@ -3375,8 +3722,16 @@ class SessionManagementModule {
      * @param {number} sessionId - Session ID
      */
     startGameTimeRealtimeClient(sessionId) {
+        // Do not reuse realtime clients across sessions.
+        if (this.gameTimeRealtimeClient && this.gameTimeRealtimeClient.sessionId !== sessionId) {
+            this.gameTimeRealtimeClient.stop();
+            this.gameTimeRealtimeClient = null;
+        }
+
         // Reuse existing realtime client if available (e.g., from audio manager)
-        if (!this.gameTimeRealtimeClient && this.audioManager?.realtimeClient) {
+        if (!this.gameTimeRealtimeClient &&
+            this.audioManager?.realtimeClient &&
+            this.audioManager.realtimeClient.sessionId === sessionId) {
             this.gameTimeRealtimeClient = this.audioManager.realtimeClient;
         }
         
@@ -3412,7 +3767,9 @@ class SessionManagementModule {
      * 
      * @param {number} sessionId - Session ID
      */
-    initializePlayerAudioManager(sessionId) {
+    async initializePlayerAudioManager(sessionId) {
+        console.log('[Session Management] Initializing player audio manager for session', sessionId);
+        
         // Initialize audio manager if available
         if (window.AudioManager) {
             if (!this.audioManager) {
@@ -3421,6 +3778,12 @@ class SessionManagementModule {
             
             // Use gameTimeRealtimeClient if available, otherwise create a new one
             let realtimeClient = this.gameTimeRealtimeClient;
+            if (realtimeClient && realtimeClient.sessionId !== sessionId) {
+                realtimeClient.stop();
+                realtimeClient = null;
+                this.gameTimeRealtimeClient = null;
+            }
+
             if (!realtimeClient) {
                 // Create a new realtime client for audio if gameTimeRealtimeClient doesn't exist
                 if (window.RealtimeClient) {
@@ -3433,13 +3796,17 @@ class SessionManagementModule {
                 }
             }
             
-            // Initialize audio manager with realtime client
-            this.audioManager.init(sessionId, realtimeClient);
+            // Initialize audio manager with realtime client (this will sync with current state)
+            console.log('[Session Management] Initializing AudioManager with realtime client...');
+            await this.audioManager.init(sessionId, realtimeClient);
+            console.log('[Session Management] AudioManager initialized and synced');
             
-            // Set initial volume levels to match defaults
+            // Volume levels are set during sync, but set defaults if sync didn't set them
             if (this.audioManager) {
-                this.audioManager.setMasterVolume(0.6);
-                this.audioManager.setMusicVolume(0.33);
+                // Only set defaults if not already set by sync
+                if (this.audioManager.masterVolume === 0.6 && this.audioManager.musicVolume === 0.33) {
+                    // Already at defaults, no need to change
+                }
             }
             
             // Ensure realtime client is started
@@ -3468,14 +3835,9 @@ class SessionManagementModule {
             // Get realtime client from dmDashboard
             const realtimeClient = this.app.modules.dmDashboard?.realtimeClient;
             if (realtimeClient) {
-                this.audioManager.init(sessionId, realtimeClient);
+                await this.audioManager.init(sessionId, realtimeClient);
             }
             
-            // Set initial volume levels to match UI defaults
-            if (this.audioManager) {
-                this.audioManager.setMasterVolume(0.6);
-                this.audioManager.setMusicVolume(0.33);
-            }
         }
         
         // Setup soundboard event handlers
@@ -3507,9 +3869,14 @@ class SessionManagementModule {
         $('#music-upload-input').off('change').on('change', async (e) => {
             const file = e.target.files[0];
             if (file) {
-                await this.uploadAudioFile(sessionId, file, 'music', $('#music-track-name').val() || file.name);
-                $('#music-track-name').val('');
-                e.target.value = '';
+                try {
+                    await this.uploadAudioFile(sessionId, file, 'music', $('#music-track-name').val() || file.name);
+                    $('#music-track-name').val('');
+                } catch (error) {
+                    // Error already shown in uploadAudioFile.
+                } finally {
+                    e.target.value = '';
+                }
             }
         });
         
@@ -3521,17 +3888,54 @@ class SessionManagementModule {
         $('#sound-upload-input').off('change').on('change', async (e) => {
             const file = e.target.files[0];
             if (file) {
-                await this.uploadAudioFile(sessionId, file, 'sound', $('#sound-track-name').val() || file.name);
-                $('#sound-track-name').val('');
-                e.target.value = '';
+                try {
+                    await this.uploadAudioFile(sessionId, file, 'sound', $('#sound-track-name').val() || file.name);
+                    $('#sound-track-name').val('');
+                } catch (error) {
+                    // Error already shown in uploadAudioFile.
+                } finally {
+                    e.target.value = '';
+                }
+            }
+        });
+        
+        // Ambiance upload
+        $(document).off('click', '#upload-ambiance-btn').on('click', '#upload-ambiance-btn', () => {
+            $('#ambiance-upload-input').click();
+        });
+        
+        $('#ambiance-upload-input').off('change').on('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                try {
+                    await this.uploadAudioFile(sessionId, file, 'ambiance', $('#ambiance-track-name').val() || file.name);
+                    $('#ambiance-track-name').val('');
+                } catch (error) {
+                    // Error already shown in uploadAudioFile.
+                } finally {
+                    e.target.value = '';
+                }
             }
         });
         
         // Audio controls
         $(document).off('click', '#audio-play-btn').on('click', '#audio-play-btn', async (e) => {
-            const trackId = $(e.currentTarget).data('track-id');
+            const $button = $(e.currentTarget);
+            const trackId = $button.data('track-id');
+            
             if (trackId) {
-                await this.playTrack(sessionId, trackId);
+                // Show loading state immediately
+                const originalHtml = $button.html();
+                $button.prop('disabled', true);
+                $button.html('<i class="fas fa-spinner fa-spin"></i> Loading...');
+                
+                try {
+                    await this.playTrack(sessionId, trackId, $button);
+                } catch (error) {
+                    // Re-enable button on error
+                    $button.prop('disabled', false);
+                    $button.html(originalHtml);
+                }
             }
         });
         
@@ -3565,6 +3969,22 @@ class SessionManagementModule {
             $('#sound-volume-value').text($(e.target).val());
             await this.setAudioVolume(sessionId, { sound_volume: volume });
         });
+
+        $(document).off('input', '#ambiance-volume-slider').on('input', '#ambiance-volume-slider', async (e) => {
+            const volume = parseInt($(e.target).val()) / 100;
+            $('#ambiance-volume-value').text($(e.target).val());
+
+            // Local immediate feedback for DM, then broadcast to all clients
+            if (this.audioManager) {
+                this.audioManager.setAmbianceVolume(volume);
+            }
+
+            await this.setAudioVolume(sessionId, { ambiance_volume: volume });
+        });
+
+        $(document).off('click', '#stop-ambiance-btn').on('click', '#stop-ambiance-btn', async () => {
+            await this.stopAmbiance(sessionId);
+        });
         
         // Playlist creation
         $(document).off('click', '#create-playlist-btn').on('click', '#create-playlist-btn', async () => {
@@ -3581,46 +4001,64 @@ class SessionManagementModule {
      */
     async uploadAudioFile(sessionId, file, trackType, trackName) {
         try {
+            if (!file) {
+                throw new Error('No file selected');
+            }
+
+            const maxSizeBytes = 10 * 1024 * 1024;
+            if (!Number.isFinite(file.size) || file.size <= 0) {
+                throw new Error('Selected file appears empty or inaccessible');
+            }
+            if (file.size > maxSizeBytes) {
+                throw new Error('File too large. Maximum size is 10MB');
+            }
+
+            const extension = (file.name.split('.').pop() || '').toLowerCase();
+            if (extension !== 'mp3') {
+                throw new Error('Invalid file type. Only MP3 files are allowed');
+            }
+
+            const resolvedTrackName = (trackName || file.name).toString().trim() || file.name;
+
             const formData = new FormData();
             formData.append('audio', file);
             formData.append('session_id', sessionId);
             formData.append('track_type', trackType);
-            formData.append('track_name', trackName);
+            formData.append('track_name', resolvedTrackName);
             
             const xhr = new XMLHttpRequest();
             const url = this.app.modules.apiClient.buildURL('/api/audio/upload.php');
             
-            return new Promise((resolve, reject) => {
+            return await new Promise((resolve, reject) => {
                 xhr.addEventListener('load', () => {
+                    let response = null;
+                    try {
+                        const jsonMatch = xhr.responseText.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+                        const responseText = jsonMatch ? jsonMatch[1] : xhr.responseText;
+                        response = JSON.parse(responseText);
+                    } catch (e) {
+                        response = null;
+                    }
+
                     if (xhr.status >= 200 && xhr.status < 300) {
-                        try {
-                            // Parse JSON response (may have HTML before JSON)
-                            const jsonMatch = xhr.responseText.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-                            const responseText = jsonMatch ? jsonMatch[1] : xhr.responseText;
-                            const response = JSON.parse(responseText);
-                            
-                            if (response.status === 'success') {
-                                this.app.showSuccess('Audio file uploaded successfully');
-                                this.loadAudioTracks(sessionId).then(() => resolve(response)).catch(reject);
-                            } else {
-                                reject(new Error(response.message || 'Upload failed'));
-                            }
-                        } catch (e) {
-                            console.error('Parse error:', e, 'Response:', xhr.responseText);
-                            reject(new Error('Failed to parse server response'));
+                        if (response && response.status === 'success') {
+                            this.app.showSuccess(response.message || 'Audio file uploaded successfully');
+                            this.loadAudioTracks(sessionId).then(() => resolve(response)).catch(reject);
+                        } else {
+                            reject(new Error(this.extractApiErrorMessage(response, 'Upload failed')));
                         }
                     } else {
-                        reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
+                        reject(new Error(this.extractApiErrorMessage(response, `Upload failed (HTTP ${xhr.status})`)));
                     }
                 });
                 
                 xhr.addEventListener('error', () => {
-                    reject(new Error('Network error during upload'));
+                    reject(new Error('Network error during upload. Check your connection and try again.'));
                 });
                 
                 xhr.timeout = 30000;
                 xhr.addEventListener('timeout', () => {
-                    reject(new Error('Upload timeout'));
+                    reject(new Error('Upload timed out. Try a smaller file or try again.'));
                 });
                 
                 xhr.open('POST', url);
@@ -3641,33 +4079,73 @@ class SessionManagementModule {
             throw error;
         }
     }
+
+    /**
+     * Extract human-readable message from API error payload.
+     */
+    extractApiErrorMessage(response, fallbackMessage = 'Request failed') {
+        if (!response || typeof response !== 'object') {
+            return fallbackMessage;
+        }
+
+        if (typeof response.message === 'string' && response.message.trim() !== '') {
+            return response.message;
+        }
+
+        const directErrors = response.errors && typeof response.errors === 'object' ? response.errors : null;
+        const dataErrors = response.data && response.data.errors && typeof response.data.errors === 'object'
+            ? response.data.errors
+            : null;
+        const errors = directErrors || dataErrors;
+
+        if (errors) {
+            const firstError = Object.values(errors).find((value) => typeof value === 'string' && value.trim() !== '');
+            if (firstError) {
+                return firstError;
+            }
+        }
+
+        return fallbackMessage;
+    }
     
     /**
      * Load audio tracks
      */
     async loadAudioTracks(sessionId) {
         try {
-            const [musicResponse, soundResponse] = await Promise.all([
+            const [musicResult, soundResult, ambianceResult] = await Promise.allSettled([
                 this.app.modules.apiClient.get(`/api/audio/list.php?session_id=${sessionId}&track_type=music`),
-                this.app.modules.apiClient.get(`/api/audio/list.php?session_id=${sessionId}&track_type=sound`)
+                this.app.modules.apiClient.get(`/api/audio/list.php?session_id=${sessionId}&track_type=sound`),
+                this.app.modules.apiClient.get(`/api/audio/list.php?session_id=${sessionId}&track_type=ambiance`)
             ]);
-            
-            if (musicResponse.status === 'success' && musicResponse.data && musicResponse.data.tracks) {
+
+            const musicResponse = musicResult.status === 'fulfilled' ? musicResult.value : null;
+            const soundResponse = soundResult.status === 'fulfilled' ? soundResult.value : null;
+            const ambianceResponse = ambianceResult.status === 'fulfilled' ? ambianceResult.value : null;
+             
+            if (musicResponse && musicResponse.status === 'success' && musicResponse.data && musicResponse.data.tracks) {
                 this.renderMusicTracks(musicResponse.data.tracks);
             } else {
                 this.renderMusicTracks([]);
             }
-            
-            if (soundResponse.status === 'success' && soundResponse.data && soundResponse.data.tracks) {
+             
+            if (soundResponse && soundResponse.status === 'success' && soundResponse.data && soundResponse.data.tracks) {
                 this.renderSoundboardGrid(soundResponse.data.tracks);
             } else {
                 this.renderSoundboardGrid([]);
+            }
+
+            if (ambianceResponse && ambianceResponse.status === 'success' && ambianceResponse.data && ambianceResponse.data.tracks) {
+                this.renderAmbianceGrid(ambianceResponse.data.tracks);
+            } else {
+                this.renderAmbianceGrid([]);
             }
         } catch (error) {
             console.error('Failed to load audio tracks:', error);
             // Render empty lists on error
             this.renderMusicTracks([]);
             this.renderSoundboardGrid([]);
+            this.renderAmbianceGrid([]);
         }
     }
     
@@ -3707,12 +4185,25 @@ class SessionManagementModule {
         
         // Setup play buttons
         $(document).off('click', '.play-track-btn').on('click', '.play-track-btn', async (e) => {
-            const trackId = $(e.currentTarget).data('track-id');
-            const sessionId = this.currentSession?.session_id || $(e.currentTarget).closest('.soundboard-section').find('[data-session-id]').first().data('session-id');
+            const $button = $(e.currentTarget);
+            const trackId = $button.data('track-id');
+            const sessionId = this.currentSession?.session_id || $button.closest('.soundboard-section').find('[data-session-id]').first().data('session-id');
+            
             if (sessionId && trackId) {
-                await this.playTrack(sessionId, trackId);
-                // Update play button to show it's playing
-                $('#audio-play-btn').data('track-id', trackId);
+                // Show loading state immediately
+                const originalHtml = $button.html();
+                $button.prop('disabled', true);
+                $button.html('<i class="fas fa-spinner fa-spin"></i> Loading...');
+                
+                try {
+                    await this.playTrack(sessionId, trackId, $button);
+                    // Update play button to show it's playing
+                    $('#audio-play-btn').data('track-id', trackId);
+                } catch (error) {
+                    // Re-enable button on error
+                    $button.prop('disabled', false);
+                    $button.html(originalHtml);
+                }
             }
         });
         
@@ -3751,10 +4242,74 @@ class SessionManagementModule {
         
         // Setup soundboard buttons
         $(document).off('click', '.soundboard-button').on('click', '.soundboard-button', async (e) => {
-            const trackId = $(e.currentTarget).data('track-id');
-            const sessionId = this.currentSession?.session_id || $(e.currentTarget).closest('.soundboard-section').find('[data-session-id]').first().data('session-id');
+            const $button = $(e.currentTarget);
+            const trackId = $button.data('track-id');
+            const sessionId = this.currentSession?.session_id || $button.closest('.soundboard-section').find('[data-session-id]').first().data('session-id');
+            
             if (sessionId && trackId) {
-                await this.playSoundEffect(sessionId, trackId);
+                // Show loading state immediately
+                const originalHtml = $button.html();
+                $button.addClass('loading');
+                $button.css('opacity', '0.7');
+                $button.find('i').removeClass('fa-volume-up').addClass('fa-spinner fa-spin');
+                
+                try {
+                    await this.playSoundEffect(sessionId, trackId, $button);
+                } catch (error) {
+                    // Re-enable button on error
+                    $button.removeClass('loading');
+                    $button.css('opacity', '1');
+                    $button.find('i').removeClass('fa-spinner fa-spin').addClass('fa-volume-up');
+                }
+            }
+        });
+    }
+    
+    /**
+     * Render ambiance grid
+     */
+    renderAmbianceGrid(tracks) {
+        const container = $('#ambiance-grid');
+        if (!tracks || !Array.isArray(tracks)) {
+            container.html('<p class="text-muted">No ambiance sounds uploaded yet</p>');
+            return;
+        }
+        
+        if (tracks.length === 0) {
+            container.html('<p class="text-muted">No ambiance sounds uploaded yet</p>');
+            return;
+        }
+        
+        const html = tracks.map(track => `
+            <div class="ambiance-button" data-track-id="${track.track_id}" data-file-path="${track.file_path}">
+                <i class="fas fa-tree"></i>
+                <span>${this.escapeHtml(track.track_name)}</span>
+            </div>
+        `).join('');
+        
+        container.html(html);
+        
+        // Setup ambiance buttons
+        $(document).off('click', '.ambiance-button').on('click', '.ambiance-button', async (e) => {
+            const $button = $(e.currentTarget);
+            const trackId = $button.data('track-id');
+            const sessionId = this.currentSession?.session_id || $button.closest('.soundboard-section').find('[data-session-id]').first().data('session-id');
+            
+            if (sessionId && trackId) {
+                // Show loading state immediately
+                const originalHtml = $button.html();
+                $button.addClass('loading');
+                $button.css('opacity', '0.7');
+                $button.find('i').removeClass('fa-tree').addClass('fa-spinner fa-spin');
+                
+                try {
+                    await this.playAmbiance(sessionId, trackId, $button);
+                } catch (error) {
+                    // Re-enable button on error
+                    $button.removeClass('loading');
+                    $button.css('opacity', '1');
+                    $button.find('i').removeClass('fa-spinner fa-spin').addClass('fa-tree');
+                }
             }
         });
     }
@@ -3870,13 +4425,26 @@ class SessionManagementModule {
         
         // Play playlist
         $(document).off('click', '.play-playlist-btn').on('click', '.play-playlist-btn', async (e) => {
-            const playlistId = $(e.currentTarget).data('playlist-id');
+            const $button = $(e.currentTarget);
+            const playlistId = $button.data('playlist-id');
             const sessionId = this.currentSession?.session_id;
+            
             if (playlistId && sessionId) {
-                const $playlistItem = $(e.currentTarget).closest('.playlist-item');
-                const isLooping = $playlistItem.find('.playlist-loop-checkbox').is(':checked');
-                const isShuffled = $playlistItem.find('.playlist-shuffle-checkbox').is(':checked');
-                await this.playPlaylist(sessionId, playlistId, isLooping, isShuffled);
+                // Show loading state immediately
+                const originalHtml = $button.html();
+                $button.prop('disabled', true);
+                $button.html('<i class="fas fa-spinner fa-spin"></i> Loading...');
+                
+                try {
+                    const $playlistItem = $button.closest('.playlist-item');
+                    const isLooping = $playlistItem.find('.playlist-loop-checkbox').is(':checked');
+                    const isShuffled = $playlistItem.find('.playlist-shuffle-checkbox').is(':checked');
+                    await this.playPlaylist(sessionId, playlistId, isLooping, isShuffled, $button);
+                } catch (error) {
+                    // Re-enable button on error
+                    $button.prop('disabled', false);
+                    $button.html(originalHtml);
+                }
             }
         });
         
@@ -3897,8 +4465,27 @@ class SessionManagementModule {
             const sessionId = this.currentSession?.session_id;
             const isLooping = $(e.currentTarget).is(':checked');
             if (playlistId && sessionId) {
-                // Update playlist loop state (this is just UI state, actual looping happens during playback)
-                console.log(`Playlist ${playlistId} loop set to: ${isLooping}`);
+                // Update playlist loop state in AudioManager immediately
+                if (this.audioManager && 
+                    this.audioManager.currentPlaylist && 
+                    this.audioManager.currentPlaylist.playlist_id === playlistId) {
+                    this.audioManager.isPlaylistLooping = isLooping;
+                    console.log(`Playlist ${playlistId} loop set to: ${isLooping} (updated AudioManager)`);
+                } else {
+                    console.log(`Playlist ${playlistId} loop set to: ${isLooping} (will apply on next play)`);
+                }
+                
+                // Send real-time event to update all clients
+                try {
+                    await this.app.modules.apiClient.post('/api/audio/control.php', {
+                        session_id: sessionId,
+                        action: 'playlist_loop',
+                        playlist_id: playlistId,
+                        is_playlist_looping: isLooping
+                    });
+                } catch (error) {
+                    console.error('Failed to update playlist loop state:', error);
+                }
             }
         });
         
@@ -4076,15 +4663,47 @@ class SessionManagementModule {
     /**
      * Play playlist
      */
-    async playPlaylist(sessionId, playlistId, isLooping = false, isShuffled = false) {
+    async playPlaylist(sessionId, playlistId, isLooping = false, isShuffled = false, $button = null) {
         try {
-            const response = await this.app.modules.apiClient.post('/api/audio/control.php', {
-                session_id: sessionId,
-                action: 'play',
-                playlist_id: playlistId,
-                is_playlist_looping: isLooping,
-                is_playlist_shuffled: isShuffled
-            });
+            // Start both operations in parallel for faster response
+            // 1. Get playlist data for direct DM playback
+            // 2. Send control command to broadcast to all players (this is most important for speed)
+            const [playlistResponse, controlResponse] = await Promise.all([
+                this.app.modules.apiClient.get(`/api/audio/playlists/list.php?session_id=${sessionId}`),
+                this.app.modules.apiClient.post('/api/audio/control.php', {
+                    session_id: sessionId,
+                    action: 'play',
+                    playlist_id: playlistId,
+                    is_playlist_looping: isLooping,
+                    is_playlist_shuffled: isShuffled
+                })
+            ]);
+            
+            // Play directly for DM (after event is already sent for faster player response)
+            if (playlistResponse.status === 'success' && playlistResponse.data && playlistResponse.data.playlists) {
+                const playlist = playlistResponse.data.playlists.find(p => p.playlist_id === playlistId);
+                if (playlist && playlist.tracks && playlist.tracks.length > 0) {
+                    // Mark as direct play so we can ignore the duplicate real-time event
+                    if (this.audioManager) {
+                        this.audioManager.playPlaylist(
+                            playlistId,
+                            playlist.tracks,
+                            0,
+                            isLooping,
+                            isShuffled,
+                            true // isDirectPlay = true
+                        );
+                    }
+                }
+            }
+            
+            const response = controlResponse;
+            
+            // Re-enable button and restore original state
+            if ($button) {
+                $button.prop('disabled', false);
+                $button.html('<i class="fas fa-play"></i> Play');
+            }
             
             if (response.status === 'success') {
                 let message = 'Playing playlist';
@@ -4098,6 +4717,11 @@ class SessionManagementModule {
                 this.app.showSuccess(message);
             }
         } catch (error) {
+            // Re-enable button on error
+            if ($button) {
+                $button.prop('disabled', false);
+                $button.html('<i class="fas fa-play"></i> Play');
+            }
             console.error('Failed to play playlist:', error);
             this.app.showError('Failed to play playlist: ' + error.message);
         }
@@ -4126,13 +4750,19 @@ class SessionManagementModule {
     /**
      * Play track
      */
-    async playTrack(sessionId, trackId) {
+    async playTrack(sessionId, trackId, $button = null) {
         try {
             const response = await this.app.modules.apiClient.post('/api/audio/control.php', {
                 session_id: sessionId,
                 action: 'play',
                 track_id: trackId
             });
+            
+            // Re-enable button and restore original state
+            if ($button) {
+                $button.prop('disabled', false);
+                $button.html('<i class="fas fa-play"></i> Play');
+            }
             
             if (response.status === 'success') {
                 // Update UI
@@ -4143,6 +4773,11 @@ class SessionManagementModule {
                 }
             }
         } catch (error) {
+            // Re-enable button on error
+            if ($button) {
+                $button.prop('disabled', false);
+                $button.html('<i class="fas fa-play"></i> Play');
+            }
             console.error('Play error:', error);
             this.app.showError('Failed to play track: ' + error.message);
         }
@@ -4210,15 +4845,100 @@ class SessionManagementModule {
     /**
      * Play sound effect
      */
-    async playSoundEffect(sessionId, trackId) {
+    async playSoundEffect(sessionId, trackId, $button = null) {
         try {
+            // Find track info from already loaded tracks for immediate DM playback
+            let trackInfo = null;
+            const soundTracks = $('#soundboard-grid .soundboard-button[data-track-id="' + trackId + '"]');
+            if (soundTracks.length > 0) {
+                const filePath = soundTracks.data('file-path');
+                if (filePath && this.audioManager) {
+                    // Play directly for DM (before sending event) for immediate feedback
+                    this.audioManager.playSoundEffect(trackId, filePath, 1.0);
+                    trackInfo = { file_path: filePath };
+                }
+            }
+            
+            // Send control command to broadcast to all players (including DM, but DM will ignore duplicate)
+            // This is sent in parallel with direct play for fastest possible response
             await this.app.modules.apiClient.post('/api/audio/soundboard/play.php', {
                 session_id: sessionId,
                 track_id: trackId,
                 volume: 1.0
             });
+            
+            // Re-enable button and restore original state
+            if ($button) {
+                $button.removeClass('loading');
+                $button.css('opacity', '1');
+                $button.find('i').removeClass('fa-spinner fa-spin').addClass('fa-volume-up');
+            }
         } catch (error) {
+            // Re-enable button on error
+            if ($button) {
+                $button.removeClass('loading');
+                $button.css('opacity', '1');
+                $button.find('i').removeClass('fa-spinner fa-spin').addClass('fa-volume-up');
+            }
             console.error('Sound effect error:', error);
+            this.app.showError('Failed to play sound effect: ' + error.message);
+        }
+    }
+
+    /**
+     * Play ambiance track
+     */
+    async playAmbiance(sessionId, trackId, $button = null) {
+        try {
+            const sliderValue = parseInt($('#ambiance-volume-slider').val(), 10);
+            const volume = Number.isNaN(sliderValue) ? 1.0 : sliderValue / 100;
+
+            // Immediate local play for DM (broadcast event will sync players)
+            const ambianceTrack = $('#ambiance-grid .ambiance-button[data-track-id="' + trackId + '"]');
+            if (ambianceTrack.length > 0 && this.audioManager) {
+                const filePath = ambianceTrack.data('file-path');
+                if (filePath) {
+                    this.audioManager.playAmbiance(trackId, filePath, volume, null, true);
+                }
+            }
+
+            await this.app.modules.apiClient.post('/api/audio/ambiance/play.php', {
+                session_id: sessionId,
+                track_id: trackId,
+                volume
+            });
+
+            if ($button) {
+                $button.removeClass('loading');
+                $button.css('opacity', '1');
+                $button.find('i').removeClass('fa-spinner fa-spin').addClass('fa-tree');
+            }
+        } catch (error) {
+            if ($button) {
+                $button.removeClass('loading');
+                $button.css('opacity', '1');
+                $button.find('i').removeClass('fa-spinner fa-spin').addClass('fa-tree');
+            }
+            console.error('Ambiance play error:', error);
+            this.app.showError('Failed to play ambiance: ' + error.message);
+        }
+    }
+
+    /**
+     * Stop ambiance playback
+     */
+    async stopAmbiance(sessionId) {
+        try {
+            if (this.audioManager) {
+                this.audioManager.stopAmbiance();
+            }
+
+            await this.app.modules.apiClient.post('/api/audio/ambiance/stop.php', {
+                session_id: sessionId
+            });
+        } catch (error) {
+            console.error('Ambiance stop error:', error);
+            this.app.showError('Failed to stop ambiance: ' + error.message);
         }
     }
     
@@ -4415,6 +5135,11 @@ class SessionManagementModule {
         if (this.playerInitiativePollInterval) {
             clearInterval(this.playerInitiativePollInterval);
             this.playerInitiativePollInterval = null;
+        }
+
+        if (this.audioManager && typeof this.audioManager.cleanup === 'function') {
+            this.audioManager.cleanup();
+            this.audioManager = null;
         }
     }
 }

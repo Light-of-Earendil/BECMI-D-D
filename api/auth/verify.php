@@ -30,10 +30,31 @@ try {
     if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
         Security::sendErrorResponse('Method not allowed', 405);
     }
+
+    // Optional "soft" mode for pre-auth checks:
+    // returns HTTP 200 + {status:"error", code:"UNAUTHORIZED"} instead of HTTP 401
+    // to avoid browser console noise on expected unauthenticated startup checks.
+    $softAuthCheck = isset($_GET['soft']) && $_GET['soft'] === '1';
+    $sendUnauthorized = static function() use ($softAuthCheck) {
+        if ($softAuthCheck) {
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                @session_write_close();
+            }
+            http_response_code(200);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'status' => 'error',
+                'message' => 'Authentication required',
+                'code' => 'UNAUTHORIZED'
+            ]);
+            exit;
+        }
+        Security::sendUnauthorizedResponse();
+    };
     
     // Check if user is authenticated
     if (!Security::isAuthenticated()) {
-        Security::sendUnauthorizedResponse();
+        $sendUnauthorized();
     }
     
     // Get current user ID
@@ -50,13 +71,13 @@ try {
     
     if (!$user) {
         Security::logSecurityEvent('verify_failed', ['user_id' => $userId, 'reason' => 'user_not_found']);
-        Security::sendUnauthorizedResponse();
+        $sendUnauthorized();
     }
     
     // Check if user is active
     if (!$user['is_active']) {
         Security::logSecurityEvent('verify_failed', ['user_id' => $userId, 'reason' => 'account_disabled']);
-        Security::sendUnauthorizedResponse();
+        $sendUnauthorized();
     }
     
     // Get current session information (optional - don't fail if session validation is slow)

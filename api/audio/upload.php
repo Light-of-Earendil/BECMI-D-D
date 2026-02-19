@@ -2,7 +2,7 @@
 /**
  * BECMI D&D Character Manager - Audio Upload Endpoint
  * 
- * Allows DM to upload MP3 audio files (music or sound effects) for a session
+ * Allows DM to upload MP3 audio files (music, sound effects, or ambiance) for a session
  * 
  * Request: POST
  * Content-Type: multipart/form-data
@@ -11,7 +11,7 @@
  * - audio: file (MP3, max 10MB)
  * - session_id: int
  * - track_name: string
- * - track_type: 'music' or 'sound'
+ * - track_type: 'music', 'sound', or 'ambiance'
  * 
  * Response: {
  *   "status": "success",
@@ -43,6 +43,32 @@ require_once '../../app/core/security.php';
 Security::init();
 header('Content-Type: application/json; charset=utf-8');
 
+/**
+ * Convert PHP upload error codes to actionable validation messages.
+ */
+function getUploadErrorMessage($errorCode)
+{
+    switch ((int) $errorCode) {
+        case UPLOAD_ERR_INI_SIZE:
+            $serverLimit = ini_get('upload_max_filesize');
+            return 'File exceeds server upload limit (' . ($serverLimit ?: 'configured maximum') . ')';
+        case UPLOAD_ERR_FORM_SIZE:
+            return 'File exceeds form upload limit';
+        case UPLOAD_ERR_PARTIAL:
+            return 'File upload was interrupted. Please try again';
+        case UPLOAD_ERR_NO_FILE:
+            return 'Audio file is required';
+        case UPLOAD_ERR_NO_TMP_DIR:
+            return 'Server upload temp folder is missing';
+        case UPLOAD_ERR_CANT_WRITE:
+            return 'Server failed to write uploaded file';
+        case UPLOAD_ERR_EXTENSION:
+            return 'Upload blocked by a server extension';
+        default:
+            return 'Audio upload failed due to an unknown server error';
+    }
+}
+
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         Security::sendErrorResponse('Method not allowed', 405);
@@ -66,12 +92,16 @@ try {
         $errors['track_name'] = 'Track name must be 200 characters or less';
     }
     
-    if (!isset($_POST['track_type']) || !in_array($_POST['track_type'], ['music', 'sound'])) {
-        $errors['track_type'] = 'Track type must be "music" or "sound"';
+    if (!isset($_POST['track_type']) || !in_array($_POST['track_type'], ['music', 'sound', 'ambiance'])) {
+        $errors['track_type'] = 'Track type must be "music", "sound", or "ambiance"';
     }
     
-    if (!isset($_FILES['audio']) || $_FILES['audio']['error'] !== UPLOAD_ERR_OK) {
+    if (!isset($_FILES['audio'])) {
         $errors['audio'] = 'Audio file is required';
+    } elseif ((int) $_FILES['audio']['error'] !== UPLOAD_ERR_OK) {
+        $errors['audio'] = getUploadErrorMessage((int) $_FILES['audio']['error']);
+    } elseif (!isset($_FILES['audio']['size']) || (int) $_FILES['audio']['size'] <= 0) {
+        $errors['audio'] = 'Selected file appears empty or inaccessible';
     }
     
     if (!empty($errors)) {
@@ -160,11 +190,30 @@ try {
     $relativePath = 'audio/sessions/' . $sessionId . '/' . $trackType . '/' . $filename;
     
     // Insert track record (duration will be determined client-side or can be NULL)
-    $trackId = $db->insert(
-        "INSERT INTO session_audio_tracks (session_id, file_path, track_name, track_type, file_size_bytes, created_by_user_id)
-         VALUES (?, ?, ?, ?, ?, ?)",
-        [$sessionId, $relativePath, $trackName, $trackType, $file['size'], $userId]
-    );
+    try {
+        $trackId = $db->insert(
+            "INSERT INTO session_audio_tracks (session_id, file_path, track_name, track_type, file_size_bytes, created_by_user_id)
+             VALUES (?, ?, ?, ?, ?, ?)",
+            [$sessionId, $relativePath, $trackName, $trackType, $file['size'], $userId]
+        );
+    } catch (Exception $insertException) {
+        // Avoid orphaned files when DB insert fails.
+        if (is_file($filePath)) {
+            @unlink($filePath);
+        }
+
+        $insertMessage = $insertException->getMessage();
+        $looksLikeTrackTypeSchemaMismatch = preg_match('/track_type|enum|data truncated|incorrect/i', $insertMessage) === 1;
+
+        if ($trackType === 'ambiance' && $looksLikeTrackTypeSchemaMismatch) {
+            Security::sendErrorResponse(
+                'Ambiance uploads are not enabled in the database yet. Run migration 029_ambiance_sounds.sql',
+                500
+            );
+        }
+
+        throw $insertException;
+    }
     
     // Update filename to include track_id for easier identification
     $newFilename = $trackId . '_' . $safeFilename . '_' . $timestamp . '_' . $random . '.mp3';

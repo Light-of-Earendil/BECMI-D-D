@@ -287,8 +287,17 @@ class Security {
 
         $sent = false;
         if (function_exists('mail')) {
+            // Try to send email - if it hangs, the increased execution time will catch it
+            // The calling code should handle timeouts gracefully
+            $startTime = microtime(true);
             $sent = @mail($to, $subject, $message, $formattedHeaders);
-            error_log("EMAIL RESULT: " . ($sent ? 'SUCCESS' : 'FAILED'));
+            $duration = microtime(true) - $startTime;
+            
+            if ($duration > 5) {
+                error_log("EMAIL WARNING: Email sending took {$duration} seconds (slow mail server)");
+            }
+            
+            error_log("EMAIL RESULT: " . ($sent ? 'SUCCESS' : 'FAILED') . " (took {$duration}s)");
         } else {
             error_log("EMAIL ERROR: mail() function does not exist");
         }
@@ -694,11 +703,44 @@ class Security {
         // Ensure no output before JSON
         self::clearOutputBuffers();
         
-        echo json_encode([
+        // Sanitize message to ensure it's safe for JSON encoding
+        if (!empty($message)) {
+            // Ensure valid UTF-8 encoding
+            $message = mb_convert_encoding($message, 'UTF-8', 'UTF-8');
+            // Remove control characters that could break JSON
+            $message = preg_replace('/[\x00-\x1F\x7F]/', '', $message);
+            // Limit length to prevent issues
+            if (strlen($message) > 500) {
+                $message = substr($message, 0, 497) . '...';
+            }
+        }
+        
+        $response = [
             'status' => 'error',
             'message' => $message,
             'code' => 'ERROR'
-        ]);
+        ];
+        
+        // Encode JSON with error handling
+        $json = json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false) {
+            // If JSON encoding fails, use a safe fallback message
+            $jsonError = json_last_error_msg();
+            @error_log("JSON encoding error in sendErrorResponse: " . $jsonError);
+            @error_log("Message that failed to encode: " . substr($message, 0, 200));
+            
+            // Clear output buffer again
+            self::clearOutputBuffers();
+            
+            // Send a safe fallback response
+            $json = json_encode([
+                'status' => 'error',
+                'message' => 'An error occurred while processing your request',
+                'code' => 'ENCODING_ERROR'
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+        
+        echo $json;
         exit;
     }
     

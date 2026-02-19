@@ -41,16 +41,8 @@ class BECMIApp {
             await this.initializeModules();
             
             // Check authentication status
-            let authSuccess = false;
-            try {
-                await this.checkAuthentication();
-                authSuccess = true;
-            } catch (authError) {
-                // Authentication failed - login modal is already shown by checkAuthentication()
-                console.error('Authentication check failed:', authError);
-                // Continue to setup event listeners even if auth failed
-                // User can still interact with login modal
-            }
+            await this.checkAuthentication();
+            const authSuccess = !!this.state.user;
             
             // Setup event listeners (always, even if auth failed)
             this.setupEventListeners();
@@ -129,26 +121,28 @@ class BECMIApp {
         try {
             const token = localStorage.getItem('auth_token');
             if (!token) {
-                // No token - show login but don't throw error
+                // No token - show login without error noise
                 this.showLoginModal();
-                return;
+                return false;
             }
             
             // Verify token with server (with explicit timeout handling)
             let response;
             try {
                 response = await Promise.race([
-                    this.modules.apiClient.get('/api/auth/verify.php'),
+                    this.modules.apiClient.get('/api/auth/verify.php?soft=1', {}, {
+                        expectedStatusCodes: [401]
+                    }),
                     new Promise((_, reject) => 
                         setTimeout(() => reject(new Error('Authentication request timeout after 10 seconds')), 10000)
                     )
                 ]);
             } catch (fetchError) {
-                console.error('Authentication request failed:', fetchError);
+                console.warn('Authentication request failed:', fetchError);
                 // If request fails, clear token and show login
                 localStorage.removeItem('auth_token');
                 this.showLoginModal();
-                throw fetchError; // Re-throw to let init() handle it
+                return false;
             }
             
             if (response && response.status === 'success') {
@@ -164,23 +158,23 @@ class BECMIApp {
                 
                 // Navigate to dashboard after loading data
                 this.navigateToView('dashboard');
+                return true;
             } else {
                 // Invalid response - clear token and show login
                 localStorage.removeItem('auth_token');
                 this.showLoginModal();
-                throw new Error('Authentication verification failed');
+                return false;
             }
             
         } catch (error) {
-            console.error('Authentication check failed:', error);
+            console.warn('Authentication check failed:', error);
             // Clear token if it exists
             if (localStorage.getItem('auth_token')) {
                 localStorage.removeItem('auth_token');
             }
             // Show login modal
             this.showLoginModal();
-            // Re-throw to let init() handle loading screen
-            throw error;
+            return false;
         }
     }
     

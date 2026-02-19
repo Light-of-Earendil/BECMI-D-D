@@ -34,6 +34,25 @@ Security::init();
 // Set content type
 header('Content-Type: application/json; charset=utf-8');
 
+/**
+ * Check whether a table exists in current schema.
+ */
+function realtimeTableExists(Database $db, string $tableName): bool {
+    try {
+        $exists = $db->selectOne(
+            "SELECT 1 AS table_exists
+             FROM information_schema.tables
+             WHERE table_schema = DATABASE()
+             AND table_name = ?
+             LIMIT 1",
+            [$tableName]
+        );
+        return $exists !== null;
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
 try {
     // Only allow GET requests
     if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -46,7 +65,11 @@ try {
     // Get parameters
     $sessionId = isset($_GET['session_id']) ? (int) $_GET['session_id'] : 0;
     $lastEventId = isset($_GET['last_event_id']) ? (int) $_GET['last_event_id'] : 0;
-    $timeout = isset($_GET['timeout']) ? min((int) $_GET['timeout'], 10) : 5; // Max 10 seconds, default 5
+    $timeout = isset($_GET['timeout']) ? (int) $_GET['timeout'] : 20;
+    if ($timeout <= 0) {
+        $timeout = 20;
+    }
+    $timeout = min($timeout, 30); // Hard cap for long-polling window
     
     if ($sessionId <= 0) {
         Security::sendValidationErrorResponse(['session_id' => 'Valid session ID required']);
@@ -54,6 +77,12 @@ try {
     
     // Get current user ID
     $userId = Security::getCurrentUserId();
+
+    // Release PHP session lock before long-poll wait loop so concurrent
+    // requests from the same user (audio list, map data, etc.) are not blocked.
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        @session_write_close();
+    }
     
     // Get database connection
     $db = getDB();
@@ -98,10 +127,11 @@ try {
     $broadcaster->updateUserActivity($userId, $sessionId, $lastEventId);
     
     // Long-polling: Wait for new events up to timeout seconds
-    $startTime = time();
+    $startTime = microtime(true);
+    $lastActivityUpdate = $startTime;
     $events = [];
     
-    while (time() - $startTime < $timeout) {
+    while (microtime(true) - $startTime < $timeout) {
         // Get new events
         $events = $broadcaster->getEvents($sessionId, $lastEventId);
         
@@ -110,32 +140,46 @@ try {
             break;
         }
         
-        // No events yet - wait 1 second before checking again
-        sleep(1);
-        
-        // Update activity to keep user online
-        $broadcaster->updateUserActivity($userId, $sessionId, $lastEventId);
+        // No events yet - keep request parked for true long-poll behavior.
+        usleep(250000); // 250ms
+
+        // Keep online presence fresh, but avoid write storm.
+        $now = microtime(true);
+        if (($now - $lastActivityUpdate) >= 5) {
+            $broadcaster->updateUserActivity($userId, $sessionId, $lastEventId);
+            $lastActivityUpdate = $now;
+        }
     }
     
     // Get online users in this session
     $onlineUsers = $broadcaster->getOnlineUsers($sessionId);
     
     // Get the highest event ID for this session (even if no new events)
-    // This ensures clients always know the latest event ID
-    $db = getDB();
-    $maxEventId = $db->selectOne(
-        "SELECT COALESCE(MAX(event_id), 0) as max_event_id 
-         FROM session_events 
-         WHERE session_id = ?",
-        [$sessionId]
-    );
-    $maxEventId = (int) ($maxEventId['max_event_id'] ?? $lastEventId);
+    // This ensures clients always know the latest event ID.
+    $eventTable = null;
+    if (realtimeTableExists($db, 'session_events')) {
+        $eventTable = 'session_events';
+    } elseif (realtimeTableExists($db, 'realtime_events')) {
+        $eventTable = 'realtime_events';
+    }
+
+    $maxEventId = $lastEventId;
+    if ($eventTable !== null) {
+        $maxEventResult = $db->selectOne(
+            "SELECT COALESCE(MAX(event_id), 0) as max_event_id
+             FROM {$eventTable}
+             WHERE session_id = ?",
+            [$sessionId]
+        );
+        $maxEventId = (int) ($maxEventResult['max_event_id'] ?? $lastEventId);
+    }
     
     // Use the highest of: max event ID, last event ID from request, or last event ID from events returned
     $returnedLastEventId = !empty($events) ? end($events)['event_id'] : $lastEventId;
     $finalLastEventId = max($maxEventId, $returnedLastEventId, $lastEventId);
     
-    @error_log("Poll response: session_id=$sessionId, events_count=" . count($events) . ", lastEventId_requested=$lastEventId, maxEventId=$maxEventId, finalLastEventId=$finalLastEventId");
+    // Final activity update at response time.
+    $broadcaster->updateUserActivity($userId, $sessionId, $finalLastEventId);
     
     // Return events
     Security::sendSuccessResponse([
@@ -154,4 +198,3 @@ try {
     Security::sendErrorResponse('Polling failed', 500);
 }
 ?>
-

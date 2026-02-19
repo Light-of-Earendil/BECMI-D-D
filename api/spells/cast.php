@@ -34,10 +34,18 @@ try {
     }
     
     // Validate required fields
-    $required = ['character_id', 'spell_id'];
-    $validation = Security::validateRequired($data, $required);
-    if (!$validation['valid']) {
-        Security::sendValidationErrorResponse($validation['errors']);
+    $errors = [];
+    
+    if (!isset($data['character_id']) || !is_numeric($data['character_id'])) {
+        $errors['character_id'] = 'Valid character ID is required';
+    }
+    
+    if (!isset($data['spell_id']) || !is_numeric($data['spell_id'])) {
+        $errors['spell_id'] = 'Valid spell ID is required';
+    }
+    
+    if (!empty($errors)) {
+        Security::sendValidationErrorResponse($errors);
     }
     
     $characterId = (int) $data['character_id'];

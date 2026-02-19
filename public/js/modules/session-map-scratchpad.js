@@ -50,6 +50,9 @@ class SessionMapScratchpadModule {
         // Real-time
         this.realtimeClient = null;
         this.lastEventId = 0;
+        this.pendingDrawingTimeouts = new Map(); // Track timeouts for fallback reload
+        this.pendingClearTimeout = null; // Track timeout for clear fallback
+        this.drawingReloadInterval = null; // Periodic reload interval for fallback
         
         // Event setup flag
         this.eventsSetup = false;
@@ -592,6 +595,10 @@ class SessionMapScratchpadModule {
         this.setupResizeObserver();
         
         this.startRealtimeUpdates();
+        
+        // Start periodic reload of drawings as fallback (every 10 seconds)
+        // This ensures all users see the latest drawings even if real-time events fail
+        this.startPeriodicDrawingReload();
     }
     
     /**
@@ -1335,9 +1342,25 @@ class SessionMapScratchpadModule {
             
             if (response.status === 'success') {
                 console.log('[Map Scratch-Pad] submitDrawing: Drawing saved successfully', response.data);
-                // Add to local drawings array
-                this.drawings.push(response.data);
-                console.log('[Map Scratch-Pad] submitDrawing: Total drawings now:', this.drawings.length);
+                // CRITICAL FIX: Don't add to local drawings array here - let real-time event handle it
+                // This ensures all users (including the drawer) see the drawing via the same mechanism
+                // The drawing is already visible on canvas from the drawing process, so we just wait for real-time sync
+                
+                // Set up a timeout fallback: if real-time event doesn't arrive within 2 seconds, reload all drawings
+                const drawingId = response.data.drawing_id;
+                const fallbackTimeout = setTimeout(() => {
+                    // Check if drawing was added by real-time event
+                    const wasAdded = this.drawings.find(d => d.drawing_id === drawingId);
+                    if (!wasAdded) {
+                        console.warn('[Map Scratch-Pad] submitDrawing: Real-time event did not arrive, reloading all drawings as fallback');
+                        this.loadDrawings(this.currentMapId);
+                    }
+                }, 2000);
+                
+                // Store timeout so we can clear it if real-time event arrives
+                this.pendingDrawingTimeouts.set(drawingId, fallbackTimeout);
+                
+                console.log('[Map Scratch-Pad] submitDrawing: Waiting for real-time event to sync drawing to all users');
             } else {
                 console.error('[Map Scratch-Pad] submitDrawing: API returned error:', response.message);
             }
@@ -2006,8 +2029,29 @@ class SessionMapScratchpadModule {
                     await this.apiClient.post('/api/session/maps/drawings/clear.php', {
                         map_id: this.currentMapId
                     });
-                    this.drawings = [];
-                    this.redrawDrawings();
+                    
+                    // CRITICAL FIX: Don't clear locally - let real-time event handle it
+                    // This ensures all users (including the one who cleared) see the clearing via the same mechanism
+                    
+                    // Set up a timeout fallback: if real-time event doesn't arrive within 2 seconds, reload all drawings
+                    const clearFallbackTimeout = setTimeout(() => {
+                        // Check if drawings were cleared by real-time event
+                        if (this.drawings.length > 0) {
+                            console.warn('[Map Scratch-Pad] clear-drawings: Real-time event did not arrive, reloading all drawings as fallback');
+                            this.loadDrawings(this.currentMapId);
+                        }
+                    }, 2000);
+                    
+                    // Store timeout so we can clear it if real-time event arrives
+                    if (!this.pendingClearTimeout) {
+                        this.pendingClearTimeout = null;
+                    }
+                    if (this.pendingClearTimeout) {
+                        clearTimeout(this.pendingClearTimeout);
+                    }
+                    this.pendingClearTimeout = clearFallbackTimeout;
+                    
+                    console.log('[Map Scratch-Pad] clear-drawings: Waiting for real-time event to sync clearing to all users');
                     this.app.showSuccess('Drawings cleared');
                 } catch (error) {
                     this.app.showError('Failed to clear drawings: ' + error.message);
@@ -2411,6 +2455,37 @@ class SessionMapScratchpadModule {
     }
     
     /**
+     * Start periodic reload of drawings as fallback
+     * Reloads drawings every 10 seconds to ensure all users see the latest state
+     * even if real-time events fail
+     */
+    startPeriodicDrawingReload() {
+        // Stop existing interval if any
+        this.stopPeriodicDrawingReload();
+        
+        // Start new interval - reload every 10 seconds
+        this.drawingReloadInterval = setInterval(async () => {
+            if (this.currentMapId && this.drawingCtx) {
+                console.log('[Map Scratch-Pad] Periodic reload: Reloading drawings as fallback');
+                await this.loadDrawings(this.currentMapId);
+            }
+        }, 10000); // 10 seconds
+        
+        console.log('[Map Scratch-Pad] Started periodic drawing reload (every 10 seconds)');
+    }
+    
+    /**
+     * Stop periodic reload of drawings
+     */
+    stopPeriodicDrawingReload() {
+        if (this.drawingReloadInterval) {
+            clearInterval(this.drawingReloadInterval);
+            this.drawingReloadInterval = null;
+            console.log('[Map Scratch-Pad] Stopped periodic drawing reload');
+        }
+    }
+    
+    /**
      * Stop real-time updates
      */
     stopRealtimeUpdates() {
@@ -2422,6 +2497,7 @@ class SessionMapScratchpadModule {
             this.realtimeClient.stop();
             this.realtimeClient = null;
         }
+        this.stopPeriodicDrawingReload();
     }
     
     /**
@@ -2447,25 +2523,40 @@ class SessionMapScratchpadModule {
                     eventDataMapId: eventData?.map_id
                 });
                 if (eventData && eventData.map_id === this.currentMapId) {
-                    // Add drawing if not already present
-                    const exists = this.drawings.find(d => d.drawing_id === eventData.drawing_id);
-                    if (!exists) {
-                        console.log('[Map Scratch-Pad] handleRealtimeEvent: Adding new drawing', eventData);
-                        this.drawings.push({
-                            drawing_id: eventData.drawing_id,
-                            map_id: eventData.map_id,
-                            user_id: eventData.user_id,
-                            drawing_type: eventData.drawing_type,
-                            color: eventData.color,
-                            brush_size: eventData.brush_size,
-                            path_data: eventData.path_data,
-                            created_at: new Date().toISOString()
-                        });
-                        console.log('[Map Scratch-Pad] handleRealtimeEvent: Redrawing drawings, total:', this.drawings.length);
-                        this.redrawDrawings();
+                    // CRITICAL FIX: Always update/add drawing, even if it exists
+                    // This ensures all users see the same data, and handles cases where real-time event
+                    // arrives before or after local state changes
+                    const existingIndex = this.drawings.findIndex(d => d.drawing_id === eventData.drawing_id);
+                    
+                    const drawingData = {
+                        drawing_id: eventData.drawing_id,
+                        map_id: eventData.map_id,
+                        user_id: eventData.user_id,
+                        drawing_type: eventData.drawing_type,
+                        color: eventData.color,
+                        brush_size: eventData.brush_size,
+                        path_data: eventData.path_data,
+                        created_at: eventData.created_at || new Date().toISOString()
+                    };
+                    
+                    if (existingIndex >= 0) {
+                        // Update existing drawing (in case data changed or was incomplete)
+                        console.log('[Map Scratch-Pad] handleRealtimeEvent: Updating existing drawing', eventData.drawing_id);
+                        this.drawings[existingIndex] = drawingData;
                     } else {
-                        console.log('[Map Scratch-Pad] handleRealtimeEvent: Drawing already exists, skipping');
+                        // Add new drawing
+                        console.log('[Map Scratch-Pad] handleRealtimeEvent: Adding new drawing', eventData);
+                        this.drawings.push(drawingData);
                     }
+                    
+                    // Clear fallback timeout if it exists
+                    if (this.pendingDrawingTimeouts && this.pendingDrawingTimeouts.has(eventData.drawing_id)) {
+                        clearTimeout(this.pendingDrawingTimeouts.get(eventData.drawing_id));
+                        this.pendingDrawingTimeouts.delete(eventData.drawing_id);
+                    }
+                    
+                    console.log('[Map Scratch-Pad] handleRealtimeEvent: Redrawing drawings, total:', this.drawings.length);
+                    this.redrawDrawings();
                 } else {
                     console.log('[Map Scratch-Pad] handleRealtimeEvent: Map ID mismatch or no eventData', {
                         eventDataMapId: eventData?.map_id,
@@ -2475,9 +2566,40 @@ class SessionMapScratchpadModule {
                 break;
                 
             case 'map_drawings_cleared':
+                console.log('[Map Scratch-Pad] handleRealtimeEvent: map_drawings_cleared event received', {
+                    eventData,
+                    currentMapId: this.currentMapId,
+                    eventDataMapId: eventData?.map_id
+                });
                 if (eventData && eventData.map_id === this.currentMapId) {
-                    this.drawings = [];
-                    this.redrawDrawings();
+                    // CRITICAL FIX: Always reload drawings from API when clear event arrives
+                    // This ensures we have the correct state from database, not just local state
+                    console.log('[Map Scratch-Pad] handleRealtimeEvent: Reloading drawings from API after clear event');
+                    
+                    // Clear any pending drawing timeouts
+                    if (this.pendingDrawingTimeouts) {
+                        this.pendingDrawingTimeouts.forEach(timeout => clearTimeout(timeout));
+                        this.pendingDrawingTimeouts.clear();
+                    }
+                    
+                    // Clear pending clear timeout if it exists
+                    if (this.pendingClearTimeout) {
+                        clearTimeout(this.pendingClearTimeout);
+                        this.pendingClearTimeout = null;
+                    }
+                    
+                    // Reload drawings from API to ensure correct state
+                    // This is more reliable than just clearing local array
+                    this.loadDrawings(this.currentMapId).then(() => {
+                        console.log('[Map Scratch-Pad] handleRealtimeEvent: Drawings reloaded after clear event');
+                    }).catch(error => {
+                        console.error('[Map Scratch-Pad] handleRealtimeEvent: Failed to reload drawings after clear:', error);
+                    });
+                } else {
+                    console.log('[Map Scratch-Pad] handleRealtimeEvent: Map ID mismatch or no eventData', {
+                        eventDataMapId: eventData?.map_id,
+                        currentMapId: this.currentMapId
+                    });
                 }
                 break;
                 
@@ -2679,6 +2801,7 @@ class SessionMapScratchpadModule {
     
     cleanup() {
         this.stopRealtimeUpdates();
+        this.stopPeriodicDrawingReload();
         
         // Disconnect resize observer
         if (this.resizeObserver) {
@@ -2689,6 +2812,16 @@ class SessionMapScratchpadModule {
         if (this.resizeTimeout) {
             clearTimeout(this.resizeTimeout);
             this.resizeTimeout = null;
+        }
+        
+        // Clear pending timeouts
+        if (this.pendingDrawingTimeouts) {
+            this.pendingDrawingTimeouts.forEach(timeout => clearTimeout(timeout));
+            this.pendingDrawingTimeouts.clear();
+        }
+        if (this.pendingClearTimeout) {
+            clearTimeout(this.pendingClearTimeout);
+            this.pendingClearTimeout = null;
         }
         
         // Reset event setup flag

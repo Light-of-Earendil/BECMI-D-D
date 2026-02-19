@@ -1672,7 +1672,12 @@ class CharacterSheetModule {
             ` : ''}
             
             <div class="spells-spellbook">
-                <h4><i class="fas fa-book"></i> Spellbook</h4>
+                <div class="spellbook-header">
+                    <h4><i class="fas fa-book"></i> Spellbook</h4>
+                    <button class="btn btn-sm btn-primary" id="add-spell-btn" data-character-id="${character.character_id}">
+                        <i class="fas fa-plus"></i> Add Spell
+                    </button>
+                </div>
                 ${Object.entries(spellsByLevel).map(([level, levelSpells]) => `
                     <div class="spell-level-section">
                         <h5 class="spell-level-header">Level ${level} Spells</h5>
@@ -1956,6 +1961,204 @@ class CharacterSheetModule {
         
         console.log('Generated spells list HTML:', html);
         return html;
+    }
+    
+    /**
+     * Show add spell to spellbook modal
+     * 
+     * @param {number} characterId - Character ID
+     */
+    async showAddSpellModal(characterId) {
+        try {
+            const character = this.currentCharacter;
+            if (!character) {
+                throw new Error('No character data available');
+            }
+            
+            // Get character's current spells
+            const currentSpells = this.currentSpells || [];
+            const currentSpellIds = currentSpells.map(s => s.spell_id);
+            
+            // Determine spell type based on character class
+            let spellType = null;
+            if (character.class === 'magic_user' || character.class === 'elf') {
+                spellType = 'magic_user';
+            } else if (character.class === 'cleric') {
+                spellType = 'cleric';
+            } else {
+                throw new Error('This character class cannot learn spells');
+            }
+            
+            // Fetch available spells
+            const response = await this.apiClient.get(
+                `/api/spells/list.php?spell_type=${spellType}&t=${Date.now()}`
+            );
+            
+            if (response.status !== 'success') {
+                throw new Error(response.message || 'Failed to load spells');
+            }
+            
+            const allSpells = response.data.spells || [];
+            // Filter out spells already in spellbook
+            const availableSpells = allSpells.filter(spell => !currentSpellIds.includes(spell.spell_id));
+            
+            if (availableSpells.length === 0) {
+                this.app.showError('No new spells available to learn');
+                return;
+            }
+            
+            // Group spells by level
+            const spellsByLevel = availableSpells.reduce((acc, spell) => {
+                const level = spell.spell_level;
+                if (!acc[level]) acc[level] = [];
+                acc[level].push(spell);
+                return acc;
+            }, {});
+            
+            // Generate modal HTML
+            const spellsListHtml = Object.entries(spellsByLevel)
+                .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                .map(([level, levelSpells]) => `
+                    <div class="add-spell-level-group">
+                        <h6>Level ${level} Spells</h6>
+                        <div class="spell-selection-grid">
+                            ${levelSpells.map(spell => `
+                                <div class="spell-selection-card" data-spell-id="${spell.spell_id}">
+                                    <div class="spell-selection-header">
+                                        <h5>${spell.spell_name}</h5>
+                                        <button type="button" class="btn btn-sm btn-primary add-spell-select-btn" 
+                                                data-spell-id="${spell.spell_id}"
+                                                data-spell-name="${spell.spell_name}">
+                                            <i class="fas fa-plus"></i> Add
+                                        </button>
+                                    </div>
+                                    <div class="spell-selection-details">
+                                        <p><strong>Range:</strong> ${spell.range || 'N/A'}</p>
+                                        <p><strong>Duration:</strong> ${spell.duration || 'N/A'}</p>
+                                        <p class="spell-description">${spell.description || ''}</p>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `).join('');
+            
+            const modalHtml = `
+                <div class="modal" id="addSpellModal" tabindex="-1" role="dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-book"></i> Add Spell to Spellbook
+                            </h5>
+                            <button type="button" class="close" data-dismiss="modal">
+                                <span>&times;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <p>Select a spell to add to your spellbook:</p>
+                            <div class="add-spell-selection" id="add-spell-selection">
+                                ${spellsListHtml}
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Remove existing modal if any
+            $('#addSpellModal').remove();
+            
+            // Add modal to page
+            const modal = $(modalHtml);
+            $('body').append(modal);
+            
+            // Show modal by adding 'show' class
+            $('#addSpellModal').addClass('show');
+            
+            // Setup event handlers
+            this.setupAddSpellHandlers(characterId);
+            
+            // Cleanup when modal is closed
+            $('#addSpellModal .close, #addSpellModal .btn-secondary').on('click', () => {
+                $('#addSpellModal').removeClass('show');
+                setTimeout(() => {
+                    $('#addSpellModal').remove();
+                }, 300);
+            });
+            
+        } catch (error) {
+            console.error('Failed to show add spell modal:', error);
+            this.app.showError('Failed to open spell selection: ' + error.message);
+        }
+    }
+    
+    /**
+     * Setup add spell modal handlers
+     */
+    setupAddSpellHandlers(characterId) {
+        $(document).off('click', '.add-spell-select-btn').on('click', '.add-spell-select-btn', async (e) => {
+            e.preventDefault();
+            const $btn = $(e.currentTarget);
+            const spellId = $btn.data('spell-id');
+            const spellName = $btn.data('spell-name');
+            
+            // Disable button to prevent double-clicks
+            $btn.prop('disabled', true);
+            $btn.html('<i class="fas fa-spinner fa-spin"></i> Adding...');
+            
+            try {
+                const response = await this.apiClient.post('/api/spells/add-to-spellbook.php', {
+                    character_id: characterId,
+                    spell_id: spellId
+                });
+                
+                console.log('Add spell response:', response);
+                
+                if (response.status === 'success' || response.success === true) {
+                    this.app.showSuccess(`Spell '${spellName}' added to spellbook!`);
+                    
+                    // Close modal
+                    $('#addSpellModal').removeClass('show');
+                    setTimeout(() => {
+                        $('#addSpellModal').remove();
+                    }, 300);
+                    
+                    // Reload spells
+                    await this.loadAndRenderSpells(characterId);
+                    
+                } else {
+                    // Extract error message from response
+                    let errorMessage = 'Failed to add spell';
+                    if (response.message) {
+                        errorMessage = response.message;
+                    } else if (response.error) {
+                        errorMessage = response.error;
+                    } else if (response.data && response.data.message) {
+                        errorMessage = response.data.message;
+                    }
+                    
+                    console.error('Add spell failed:', response);
+                    throw new Error(errorMessage);
+                }
+            } catch (error) {
+                console.error('Failed to add spell:', error);
+                console.error('Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    response: error.response
+                });
+                
+                // Show error message
+                const errorMessage = error.message || 'Failed to add spell';
+                this.app.showError(errorMessage);
+                
+                // Re-enable button
+                $btn.prop('disabled', false);
+                $btn.html('<i class="fas fa-plus"></i> Add');
+            }
+        });
     }
     
     /**
@@ -2349,6 +2552,13 @@ class CharacterSheetModule {
             } else {
                 this.app.showError('Level-up wizard not available');
             }
+        });
+        
+        // Add spell to spellbook button
+        $(document).on('click', '#add-spell-btn', async (e) => {
+            e.preventDefault();
+            const characterId = $(e.currentTarget).data('character-id');
+            await this.showAddSpellModal(characterId);
         });
     }
     
