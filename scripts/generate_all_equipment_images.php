@@ -31,7 +31,7 @@ echo "Found " . count($items) . " items to generate images for.\n\n";
 
 // Together AI API configuration
 $apiUrl = 'https://api.together.xyz/v1/images/generations';
-$model = 'black-forest-labs/FLUX.1-schnell-Free';
+$model = 'google/gemini-3-pro-image';
 
 $successCount = 0;
 $failCount = 0;
@@ -67,10 +67,6 @@ foreach ($items as $index => $item) {
     $data = [
         'model' => $model,
         'prompt' => $prompt,
-        'width' => 1024,
-        'height' => 768,
-        'steps' => 4,
-        'n' => 1
     ];
     
     $ch = curl_init($apiUrl);

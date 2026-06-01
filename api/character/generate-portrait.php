@@ -2,7 +2,7 @@
 /**
  * BECMI D&D Character Manager - Generate Character Portrait
  * 
- * Uses Together AI's FLUX.1-schnell-Free model to generate character portraits
+ * Uses Together AI's image generation API to generate character portraits
  * 
  * @return JSON Success/error response with image URL
  */
@@ -14,6 +14,7 @@ error_reporting(E_ALL);
 require_once '../../app/core/database.php';
 require_once '../../app/core/security.php';
 require_once '../../app/services/portrait-manager.php';
+require_once '../../app/services/portrait-prompt.php';
 require_once '../../config/together-ai.php';
 
 // Initialize security
@@ -54,7 +55,8 @@ try {
     // Verify character ownership and get character details
     $character = $db->selectOne(
         "SELECT c.character_id, c.user_id, c.character_name, c.class, c.gender,
-                c.age, c.height, c.weight, c.hair_color, c.eye_color
+                c.age, c.height, c.weight, c.hair_color, c.eye_color,
+                c.strength, c.dexterity, c.constitution, c.intelligence, c.wisdom, c.charisma
          FROM characters c
          WHERE c.character_id = ? AND c.is_active = 1",
         [$characterId]
@@ -75,8 +77,9 @@ try {
         Security::sendErrorResponse('Portrait generation is not configured. Please contact the administrator.', 503);
     }
     
-    // Build portrait prompt from character details
-    $prompt = buildPortraitPrompt($character);
+    // Build portrait prompt from character details (DB + optional POST overrides)
+    $promptData = array_merge($character, is_array($data) ? $data : []);
+    $prompt = PortraitPromptBuilder::build($promptData);
     
     // Call Together AI API
     $imageData = generatePortraitWithTogetherAI($prompt, $together_AI_api_key);
@@ -178,77 +181,15 @@ try {
 }
 
 /**
- * Build a descriptive prompt for character portrait generation
- */
-function buildPortraitPrompt($character) {
-    $parts = [];
-    
-    // Start with basic description
-    $parts[] = "Fotorealistic Medieval Low-fantasy realistic gritty character portrait";
-    
-    // Add gender if available
-    if (!empty($character['gender'])) {
-        $parts[] = $character['gender'];
-    }
-    
-    // Add class/race description
-    $classDescriptions = [
-        'fighter' => 'warrior in armor',
-        'magic_user' => 'wizard with robes and mystical aura',
-        'cleric' => 'holy priest with religious symbols',
-        'thief' => 'rogue with leather armor and daggers',
-        'dwarf' => 'stout dwarven warrior with beard',
-        'elf' => 'elegant elven adventurer with pointed ears',
-        'halfling' => 'small halfling with cheerful expression',
-        'druid' => 'nature priest with wooden staff and natural clothing',
-        'mystic' => 'martial artist monk in simple robes'
-    ];
-    
-    if (isset($classDescriptions[$character['class']])) {
-        $parts[] = $classDescriptions[$character['class']];
-    }
-    
-    // Add physical details
-    if (!empty($character['hair_color'])) {
-        $parts[] = "with " . strtolower($character['hair_color']) . " hair";
-    }
-    
-    if (!empty($character['eye_color'])) {
-        $parts[] = strtolower($character['eye_color']) . " eyes";
-    }
-    
-    // Add age hint
-    if (!empty($character['age'])) {
-        $age = (int)$character['age'];
-        if ($age < 20) {
-            $parts[] = "youthful appearance";
-        } elseif ($age > 50) {
-            $parts[] = "mature and weathered";
-        }
-    }
-    
-    // Style instructions
-    $parts[] = "fotorealistic style";
-    $parts[] = "detailed face";
-    $parts[] = "dramatic lighting";
-    $parts[] = "dungeons and dragons character";
-
-    if (!empty($character['backstory'])) {
-        $parts[] = strtolower("backstory " . $character['backstory']);
-    }
-    
-    return implode(', ', $parts);
-}
-
-/**
  * Call Together AI API to generate portrait
  */
 function generatePortraitWithTogetherAI($prompt, $apiKey) {
     $url = 'https://api.together.xyz/v1/images/generations';
     
     $data = [
-        'model' => 'google/gemini-3-pro-image',
-        'prompt' => $prompt
+        'model' => 'black-forest-labs/FLUX.2-pro',
+        'prompt' => $prompt,
+        'response_format' => 'url'
     ];
     
     // Log full request details for debugging
@@ -360,4 +301,3 @@ function generatePortraitWithTogetherAI($prompt, $apiKey) {
 }
 
 ?>
-

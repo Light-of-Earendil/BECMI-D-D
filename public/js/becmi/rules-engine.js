@@ -174,11 +174,16 @@ class BECMIRulesEngine {
                 9, 9, 9, 9, 9,  // 26-30
                 7, 7, 7, 7, 7,  // 31-35
                 5                      // 36
+            ],
+            'barbarian': [
+                19, 19, 18, 17, 16, 15, 14,
+                14, 13, 12, 12, 11, 10, 10
             ]
         };
         
-        // Cap at level 36 (max in official table)
-        const levelIndex = Math.min(level - 1, 35);
+        // Cap at the available table length for the selected class.
+        const classTable = thac0Table[classType] || [];
+        const levelIndex = Math.min(level - 1, classTable.length - 1);
         return thac0Table[classType]?.[levelIndex] ?? 19;
     }
     
@@ -222,11 +227,20 @@ class BECMIRulesEngine {
     calculateMovementRates(character) {
         const strength = character.strength;
         const totalWeight = this.calculateTotalWeight(character);
+        const overlandByStatus = {
+            unencumbered: 24,
+            lightly_encumbered: 18,
+            heavily_encumbered: 12,
+            severely_encumbered: 6,
+            overloaded: 3,
+            immobile: 0
+        };
+        let movement;
         
         // BECMI Character Movement Rates and Encumbrance Table (Chapter 6)
         // Encumbrance levels are fixed, not adjusted by strength
         if (totalWeight <= 400) {
-            return {
+            movement = {
                 normal: 120,
                 encounter: 40,
                 running: 120,
@@ -235,7 +249,7 @@ class BECMIRulesEngine {
                 limit: 400
             };
         } else if (totalWeight <= 800) {
-            return {
+            movement = {
                 normal: 90,
                 encounter: 30,
                 running: 90,
@@ -244,7 +258,7 @@ class BECMIRulesEngine {
                 limit: 800
             };
         } else if (totalWeight <= 1200) {
-            return {
+            movement = {
                 normal: 60,
                 encounter: 20,
                 running: 60,
@@ -253,7 +267,7 @@ class BECMIRulesEngine {
                 limit: 1200
             };
         } else if (totalWeight <= 1600) {
-            return {
+            movement = {
                 normal: 30,
                 encounter: 10,
                 running: 30,
@@ -262,7 +276,7 @@ class BECMIRulesEngine {
                 limit: 1600
             };
         } else if (totalWeight <= 2400) {
-            return {
+            movement = {
                 normal: 15,
                 encounter: 5,
                 running: 15,
@@ -271,7 +285,7 @@ class BECMIRulesEngine {
                 limit: 2400
             };
         } else {
-            return {
+            movement = {
                 normal: 0,
                 encounter: 0,
                 running: 0,
@@ -280,6 +294,75 @@ class BECMIRulesEngine {
                 limit: 2400
             };
         }
+
+        movement.overland = overlandByStatus[movement.status] || 0;
+
+        if (character.class === 'barbarian') {
+            movement = this.applyBarbarianFleetOfFoot(movement, character, totalWeight);
+        }
+
+        return movement;
+    }
+
+    /**
+     * Apply Barbarian Fleet of Foot movement bonuses when armor and load allow it.
+     */
+    applyBarbarianFleetOfFoot(movement, character, totalWeight) {
+        const armorType = this.getEquippedArmorType(character.inventory || []);
+        let fleetBonus = 0;
+
+        if (totalWeight <= 1200) {
+            if (armorType === null || armorType === 'leather') {
+                fleetBonus = 10;
+            } else if (armorType === 'chain') {
+                fleetBonus = 5;
+            }
+        }
+
+        if (fleetBonus > 0) {
+            movement.normal += fleetBonus;
+            movement.running += fleetBonus;
+            movement.encounter += Math.floor(fleetBonus / 3);
+        }
+
+        if (totalWeight <= 800 && movement.overland > 0 && (armorType === null || armorType === 'leather')) {
+            movement.overland = Math.round(movement.overland * 1.25);
+        }
+
+        movement.fleet_bonus = fleetBonus;
+
+        return movement;
+    }
+
+    /**
+     * Return equipped armor type for class feature calculations.
+     */
+    getEquippedArmorType(inventory) {
+        if (!Array.isArray(inventory) || inventory.length === 0) {
+            return null;
+        }
+
+        for (const item of inventory) {
+            const isEquipped = item.is_equipped !== undefined ? Boolean(item.is_equipped) : true;
+            const itemType = item.item_type || 'unknown';
+
+            if (!isEquipped || itemType !== 'armor') {
+                continue;
+            }
+
+            if (item.armor_type) {
+                return String(item.armor_type).toLowerCase().trim();
+            }
+
+            const name = String(item.name || '').toLowerCase().trim();
+            if (name.includes('leather')) return 'leather';
+            if (name.includes('chain')) return 'chain';
+            if (name.includes('plate') || name.includes('suit')) return 'plate';
+
+            return 'other';
+        }
+
+        return null;
     }
     
     /**
@@ -405,6 +488,13 @@ class BECMIRulesEngine {
                 'paralysis': {'1-3': 14, '4-6': 12, '7-9': 10, '10-12': 8, '13-15': 7, '16-18': 6, '19-21': 6, '22-24': 5, '25-27': 5, '28-30': 4, '31-33': 3, '34-36': 2},
                 'dragon_breath': {'1-3': 15, '4-6': 13, '7-9': 11, '10-12': 9, '13-15': 8, '16-18': 7, '19-21': 6, '22-24': 5, '25-27': 4, '28-30': 3, '31-33': 2, '34-36': 2},
                 'spells': {'1-3': 16, '4-6': 14, '7-9': 12, '10-12': 10, '13-15': 9, '16-18': 8, '19-21': 7, '22-24': 6, '25-27': 5, '28-30': 4, '31-33': 3, '34-36': 2}
+            },
+            'barbarian': {
+                'death_ray': {'1-3': 12, '4-6': 10, '7-9': 8, '10-12': 6, '13-14': 4},
+                'magic_wand': {'1-3': 13, '4-6': 11, '7-9': 9, '10-12': 7, '13-14': 5},
+                'paralysis': {'1-3': 14, '4-6': 12, '7-9': 10, '10-12': 8, '13-14': 6},
+                'dragon_breath': {'1-3': 15, '4-6': 13, '7-9': 10, '10-12': 8, '13-14': 5},
+                'spells': {'1-3': 16, '4-6': 14, '7-9': 12, '10-12': 10, '13-14': 8}
             }
         };
         
@@ -481,7 +571,8 @@ class BECMIRulesEngine {
         // Hit dice by class
         const hitDice = {
             'fighter': 8, 'cleric': 6, 'magic_user': 4, 'thief': 4,
-            'dwarf': 8, 'elf': 6, 'halfling': 6
+            'dwarf': 8, 'elf': 6, 'halfling': 6, 'druid': 6,
+            'mystic': 6, 'barbarian': 8
         };
         
         const hitDie = hitDice[classType] || 6;
@@ -494,6 +585,11 @@ class BECMIRulesEngine {
         
         // Add hit points for additional levels
         for (let i = 2; i <= level; i++) {
+            if (classType === 'barbarian' && i > 9) {
+                baseHP += 3;
+                continue;
+            }
+
             baseHP += Math.max(1, hitDie + conBonus);
         }
         
@@ -599,14 +695,35 @@ class BECMIRulesEngine {
             'thief': [0, 1200, 2400, 4800, 9600, 19200, 38400, 76800, 153600, 307200, 460800, 614400, 768000, 921600, 1075200, 1228800, 1382400, 1536000, 1689600, 1843200],
             'dwarf': [0, 2200, 4400, 8800, 17600, 35200, 70400, 140800, 281600, 563200, 844800, 1126400, 1408000, 1689600, 1971200, 2252800, 2534400, 2816000, 3097600, 3379200],
             'elf': [0, 4000, 8000, 16000, 32000, 64000, 128000, 256000, 512000, 1024000, 1536000, 2048000, 2560000, 3072000, 3584000, 4096000, 4608000, 5120000, 5632000, 6144000],
-            'halfling': [0, 2000, 4000, 8000, 16000, 32000, 64000, 128000, 256000, 512000, 768000, 1024000, 1280000, 1536000, 1788000, 2048000, 2304000, 2560000, 2816000, 3072000]
+            'halfling': [0, 2000, 4000, 8000, 16000, 32000, 64000, 128000, 256000, 512000, 768000, 1024000, 1280000, 1536000, 1788000, 2048000, 2304000, 2560000, 2816000, 3072000],
+            'barbarian': [0, 2500, 5000, 10000, 20000, 40000, 80000, 160000, 250000, 370000, 490000, 610000, 730000, 850000]
         };
         
-        if (currentLevel >= 20) {
+        if (currentLevel >= this.getMaxLevelForClass(classType)) {
             return null; // Max level reached
         }
         
-        return xpTable[classType][currentLevel] || null;
+        return xpTable[classType]?.[currentLevel] || null;
+    }
+
+    /**
+     * Get maximum supported class level.
+     */
+    getMaxLevelForClass(classType) {
+        const maxLevels = {
+            fighter: 36,
+            dwarf: 12,
+            elf: 10,
+            halfling: 8,
+            cleric: 36,
+            magic_user: 36,
+            thief: 36,
+            druid: 36,
+            mystic: 36,
+            barbarian: 14
+        };
+
+        return maxLevels[classType] || 20;
     }
     
     /**
@@ -625,7 +742,8 @@ class BECMIRulesEngine {
             'elf': ['strength', 'intelligence'],
             'halfling': ['strength', 'dexterity'],
             'druid': ['wisdom'],
-            'mystic': ['strength', 'dexterity']
+            'mystic': ['strength', 'dexterity'],
+            'barbarian': ['strength']
         };
         
         return primeRequisites[classType] || [];
@@ -641,6 +759,13 @@ class BECMIRulesEngine {
      */
     getExperienceBonus(classType, abilities) {
         const primeReqs = this.getClassPrimeRequisites(classType);
+
+        if (classType === 'barbarian') {
+            const strength = abilities.strength || 10;
+            if (strength >= 16) return 1.10;
+            if (strength >= 13) return 1.05;
+            return 1.0;
+        }
         
         // Special handling for classes with two prime requisites
         if (primeReqs.length === 2) {
@@ -708,6 +833,69 @@ class BECMIRulesEngine {
         if (primeValue <= 8) return 0.90; // -10%
         
         return 1.0; // No bonus or penalty
+    }
+
+    /**
+     * Return fixed HP gain for classes that stop rolling hit dice after name level.
+     */
+    getFixedHitPointGainForLevel(classType, newLevel) {
+        if (classType === 'barbarian' && Number(newLevel) > 9) {
+            return 3;
+        }
+
+        return null;
+    }
+
+    /**
+     * Get Barbarian Rage progression for a level.
+     */
+    getBarbarianRageStats(level) {
+        const safeLevel = Math.max(1, Math.min(14, Number(level) || 1));
+        let usesPerDay = 1;
+
+        if (safeLevel >= 12) {
+            usesPerDay = 4;
+        } else if (safeLevel >= 8) {
+            usesPerDay = 3;
+        } else if (safeLevel >= 4) {
+            usesPerDay = 2;
+        }
+
+        return {
+            uses_per_day: usesPerDay,
+            duration_rounds: Math.max(3, safeLevel),
+            temporary_hp: safeLevel,
+            attack_bonus: 2,
+            damage_bonus: 2,
+            save_bonus_death_poison_breath: 2,
+            ac_penalty: 2,
+            cooldown_turns: 1
+        };
+    }
+
+    /**
+     * Get Barbarian Wilderness Mastery values for a level.
+     */
+    getBarbarianWildernessMastery(level) {
+        const safeLevel = Math.max(1, Math.min(14, Number(level) || 1));
+        const table = {
+            1: { track_percent: 25, forage: '1-2', hunt: '1-2', navigate: '1-3', hide_percent: 10 },
+            2: { track_percent: 30, forage: '1-3', hunt: '1-2', navigate: '1-3', hide_percent: 15 },
+            3: { track_percent: 35, forage: '1-3', hunt: '1-3', navigate: '1-4', hide_percent: 20 },
+            4: { track_percent: 40, forage: '1-4', hunt: '1-3', navigate: '1-4', hide_percent: 25 },
+            5: { track_percent: 45, forage: '1-4', hunt: '1-4', navigate: '1-4', hide_percent: 30 },
+            6: { track_percent: 50, forage: '1-5', hunt: '1-4', navigate: '1-5', hide_percent: 35 },
+            7: { track_percent: 55, forage: '1-5', hunt: '1-5', navigate: '1-5', hide_percent: 40 },
+            8: { track_percent: 60, forage: '1-5', hunt: '1-5', navigate: '1-5', hide_percent: 45 },
+            9: { track_percent: 65, forage: '1-6', hunt: '1-5', navigate: '1-6', hide_percent: 50 },
+            10: { track_percent: 70, forage: '1-6', hunt: '1-6', navigate: '1-6', hide_percent: 55 },
+            11: { track_percent: 75, forage: '1-6', hunt: '1-6', navigate: '1-6', hide_percent: 60 },
+            12: { track_percent: 80, forage: '1-6', hunt: '1-6', navigate: '1-6', hide_percent: 65 },
+            13: { track_percent: 85, forage: '1-6', hunt: '1-6', navigate: '1-6', hide_percent: 70 },
+            14: { track_percent: 90, forage: '1-6', hunt: '1-6', navigate: '1-6', hide_percent: 75 }
+        };
+
+        return table[safeLevel];
     }
     
     /**

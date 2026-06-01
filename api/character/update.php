@@ -387,7 +387,10 @@ function calculateCharacterStats($characterData, $inventory = null) {
     $stats['thac0'] = BECMIRulesEngine::calculateTHAC0($characterData);
     
     // Calculate movement rates
-    $stats['movement'] = BECMIRulesEngine::calculateMovementRates($characterData);
+    $movementCharacter = array_merge($characterData, [
+        'inventory' => $inventory ?? []
+    ]);
+    $stats['movement'] = BECMIRulesEngine::calculateMovementRates($movementCharacter);
     
     // Calculate saving throws
     $stats['saving_throws'] = BECMIRulesEngine::calculateSavingThrows($characterData);
@@ -398,4 +401,3 @@ function calculateCharacterStats($characterData, $inventory = null) {
     return $stats;
 }
 ?>
-

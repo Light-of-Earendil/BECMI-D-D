@@ -14,6 +14,11 @@ class APIClient {
         this.timeout = 30000; // 30 seconds
         this.retryAttempts = 3;
         this.retryDelay = 1000; // 1 second
+        this.activityLimit = 20;
+
+        if (!Array.isArray(window.__BECMI_API_ACTIVITY__)) {
+            window.__BECMI_API_ACTIVITY__ = [];
+        }
         
         console.log('API Client initialized');
     }
@@ -101,6 +106,7 @@ class APIClient {
      */
     async makeRequest(method, url, data = null, options = {}) {
         const expectedStatusCodes = options.expectedStatusCodes || [];
+        const requestStartedAt = Date.now();
         
         for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
             // Don't log anything for requests with expected status codes
@@ -126,16 +132,48 @@ class APIClient {
                 const responseText = await fetchResult.text();
                 let errorMessage = `HTTP ${fetchResult.status}: ${fetchResult.statusText}`;
                 let errorData = null;
+                const responseRequestId = fetchResult.headers.get('X-Request-Id');
                 
                 // Try to parse error response as JSON
                 const jsonMatch = responseText.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
                 if (jsonMatch) {
-                    const parsed = JSON.parse(jsonMatch[1]);
-                    errorData = parsed;
-                    if (parsed.message) {
-                        errorMessage = parsed.message;
+                    const parsedResult = this.safeJSONParse(jsonMatch[1]);
+                    if (parsedResult.success) {
+                        errorData = parsedResult.data;
+                    }
+                    if (errorData && errorData.message) {
+                        errorMessage = errorData.message;
                     }
                 }
+
+                const errorResult = {
+                    success: false,
+                    data: errorData && errorData.data ? errorData.data : errorData,
+                    message: errorMessage,
+                    error: errorMessage,
+                    status: fetchResult.status,
+                    appStatus: errorData && errorData.status ? errorData.status : 'error',
+                    httpStatus: fetchResult.status,
+                    statusText: fetchResult.statusText,
+                    responseText: responseText,
+                    requestId: (errorData && errorData.request_id) || responseRequestId,
+                    errorId: errorData && errorData.error_id ? errorData.error_id : null,
+                    code: errorData && errorData.code ? errorData.code : null,
+                    errors: errorData && errorData.errors ? errorData.errors : null,
+                    parsedError: errorData,
+                    durationMs: Date.now() - requestStartedAt
+                };
+
+                this.recordApiActivity({
+                    method,
+                    url,
+                    ok: false,
+                    httpStatus: fetchResult.status,
+                    appStatus: errorResult.appStatus,
+                    errorId: errorResult.errorId,
+                    requestId: errorResult.requestId,
+                    durationMs: errorResult.durationMs
+                });
                 
                 // Log errors only if not expected
                 if (!isExpectedError) {
@@ -150,28 +188,14 @@ class APIClient {
                     }
                 }
                 
-                // Don't retry on auth errors or expected errors
-                if (fetchResult.status === 401 || fetchResult.status === 403 || isExpectedError) {
-                    return {
-                        success: false,
-                        data: errorData,
-                        error: errorMessage,
-                        status: fetchResult.status,
-                        statusText: fetchResult.statusText,
-                        responseText: responseText
-                    };
+                // Don't retry on client-side validation/permission errors.
+                if ((fetchResult.status >= 400 && fetchResult.status < 500) || isExpectedError) {
+                    return errorResult;
                 }
                 
                 // Don't retry on 500 errors
                 if (fetchResult.status === 500) {
-                    return {
-                        success: false,
-                        data: errorData,
-                        error: errorMessage,
-                        status: fetchResult.status,
-                        statusText: fetchResult.statusText,
-                        responseText: responseText
-                    };
+                    return errorResult;
                 }
                 
                 // Wait before retry
@@ -204,14 +228,31 @@ class APIClient {
                 console.error('========================================');
                 console.error('COMPLETE RESPONSE:', responseText);
                 console.error('========================================');
-                return {
+                const invalidJsonResult = {
                     success: false,
                     data: null,
+                    message: 'Invalid JSON response from server',
                     error: 'Invalid JSON response from server',
                     status: fetchResult.status,
+                    appStatus: 'error',
+                    httpStatus: fetchResult.status,
                     statusText: fetchResult.statusText,
-                    responseText: responseText
+                    responseText: responseText,
+                    requestId: fetchResult.headers.get('X-Request-Id'),
+                    errorId: null,
+                    durationMs: Date.now() - requestStartedAt
                 };
+                this.recordApiActivity({
+                    method,
+                    url,
+                    ok: false,
+                    httpStatus: fetchResult.status,
+                    appStatus: 'error',
+                    errorId: null,
+                    requestId: invalidJsonResult.requestId,
+                    durationMs: invalidJsonResult.durationMs
+                });
+                return invalidJsonResult;
             }
             
             // Parse JSON - use a safe parsing function
@@ -223,14 +264,31 @@ class APIClient {
                 console.error('COMPLETE RESPONSE:', responseText);
                 console.error('Parse error:', parseResult.error);
                 console.error('========================================');
-                return {
+                const parseErrorResult = {
                     success: false,
                     data: null,
+                    message: `JSON parse error: ${parseResult.error}`,
                     error: `JSON parse error: ${parseResult.error}`,
                     status: fetchResult.status,
+                    appStatus: 'error',
+                    httpStatus: fetchResult.status,
                     statusText: fetchResult.statusText,
-                    responseText: responseText
+                    responseText: responseText,
+                    requestId: fetchResult.headers.get('X-Request-Id'),
+                    errorId: null,
+                    durationMs: Date.now() - requestStartedAt
                 };
+                this.recordApiActivity({
+                    method,
+                    url,
+                    ok: false,
+                    httpStatus: fetchResult.status,
+                    appStatus: 'error',
+                    errorId: null,
+                    requestId: parseErrorResult.requestId,
+                    durationMs: parseErrorResult.durationMs
+                });
+                return parseErrorResult;
             }
             
             result = parseResult.data;
@@ -252,25 +310,75 @@ class APIClient {
             }
             
             // Return result object - maintain backward compatibility with existing response structure
-            return {
+            const normalizedResult = {
+                ...result,
                 success: result.status === 'success',
                 data: result.data || result,
                 error: result.status === 'error' ? (result.message || 'Unknown error') : null,
-                status: fetchResult.status,
+                status: result.status,
+                appStatus: result.status,
+                httpStatus: fetchResult.status,
                 statusText: fetchResult.statusText,
-                // Also include original response structure for backward compatibility
-                ...result
+                requestId: result.request_id || fetchResult.headers.get('X-Request-Id'),
+                errorId: result.error_id || null,
+                durationMs: Date.now() - requestStartedAt
             };
+            this.recordApiActivity({
+                method,
+                url,
+                ok: normalizedResult.success,
+                httpStatus: normalizedResult.httpStatus,
+                appStatus: normalizedResult.appStatus,
+                errorId: normalizedResult.errorId,
+                requestId: normalizedResult.requestId,
+                durationMs: normalizedResult.durationMs
+            });
+            return normalizedResult;
         }
         
         // All retries failed
-        return {
+        const exhaustedResult = {
             success: false,
             data: null,
+            message: `API request failed after ${this.retryAttempts} attempts`,
             error: `API request failed after ${this.retryAttempts} attempts`,
             status: 0,
-            statusText: 'Request failed'
+            appStatus: 'error',
+            httpStatus: 0,
+            statusText: 'Request failed',
+            errorId: null,
+            requestId: null,
+            durationMs: Date.now() - requestStartedAt
         };
+        this.recordApiActivity({
+            method,
+            url,
+            ok: false,
+            httpStatus: 0,
+            appStatus: 'error',
+            errorId: null,
+            requestId: null,
+            durationMs: exhaustedResult.durationMs
+        });
+        return exhaustedResult;
+    }
+
+    /**
+     * Keep a small rolling buffer of recent API activity for support/debugging.
+     */
+    recordApiActivity(entry) {
+        if (!Array.isArray(window.__BECMI_API_ACTIVITY__)) {
+            window.__BECMI_API_ACTIVITY__ = [];
+        }
+
+        window.__BECMI_API_ACTIVITY__.push({
+            ...entry,
+            timestamp: new Date().toISOString()
+        });
+
+        if (window.__BECMI_API_ACTIVITY__.length > this.activityLimit) {
+            window.__BECMI_API_ACTIVITY__.splice(0, window.__BECMI_API_ACTIVITY__.length - this.activityLimit);
+        }
     }
     
     /**
@@ -291,12 +399,6 @@ class APIClient {
         }
         // Note: No CSRF token is normal for first request (auth/verify.php) before login
         // Server will handle this gracefully - no need to warn
-        
-        // Add auth token if available (for compatibility, though session-based auth is primary)
-        const authToken = localStorage.getItem('auth_token');
-        if (authToken) {
-            headers['Authorization'] = `Bearer ${authToken}`;
-        }
         
         return headers;
     }
@@ -353,18 +455,25 @@ class APIClient {
         console.error(`API Error${context ? `(${context})`: ''}:`, result.error);
         
         let message = result.error || 'An unexpected error occurred';
+        const httpStatus = typeof result.httpStatus === 'number'
+            ? result.httpStatus
+            : (typeof result.status === 'number' ? result.status : 0);
         
-        if (result.status === 401) {
+        if (httpStatus === 401) {
             message = 'Authentication required. Please log in again.';
             if (window.becmiApp) {
                 window.becmiApp.logout();
             }
-        } else if (result.status === 403) {
+        } else if (httpStatus === 403) {
             message = 'You do not have permission to perform this action.';
-        } else if (result.status === 404) {
+        } else if (httpStatus === 404) {
             message = 'The requested resource was not found.';
-        } else if (result.status === 500) {
+        } else if (httpStatus === 500) {
             message = 'Server error. Please try again later.';
+        }
+
+        if (result.errorId) {
+            message += ` (Fejl-ID: ${result.errorId})`;
         }
         
         // Show error notification
@@ -432,13 +541,13 @@ class APIClient {
             
             xhr.timeout = this.timeout;
             xhr.open('POST', this.buildURL(endpoint));
-            
-            // Add auth headers
-            const authToken = localStorage.getItem('auth_token');
-            if (authToken) {
-                xhr.setRequestHeader('Authorization', `Bearer ${authToken}`);
+
+            const csrfToken = this.getCSRFToken();
+            if (csrfToken) {
+                xhr.setRequestHeader('X-CSRF-Token', csrfToken);
             }
-            
+
+            xhr.setRequestHeader('Accept', 'application/json');
             xhr.send(formData);
         });
     }

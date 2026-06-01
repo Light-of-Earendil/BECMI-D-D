@@ -61,28 +61,81 @@ class CharacterCreationEquipment {
      * @returns {Promise<Array<Object>>} Promise resolving to items array
      */
     async loadItemsFromDatabase() {
-        try {
-            const response = await fetch('/api/items/get-by-category.php');
-            const data = await response.json();
-            
-            if (data.status === 'success') {
-                // Flatten categorized items into a single array for backward compatibility
-                this.categorizedItems = data.data.items;
-                this.availableItems = this.flattenCategorizedItems(data.data.items);
-                console.log(`Loaded ${this.availableItems.length} items from database (${data.data.total_items} total)`);
-                return this.availableItems;
-            } else {
-                console.error('Failed to load items:', data.message);
-                this.availableItems = [];
+        const endpoints = [
+            '/api/items/get-by-category.php',
+            '/api/items/list.php'
+        ];
+
+        for (const endpoint of endpoints) {
+            try {
+                const response = await fetch(endpoint, {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.status !== 'success') {
+                    throw new Error(data.message || 'Unknown item loading error');
+                }
+
+                if (endpoint.endsWith('get-by-category.php')) {
+                    this.categorizedItems = data.data.items || {};
+                    this.availableItems = this.prepareCharacterCreationItems(
+                        this.flattenCategorizedItems(this.categorizedItems)
+                    );
+                    console.log(`Loaded ${this.availableItems.length} starter items from categorized endpoint`);
+                    return this.availableItems;
+                }
+
+                const flatItems = (data.data && Array.isArray(data.data.items)) ? data.data.items : [];
                 this.categorizedItems = {};
-                return [];
+                this.availableItems = this.prepareCharacterCreationItems(flatItems);
+                console.log(`Loaded ${this.availableItems.length} starter items from fallback items endpoint`);
+                return this.availableItems;
+            } catch (error) {
+                console.warn(`Failed to load items from ${endpoint}:`, error);
             }
-        } catch (error) {
-            console.error('Error loading items from database:', error);
-            this.availableItems = [];
-            this.categorizedItems = {};
-            return [];
         }
+
+        console.error('Error loading items from database: all item endpoints failed, using verified fallback catalog');
+        this.categorizedItems = {};
+        this.availableItems = this.prepareCharacterCreationItems(this.getVerifiedFallbackItems());
+        console.warn(`Loaded ${this.availableItems.length} fallback starter items`);
+        return this.availableItems;
+    }
+
+    /**
+     * Minimal fallback catalog based on verified defaults in database/schema.sql.
+     * This keeps character creation usable if the item API is temporarily unavailable.
+     *
+     * @returns {Array<Object>}
+     */
+    getVerifiedFallbackItems() {
+        return [
+            { item_id: 10001, name: 'Dagger', description: 'A small, sharp blade', weight_cn: 10, cost_gp: 3, item_type: 'weapon', item_category: 'dagger', weapon_type: 'melee', damage_die: '1d4', damage_type: 'piercing', requires_proficiency: true, is_magical: false, stackable: false },
+            { item_id: 10002, name: 'Short Sword', description: 'A light, one-handed sword', weight_cn: 30, cost_gp: 10, item_type: 'weapon', item_category: 'sword', weapon_type: 'melee', damage_die: '1d6', damage_type: 'slashing', requires_proficiency: true, is_magical: false, stackable: false },
+            { item_id: 10003, name: 'Normal Sword', description: 'Standard one-handed sword', weight_cn: 60, cost_gp: 10, item_type: 'weapon', item_category: 'sword', weapon_type: 'melee', damage_die: '1d8', damage_type: 'slashing', requires_proficiency: true, is_magical: false, stackable: false, hands_required: 1 },
+            { item_id: 10017, name: 'Bastard Sword', description: 'Versatile sword; use one-handed or two-handed. Cannot use a shield while wielded two-handed.', weight_cn: 60, cost_gp: 10, item_type: 'weapon', item_category: 'sword', weapon_type: 'melee', damage_die: '1d6+1', alternate_damage_die: '1d8+1', display_damage: '1d6+1 / 1d8+1', hands_required: 1, can_use_two_handed: true, legacy_aliases: ['Bastard Sword (One-Handed)', 'Bastard Sword (Two-Handed)'], requires_proficiency: true, is_magical: false, stackable: false },
+            { item_id: 10004, name: 'Battle Axe', description: 'A heavy axe for combat', weight_cn: 50, cost_gp: 7, item_type: 'weapon', item_category: 'axe', weapon_type: 'melee', damage_die: '1d8', damage_type: 'slashing', requires_proficiency: true, is_magical: false, stackable: false },
+            { item_id: 10005, name: 'Mace', description: 'A blunt weapon', weight_cn: 30, cost_gp: 5, item_type: 'weapon', item_category: 'bludgeon', weapon_type: 'melee', damage_die: '1d6', damage_type: 'bludgeoning', requires_proficiency: true, is_magical: false, stackable: false },
+            { item_id: 10006, name: 'Spear', description: 'A long thrusting weapon', weight_cn: 30, cost_gp: 1, item_type: 'weapon', item_category: 'pole', weapon_type: 'melee', damage_die: '1d6', damage_type: 'piercing', requires_proficiency: true, is_magical: false, stackable: false },
+            { item_id: 10007, name: 'Short Bow', description: 'A light bow for ranged combat', weight_cn: 20, cost_gp: 25, item_type: 'weapon', item_category: 'bow', weapon_type: 'ranged', damage_die: '1d6', damage_type: 'piercing', requires_proficiency: true, is_magical: false, stackable: false, range_short: 50, range_long: 150 },
+            { item_id: 10008, name: 'Crossbow', description: 'A mechanical bow', weight_cn: 50, cost_gp: 30, item_type: 'weapon', item_category: 'crossbow', weapon_type: 'ranged', damage_die: '1d6', damage_type: 'piercing', requires_proficiency: true, is_magical: false, stackable: false, range_short: 60, range_long: 180 },
+            { item_id: 10009, name: 'Leather Armor', description: 'Basic leather protection', weight_cn: 200, cost_gp: 20, item_type: 'armor', item_category: 'armor', armor_type: 'leather', ac_bonus: 7, requires_proficiency: false, is_magical: false, stackable: false },
+            { item_id: 10010, name: 'Chain Mail', description: 'Interlocked metal rings', weight_cn: 400, cost_gp: 75, item_type: 'armor', item_category: 'armor', armor_type: 'chain', ac_bonus: 5, requires_proficiency: false, is_magical: false, stackable: false },
+            { item_id: 10011, name: 'Plate Mail', description: 'Heavy metal plates', weight_cn: 500, cost_gp: 400, item_type: 'armor', item_category: 'armor', armor_type: 'plate', ac_bonus: 3, requires_proficiency: false, is_magical: false, stackable: false },
+            { item_id: 10012, name: 'Shield', description: 'Wooden or metal shield', weight_cn: 100, cost_gp: 10, item_type: 'shield', item_category: 'shield', armor_type: 'shield', ac_bonus: -1, requires_proficiency: false, is_magical: false, stackable: false },
+            { item_id: 10013, name: 'Backpack', description: 'For carrying equipment', weight_cn: 20, cost_gp: 2, item_type: 'gear', item_category: 'container', capacity_cn: 400, requires_proficiency: false, is_magical: false, stackable: false },
+            { item_id: 10014, name: 'Rope (50 ft)', description: 'Hemp rope', weight_cn: 100, cost_gp: 1, item_type: 'gear', item_category: 'tool', requires_proficiency: false, is_magical: false, stackable: false },
+            { item_id: 10015, name: 'Torch', description: 'Provides light', weight_cn: 10, cost_gp: 0.01, item_type: 'gear', item_category: 'light', requires_proficiency: false, is_magical: false, stackable: true },
+            { item_id: 10016, name: 'Rations (1 day)', description: 'Food and water', weight_cn: 50, cost_gp: 0.5, item_type: 'consumable', item_category: 'food', requires_proficiency: false, is_magical: false, stackable: true }
+        ];
     }
 
     /**
@@ -129,6 +182,226 @@ class CharacterCreationEquipment {
     }
 
     /**
+     * Prepare flat items for the character-creation shop.
+     *
+     * @param {Array<Object>} items
+     * @returns {Array<Object>}
+     */
+    prepareCharacterCreationItems(items) {
+        return this.mergeCanonicalItemVariants(items
+            .map(item => this.normalizeItem(item))
+            .filter(item => this.isCharacterCreationItem(item)))
+            .sort((a, b) => this.sortCharacterCreationItems(a, b));
+    }
+
+    /**
+     * Normalize item data into a stable UI contract.
+     *
+     * @param {Object} item
+     * @returns {Object}
+     */
+    normalizeItem(item) {
+        const canonicalItem = this.normalizeLegacyBECMIItem(item);
+        const uiCategory = this.getUICategory(canonicalItem);
+        const normalizedDescription = typeof canonicalItem.description === 'string'
+            ? canonicalItem.description.trim()
+            : '';
+        const legacyAliases = Array.isArray(canonicalItem.legacy_aliases)
+            ? canonicalItem.legacy_aliases
+            : [];
+
+        return {
+            ...canonicalItem,
+            category: canonicalItem.category || uiCategory,
+            ui_category: uiCategory,
+            description: normalizedDescription,
+            item_category: canonicalItem.item_category || null,
+            searchable_text: `${canonicalItem.name || ''} ${legacyAliases.join(' ')} ${normalizedDescription}`.toLowerCase()
+        };
+    }
+
+    /**
+     * Normalize legacy item names to Rules Cyclopedia terminology.
+     *
+     * @param {Object} item
+     * @returns {Object}
+     */
+    normalizeLegacyBECMIItem(item) {
+        const normalized = { ...item };
+        const legacyAliases = Array.isArray(normalized.legacy_aliases)
+            ? [...normalized.legacy_aliases]
+            : [];
+
+        if (
+            normalized.name === 'Long Sword' &&
+            normalized.item_type === 'weapon' &&
+            normalized.weapon_type === 'melee' &&
+            normalized.damage_die === '1d8'
+        ) {
+            legacyAliases.push('Long Sword');
+            normalized.name = 'Normal Sword';
+            normalized.description = 'Standard one-handed sword';
+            normalized.cost_gp = 10;
+            normalized.weight_cn = 60;
+            normalized.item_category = normalized.item_category || 'sword';
+            normalized.hands_required = 1;
+        }
+
+        const bastardSwordMatch = typeof normalized.name === 'string'
+            ? normalized.name.match(/^Bastard Sword \((One-Handed|Two-Handed)\)(.*)$/)
+            : null;
+
+        if (
+            bastardSwordMatch &&
+            normalized.item_type === 'weapon' &&
+            normalized.weapon_type === 'melee'
+        ) {
+            const suffix = bastardSwordMatch[2].trim();
+            legacyAliases.push(normalized.name);
+            normalized.name = suffix ? `Bastard Sword ${suffix}` : 'Bastard Sword';
+            normalized.description = 'Versatile sword; use one-handed or two-handed. Cannot use a shield while wielded two-handed.';
+            normalized.item_category = normalized.item_category || 'sword';
+            normalized.canonical_group_key = `bastard_sword:${normalized.name.toLowerCase()}`;
+            normalized.becmi_hand_mode = bastardSwordMatch[1] === 'One-Handed' ? 'one_handed' : 'two_handed';
+            normalized.can_use_two_handed = true;
+            normalized.hands_required = 1;
+        }
+
+        normalized.legacy_aliases = legacyAliases;
+        return normalized;
+    }
+
+    /**
+     * Merge flexible weapon variants that are a single Rules Cyclopedia item.
+     *
+     * @param {Array<Object>} items
+     * @returns {Array<Object>}
+     */
+    mergeCanonicalItemVariants(items) {
+        const merged = [];
+        const indexByKey = new Map();
+
+        items.forEach(item => {
+            if (!item.canonical_group_key) {
+                merged.push(item);
+                return;
+            }
+
+            if (!indexByKey.has(item.canonical_group_key)) {
+                merged.push({
+                    ...item,
+                    display_damage: item.display_damage || item.damage_die || '',
+                    alternate_damage_die: item.alternate_damage_die || null,
+                    variant_item_ids: [item.item_id]
+                });
+                indexByKey.set(item.canonical_group_key, merged.length - 1);
+                return;
+            }
+
+            const existingIndex = indexByKey.get(item.canonical_group_key);
+            const existing = merged[existingIndex];
+            const promoteVariant = item.becmi_hand_mode === 'one_handed' && existing.becmi_hand_mode === 'two_handed';
+            const baseItem = promoteVariant ? item : existing;
+            const otherItem = promoteVariant ? existing : item;
+
+            const oneHandedDamage = baseItem.becmi_hand_mode === 'one_handed'
+                ? baseItem.damage_die
+                : (otherItem.becmi_hand_mode === 'one_handed' ? otherItem.damage_die : baseItem.damage_die);
+            const twoHandedDamage = baseItem.becmi_hand_mode === 'two_handed'
+                ? baseItem.damage_die
+                : (otherItem.becmi_hand_mode === 'two_handed' ? otherItem.damage_die : (baseItem.alternate_damage_die || otherItem.alternate_damage_die || null));
+
+            merged[existingIndex] = {
+                ...baseItem,
+                damage_die: oneHandedDamage || baseItem.damage_die,
+                alternate_damage_die: twoHandedDamage,
+                display_damage: oneHandedDamage && twoHandedDamage ? `${oneHandedDamage} / ${twoHandedDamage}` : (oneHandedDamage || twoHandedDamage || ''),
+                legacy_aliases: Array.from(new Set([...(baseItem.legacy_aliases || []), ...(otherItem.legacy_aliases || [])])),
+                variant_item_ids: Array.from(new Set([...(baseItem.variant_item_ids || [baseItem.item_id]), ...(otherItem.variant_item_ids || [otherItem.item_id])]))
+            };
+
+            merged[existingIndex].searchable_text = `${merged[existingIndex].name || ''} ${(merged[existingIndex].legacy_aliases || []).join(' ')} ${merged[existingIndex].description || ''}`.toLowerCase();
+        });
+
+        return merged;
+    }
+
+    /**
+     * Map database item types to the simplified character-creation tabs.
+     *
+     * @param {Object} item
+     * @returns {string}
+     */
+    getUICategory(item) {
+        if (item.item_type === 'weapon') {
+            return 'weapon';
+        }
+
+        if (item.item_type === 'armor' || item.item_type === 'shield') {
+            return 'armor';
+        }
+
+        if (item.item_category === 'container') {
+            return 'container';
+        }
+
+        return 'gear';
+    }
+
+    /**
+     * Keep the character-creation catalog focused on mundane starter gear.
+     *
+     * @param {Object} item
+     * @returns {boolean}
+     */
+    isCharacterCreationItem(item) {
+        const allowedTypes = new Set(['weapon', 'armor', 'shield', 'gear', 'consumable']);
+
+        if (!allowedTypes.has(item.item_type)) {
+            return false;
+        }
+
+        if (item.is_magical) {
+            return false;
+        }
+
+        // Improvised rocks are not a meaningful purchase choice in the starter shop.
+        if (item.name === 'Rock, Thrown') {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Sort starter gear into a player-friendly order.
+     *
+     * @param {Object} a
+     * @param {Object} b
+     * @returns {number}
+     */
+    sortCharacterCreationItems(a, b) {
+        const categoryOrder = {
+            armor: 1,
+            weapon: 2,
+            container: 3,
+            gear: 4
+        };
+
+        const categoryDiff = (categoryOrder[a.ui_category] || 99) - (categoryOrder[b.ui_category] || 99);
+        if (categoryDiff !== 0) {
+            return categoryDiff;
+        }
+
+        const costDiff = (a.cost_gp || 0) - (b.cost_gp || 0);
+        if (costDiff !== 0) {
+            return costDiff;
+        }
+
+        return (a.name || '').localeCompare(b.name || '');
+    }
+
+    /**
      * Get all available equipment items
      * Now loads from database instead of hardcoded data
      * 
@@ -150,7 +423,37 @@ class CharacterCreationEquipment {
      * @returns {Array<Object>} Filtered equipment items
      */
     getEquipmentByCategory(category) {
-        return this.getAvailableEquipment().filter(item => item.category === category);
+        return this.getAvailableEquipment().filter(item => {
+            if (category === 'container') {
+                return item.ui_category === 'container';
+            }
+
+            if (category === 'gear') {
+                return item.ui_category === 'gear';
+            }
+
+            return item.ui_category === category;
+        });
+    }
+
+    /**
+     * Search starter equipment, optionally within a tab category.
+     *
+     * @param {string} searchQuery
+     * @param {string} category
+     * @returns {Array<Object>}
+     */
+    searchEquipment(searchQuery = '', category = 'all') {
+        const query = (searchQuery || '').trim().toLowerCase();
+        const baseItems = category === 'all'
+            ? this.getAvailableEquipment()
+            : this.getEquipmentByCategory(category);
+
+        if (!query) {
+            return baseItems;
+        }
+
+        return baseItems.filter(item => item.searchable_text.includes(query));
     }
 
     /**
@@ -540,18 +843,21 @@ class CharacterCreationEquipment {
 
         // Add weapon-specific properties
         if (item.item_type === 'weapon') {
-            props.damage = item.damage_die || '';
+            props.damage = item.display_damage || item.damage_die || '';
             props.damageType = item.damage_type || '';
             props.weaponType = item.weapon_type || '';
             props.range = item.range_short ? `${item.range_short}/${item.range_long}` : '';
             props.handsRequired = item.hands_required || 1;
+            props.handsDisplay = item.can_use_two_handed ? '1 or 2 hands' : (props.handsRequired > 1 ? `${props.handsRequired} hands` : '');
             props.canBeThrown = item.can_be_thrown || false;
         }
 
         // Add armor-specific properties
-        if (item.item_type === 'armor' || item.item_type === 'shield') {
+        if (item.item_type === 'armor' || item.item_type === 'shield' || item.item_category === 'shield') {
             props.acBonus = item.ac_bonus || 0;
             props.armorType = item.armor_type || '';
+            props.armorDisplay = getBECMIArmorDisplay(item);
+            props.acLabel = props.armorDisplay.label;
         }
 
         // Add special properties

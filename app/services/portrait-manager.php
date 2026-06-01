@@ -12,7 +12,7 @@ class PortraitManager {
     /**
      * @var string Directory path for storing portraits
      */
-    private static $portraitDir = '../../public/images/portraits/';
+    private static $portraitDir = null;
     
     /**
      * @var array Allowed image file extensions
@@ -85,11 +85,12 @@ class PortraitManager {
             // Generate filename
             $extension = $imageInfo['extension'];
             $filename = self::generateFilename($characterId, $characterName, $extension);
-            $filepath = self::$portraitDir . $filename;
+            $portraitDir = self::getPortraitDirectory();
+            $filepath = $portraitDir . $filename;
             
             // Ensure directory exists
-            if (!is_dir(self::$portraitDir)) {
-                if (!mkdir(self::$portraitDir, 0755, true)) {
+            if (!is_dir($portraitDir)) {
+                if (!mkdir($portraitDir, 0755, true)) {
                     throw new Exception('Failed to create portraits directory');
                 }
             }
@@ -209,7 +210,7 @@ class PortraitManager {
     public static function deletePortrait($portraitUrl) {
         try {
             if (strpos($portraitUrl, 'images/portraits/') === 0) {
-                $filepath = '../../public/' . $portraitUrl;
+                $filepath = self::getPublicRootDirectory() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $portraitUrl);
                 if (file_exists($filepath)) {
                     unlink($filepath);
                     return true;
@@ -240,7 +241,7 @@ class PortraitManager {
      */
     public static function cleanupOldPortraits() {
         try {
-            $files = glob(self::$portraitDir . 'portrait_*');
+            $files = glob(self::getPortraitDirectory() . 'portrait_*');
             $cutoffTime = time() - (30 * 24 * 60 * 60); // 30 days
             
             foreach ($files as $file) {
@@ -251,6 +252,27 @@ class PortraitManager {
         } catch (Exception $e) {
             error_log("Portrait cleanup error: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Resolve the absolute public root directory once.
+     */
+    private static function getPublicRootDirectory() {
+        return dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'public';
+    }
+
+    /**
+     * Resolve the portrait storage directory as an absolute path.
+     */
+    private static function getPortraitDirectory() {
+        if (self::$portraitDir === null) {
+            self::$portraitDir = self::getPublicRootDirectory()
+                . DIRECTORY_SEPARATOR . 'images'
+                . DIRECTORY_SEPARATOR . 'portraits'
+                . DIRECTORY_SEPARATOR;
+        }
+
+        return self::$portraitDir;
     }
 }
 ?>

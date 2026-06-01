@@ -372,15 +372,15 @@ class DashboardModule {
      */
     renderQuickActions() {
         return `<div class="quick-actions">
-                <button class="btn btn-primary btn-block"id="create-character-btn">
+                <button type="button" class="btn btn-primary btn-block" id="create-character-btn">
                     <i class="fas fa-user-plus"></i>
                     Create Character
                 </button>
-                <button class="btn btn-secondary btn-block"id="create-session-btn">
+                <button type="button" class="btn btn-secondary btn-block" id="create-session-btn">
                     <i class="fas fa-calendar-plus"></i>
                     Create Session
                 </button>
-                <button class="btn btn-info btn-block"data-view="calendar">
+                <button type="button" class="btn btn-info btn-block" data-dashboard-view="calendar">
                     <i class="fas fa-calendar-alt"></i>
                     View Calendar
                 </button>
@@ -458,6 +458,14 @@ class DashboardModule {
                 this.app.modules.sessionManagement.showCreationModal();
             } else {
                 this.app.showError('Session management module not available');
+            }
+        });
+
+        $(document).on('click', '[data-dashboard-view]', (e) => {
+            e.preventDefault();
+            const view = $(e.currentTarget).data('dashboard-view');
+            if (view) {
+                this.app.navigateToView(view);
             }
         });
         

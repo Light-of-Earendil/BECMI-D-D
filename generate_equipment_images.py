@@ -34,7 +34,7 @@ if not DB_CONFIG['user'] or not DB_CONFIG['password']:
 
 # Together AI API
 TOGETHER_API_URL = "https://api.together.xyz/v1/images/generations"
-MODEL = "black-forest-labs/FLUX.1-schnell-Free"
+MODEL = "google/gemini-3-pro-image"
 DEFAULT_WIDTH = 1024
 DEFAULT_HEIGHT = 1024  # Square format better for items
 DEFAULT_STEPS = 8  # Increased for better quality

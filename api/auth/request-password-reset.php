@@ -34,7 +34,10 @@ try {
     }
 
     // Rate limit the endpoint per IP.
-    Security::checkRateLimit('password_request_' . Security::getClientIP(), 5, 900);
+    if (!Security::checkRateLimit('password_request_' . Security::getClientIP(), 5, 900)) {
+        Security::logSecurityEvent('rate_limit_exceeded', ['action' => 'password_reset_request']);
+        Security::sendErrorResponse('Too many password reset requests. Please wait before trying again.', 429);
+    }
 
     $db = getDB();
 
@@ -47,19 +50,12 @@ try {
         $selector = bin2hex(random_bytes(16));
         $token = bin2hex(random_bytes(32));
         
-        // CRITICAL DEBUG: Verify token generation
-        error_log("=== PASSWORD RESET TOKEN GENERATION DEBUG ===");
-        error_log("Selector length: " . strlen($selector) . " (expected: 32)");
-        error_log("Token length: " . strlen($token) . " (expected: 64)");
-        error_log("Selector: " . $selector);
-        error_log("Token: " . $token);
-        
-        if (strlen($selector) !== 32) {
-            error_log("ERROR: Selector is not 32 characters!");
-        }
-        if (strlen($token) !== 64) {
-            error_log("ERROR: Token is not 64 characters!");
-        }
+        Security::debugLog('Password reset token generation', [
+            'selector_length' => strlen($selector),
+            'token_length' => strlen($token),
+            'selector_length_valid' => strlen($selector) === 32,
+            'token_length_valid' => strlen($token) === 64
+        ]);
         
         $tokenHash = password_hash($token, PASSWORD_DEFAULT);
         // Expire after 24 hours instead of 1 hour to give users more time
@@ -82,10 +78,11 @@ try {
         $baseUrl = Security::getBaseUrl();
         $resetLink = $baseUrl . '/public/index.php?password-reset=1&selector=' . $selector . '&token=' . $token;
         
-        // Log the reset link for debugging
-        error_log("PASSWORD RESET LINK LENGTH: " . strlen($resetLink));
-        error_log("PASSWORD RESET LINK: " . $resetLink);
-        error_log("PASSWORD RESET LINK (urlencode test): " . urlencode($resetLink));
+        Security::debugLog('Password reset link generated', [
+            'link_length' => strlen($resetLink),
+            'contains_selector' => strpos($resetLink, 'selector=') !== false,
+            'contains_token' => strpos($resetLink, 'token=') !== false
+        ]);
 
         $subject = 'BECMI Manager Password Reset';
         
@@ -141,13 +138,14 @@ try {
             "This link will expire in 24 hours.\n\n" .
             "BECMI Manager";
 
-        // Send HTML email with plain text fallback
+        // Reuse one boundary value in both header and body so multipart parsing
+        // cannot break if the clock ticks between separate time() calls.
+        $boundary = 'becmi-reset-' . bin2hex(random_bytes(8));
         $headers = [
             'MIME-Version' => '1.0',
-            'Content-Type' => 'multipart/alternative; boundary="' . md5(time()) . '"'
+            'Content-Type' => 'multipart/alternative; boundary="' . $boundary . '"'
         ];
-        
-        $boundary = md5(time());
+
         $multipartMessage = "--{$boundary}\r\n" .
             "Content-Type: text/plain; charset=UTF-8\r\n" .
             "Content-Transfer-Encoding: 7bit\r\n\r\n" .

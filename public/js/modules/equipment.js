@@ -21,7 +21,7 @@ class EquipmentModule {
      */
     async init() {
         console.log('Equipment Module initialized');
-        await this.loadEquipment();
+        // Keep public/login startup lean; load the catalog on first equipment view render.
     }
 
     /**
@@ -336,22 +336,30 @@ class EquipmentModule {
         }
         // Regular weapons (including shield weapons)
         else if (item.item_type === 'weapon') {
+            const damageDisplay = item.display_damage || item.damage_die;
+
             // Shield weapons: show damage (Basic "BS" level) and AC bonus
             if (item.item_category === 'shield') {
-                if (item.damage_die) {
-                    stats.push(`<span class="stat"><i class="fas fa-dice"></i> BS ${item.damage_die}</span>`);
+                if (damageDisplay) {
+                    stats.push(`<span class="stat"><i class="fas fa-dice"></i> BS ${damageDisplay}</span>`);
                 }
-                if (item.ac_bonus !== null && item.ac_bonus !== undefined) {
-                    stats.push(`<span class="stat"><i class="fas fa-shield-alt"></i> AC ${item.ac_bonus}</span>`);
+                const shieldDisplay = getBECMIArmorDisplay(item);
+                if (shieldDisplay.label) {
+                    stats.push(`<span class="stat"><i class="fas fa-shield-alt"></i> ${shieldDisplay.label}</span>`);
                 }
             } else {
                 // Regular weapons
-                if (item.damage_die) {
-                    stats.push(`<span class="stat"><i class="fas fa-dice"></i> ${item.damage_die}</span>`);
+                if (damageDisplay) {
+                    stats.push(`<span class="stat"><i class="fas fa-dice"></i> ${damageDisplay}</span>`);
                 }
             }
             if (item.range_short && item.range_medium && item.range_long) {
                 stats.push(`<span class="stat"><i class="fas fa-crosshairs"></i> ${item.range_short}/${item.range_medium}/${item.range_long}</span>`);
+            }
+            if (item.can_use_two_handed) {
+                stats.push('<span class="stat"><i class="fas fa-hand"></i> 1 or 2 hands</span>');
+            } else if (item.hands_required && item.hands_required > 1) {
+                stats.push(`<span class="stat"><i class="fas fa-hand"></i> ${item.hands_required} hands</span>`);
             }
             if (item.weight_cn && item.weight_cn > 0) {
                 stats.push(`<span class="stat"><i class="fas fa-weight-hanging"></i> ${item.weight_cn} cn</span>`);
@@ -363,8 +371,9 @@ class EquipmentModule {
             if (item.item_type === 'shield' && item.damage_die) {
                 stats.push(`<span class="stat"><i class="fas fa-dice"></i> ${item.damage_die}</span>`);
             }
-            if (item.ac_bonus !== null && item.ac_bonus !== undefined) {
-                stats.push(`<span class="stat"><i class="fas fa-shield-alt"></i> AC ${item.ac_bonus}</span>`);
+            const armorDisplay = getBECMIArmorDisplay(item);
+            if (armorDisplay.label) {
+                stats.push(`<span class="stat"><i class="fas fa-shield-alt"></i> ${armorDisplay.label}</span>`);
             }
             if (item.weight_cn && item.weight_cn > 0) {
                 stats.push(`<span class="stat"><i class="fas fa-weight-hanging"></i> ${item.weight_cn} cn</span>`);

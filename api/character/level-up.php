@@ -158,7 +158,10 @@ try {
     
     try {
         // Calculate new HP
-        if ($newHpRolled === null) {
+        $fixedHpGain = BECMIRulesEngine::getFixedHitPointGainForLevel($character['class'], $nextLevel);
+        if ($fixedHpGain !== null) {
+            $newHpGained = $fixedHpGain;
+        } elseif ($newHpRolled === null) {
             // Auto-roll HP based on class
             $hitDieSize = BECMIRulesEngine::getHitDieForClass($character['class']);
             // Use getConstitutionBonus() for HP, not getAbilityModifier() - they have different tables!
@@ -411,4 +414,3 @@ try {
     Security::sendErrorResponse('Failed to level up character', 500);
 }
 ?>
-

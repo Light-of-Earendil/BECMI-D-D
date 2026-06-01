@@ -33,9 +33,13 @@ class LevelUpWizard {
             
             this.currentCharacter = response.data.character;
             this.currentStep = 1;
+            const fixedHpGain = this.getFixedHPGain(
+                this.currentCharacter.class,
+                this.currentCharacter.level + 1
+            );
             this.wizardData = {
                 character_id: characterId,
-                new_hp_rolled: null,
+                new_hp_rolled: fixedHpGain,
                 new_spells: [],
                 new_skills: [],
                 new_weapon_mastery: null
@@ -175,7 +179,8 @@ class LevelUpWizard {
                 'thief': [0, 1200, 2400, 4800, 9600, 19200, 38400, 76800, 153600, 307200, 460800, 614400, 768000, 921600, 1075200, 1228800, 1382400, 1536000, 1689600, 1843200],
                 'dwarf': [0, 2200, 4400, 8800, 17600, 35200, 70400, 140800, 281600, 563200, 844800, 1126400, 1408000, 1689600, 1971200, 2252800, 2534400, 2816000, 3097600, 3379200],
                 'elf': [0, 4000, 8000, 16000, 32000, 64000, 128000, 256000, 512000, 1024000, 1536000, 2048000, 2560000, 3072000, 3584000, 4096000, 4608000, 5120000, 5632000, 6144000],
-                'halfling': [0, 2000, 4000, 8000, 16000, 32000, 64000, 128000, 256000, 512000, 768000, 1024000, 1280000, 1536000, 1788000, 2048000, 2304000, 2560000, 2816000, 3072000]
+                'halfling': [0, 2000, 4000, 8000, 16000, 32000, 64000, 128000, 256000, 512000, 768000, 1024000, 1280000, 1536000, 1788000, 2048000, 2304000, 2560000, 2816000, 3072000],
+                'barbarian': [0, 2500, 5000, 10000, 20000, 40000, 80000, 160000, 250000, 370000, 490000, 610000, 730000, 850000]
             };
             
             const classTable = xpTables[character.class] || xpTables['fighter'];
@@ -243,15 +248,10 @@ class LevelUpWizard {
         const hitDice = this.getHitDice(character.class);
         // Use getConstitutionBonus() for HP, not getAbilityModifier() - they have different tables!
         const conBonus = this.rulesEngine ? this.rulesEngine.getConstitutionBonus(character.constitution) : 0;
-        
-        // Auto-roll if not already rolled
-        if (this.wizardData.new_hp_rolled === null) {
-            const dieSize = parseInt(hitDice.substring(2));
-            const roll = Math.floor(Math.random() * dieSize) + 1;
-            this.wizardData.new_hp_rolled = Math.max(1, roll + conBonus);
-        }
-        
-        const newMaxHp = character.max_hp + this.wizardData.new_hp_rolled;
+        const nextLevel = character.level + 1;
+        const fixedHpGain = this.getFixedHPGain(character.class, nextLevel);
+        const hasRolled = this.wizardData.new_hp_rolled !== null;
+        const newMaxHp = hasRolled ? character.max_hp + this.wizardData.new_hp_rolled : character.max_hp;
         
         return `
             <div class="wizard-step-content">
@@ -259,44 +259,138 @@ class LevelUpWizard {
                     <i class="fas fa-dice-d20 fa-3x"></i>
                 </div>
                 <h3>Roll for Hit Points</h3>
-                
-                <div class="hp-roll-result">
-                    <div class="dice-display">
-                        <div class="die-roll">
-                            <i class="fas fa-dice-d${hitDice.substring(2)}"></i>
-                            <span class="roll-formula">${hitDice} + ${conBonus} (CON ${character.constitution})</span>
-                        </div>
-                        <div class="roll-result">
-                            <span class="result-label">HP Gained:</span>
-                            <span class="result-value">${this.wizardData.new_hp_rolled}</span>
-                        </div>
-                    </div>
-                    
-                    <div class="hp-summary">
-                        <div class="hp-comparison">
-                            <div class="hp-old">
-                                <span class="hp-label">Current Max HP:</span>
-                                <span class="hp-value">${character.max_hp}</span>
+
+                ${fixedHpGain !== null ? `
+                    <div class="hp-roll-result">
+                        <div class="dice-display">
+                            <div class="die-roll">
+                                <i class="fas fa-heart"></i>
+                                <span class="roll-formula">Fixed +${fixedHpGain} HP at level ${nextLevel}</span>
                             </div>
-                            <i class="fas fa-arrow-right fa-2x"></i>
-                            <div class="hp-new">
-                                <span class="hp-label">New Max HP:</span>
-                                <span class="hp-value highlight">${newMaxHp}</span>
+                            <div class="roll-result">
+                                <span class="result-label">HP Gained:</span>
+                                <span class="result-value">${fixedHpGain}</span>
                             </div>
                         </div>
+
+                        <div class="hp-summary">
+                            <div class="hp-comparison">
+                                <div class="hp-old">
+                                    <span class="hp-label">Current Max HP:</span>
+                                    <span class="hp-value">${character.max_hp}</span>
+                                </div>
+                                <i class="fas fa-arrow-right fa-2x"></i>
+                                <div class="hp-new">
+                                    <span class="hp-label">New Max HP:</span>
+                                    <span class="hp-value highlight">${character.max_hp + fixedHpGain}</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    
-                    <div class="hp-reroll">
-                        <button class="btn btn-secondary" id="reroll-hp-btn">
-                            <i class="fas fa-redo"></i> Re-roll HP
-                        </button>
-                        <p class="help-text">Or enter custom value:</p>
-                        <input type="number" id="custom-hp-input" min="1" max="20" placeholder="HP gained" class="form-control">
-                        <button class="btn btn-sm btn-info" id="set-custom-hp-btn">Set Custom HP</button>
+                ` : `
+
+                ${hasRolled ? `
+                    <div class="hp-roll-result">
+                        <div class="dice-display">
+                            <div class="die-roll">
+                                <i class="fas fa-dice-d${hitDice.substring(2)}"></i>
+                                <span class="roll-formula">${hitDice} + ${conBonus} (CON ${character.constitution})</span>
+                            </div>
+                            <div class="roll-result">
+                                <span class="result-label">HP Gained:</span>
+                                <span class="result-value">${this.wizardData.new_hp_rolled}</span>
+                            </div>
+                        </div>
+
+                        <div class="hp-summary">
+                            <div class="hp-comparison">
+                                <div class="hp-old">
+                                    <span class="hp-label">Current Max HP:</span>
+                                    <span class="hp-value">${character.max_hp}</span>
+                                </div>
+                                <i class="fas fa-arrow-right fa-2x"></i>
+                                <div class="hp-new">
+                                    <span class="hp-label">New Max HP:</span>
+                                    <span class="hp-value highlight">${newMaxHp}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="hp-reroll">
+                            <button class="btn btn-secondary" id="reroll-hp-btn">
+                                <i class="fas fa-redo"></i> Re-roll HP
+                            </button>
+                            <p class="help-text">Or enter custom value:</p>
+                            <input type="number" id="custom-hp-input" min="1" max="20" placeholder="HP gained" class="form-control">
+                            <button class="btn btn-sm btn-info" id="set-custom-hp-btn">Set Custom HP</button>
+                        </div>
                     </div>
-                </div>
+                ` : `
+                    <div class="hp-roll-result">
+                        <div class="dice-display">
+                            <div class="die-roll">
+                                <i class="fas fa-dice-d${hitDice.substring(2)}"></i>
+                                <span class="roll-formula">${hitDice} + ${conBonus} (CON ${character.constitution})</span>
+                            </div>
+                            <div class="roll-result">
+                                <span class="result-label">HP Gained:</span>
+                                <span class="result-value">Not rolled yet</span>
+                            </div>
+                        </div>
+
+                        <div class="hp-reroll">
+                            <button class="btn btn-primary" id="roll-levelup-hp-btn">
+                                <i class="fas fa-dice"></i> Roll HP
+                            </button>
+                            <p class="help-text">Or enter custom value:</p>
+                            <input type="number" id="custom-hp-input" min="1" max="20" placeholder="HP gained" class="form-control">
+                            <button class="btn btn-sm btn-info" id="set-custom-hp-btn">Set Custom HP</button>
+                        </div>
+                    </div>
+                `}
+                `}
             </div>
         `;
+    }
+
+    async rollLevelUpHP() {
+        const fixedHpGain = this.getFixedHPGain(
+            this.currentCharacter.class,
+            this.currentCharacter.level + 1
+        );
+
+        if (fixedHpGain !== null) {
+            this.wizardData.new_hp_rolled = fixedHpGain;
+            this.updateWizardDisplay();
+            return;
+        }
+
+        const hitDice = this.getHitDice(this.currentCharacter.class);
+        const dieSize = parseInt(hitDice.substring(2), 10);
+        const conBonus = this.rulesEngine ? this.rulesEngine.getConstitutionBonus(this.currentCharacter.constitution) : 0;
+        const $buttons = $('#roll-levelup-hp-btn, #reroll-hp-btn');
+
+        try {
+            $buttons.prop('disabled', true);
+
+            let total = Math.max(1, Math.floor(Math.random() * dieSize) + 1 + conBonus);
+
+            if (this.app.modules.diceRoller) {
+                const diceResult = await this.app.modules.diceRoller.rollDie({
+                    sides: dieSize,
+                    title: 'Level Up Hit Points',
+                    modifier: conBonus,
+                    text: `${this.currentCharacter.character_name} rolls ${hitDice} with CON ${conBonus >= 0 ? '+' : ''}${conBonus}`
+                });
+
+                total = Math.max(1, diceResult.total);
+            }
+
+            this.wizardData.new_hp_rolled = total;
+            this.updateWizardDisplay();
+        } finally {
+            $buttons.prop('disabled', false);
+        }
     }
     
     /**
@@ -375,6 +469,18 @@ class LevelUpWizard {
                     <div class="thief-skills-info">
                         <p class="help-text">Check your character sheet for updated thief skill percentages.</p>
                     </div>
+                </div>
+            `;
+        } else if (characterClass === 'barbarian') {
+            const rage = this.rulesEngine && typeof this.rulesEngine.getBarbarianRageStats === 'function'
+                ? this.rulesEngine.getBarbarianRageStats(nextLevel)
+                : { uses_per_day: nextLevel >= 12 ? 4 : nextLevel >= 8 ? 3 : nextLevel >= 4 ? 2 : 1, duration_rounds: Math.max(3, nextLevel), temporary_hp: nextLevel };
+
+            return `
+                <div class="class-features">
+                    <h4>Barbarian Features</h4>
+                    <p>Rage: ${rage.uses_per_day}/day, ${rage.duration_rounds} rounds, ${rage.temporary_hp} temporary HP.</p>
+                    <p>Wilderness Mastery, Danger Sense, Iron Constitution, and Fleet of Foot scale with level and remain available unless plate or heavier armor is worn.</p>
                 </div>
             `;
         }
@@ -616,18 +722,16 @@ class LevelUpWizard {
      */
     setupStepHandlers() {
         // HP reroll
-        $(document).on('click', '#reroll-hp-btn', () => {
-            const hitDice = this.getHitDice(this.currentCharacter.class);
-            // Use getConstitutionBonus() for HP, not getAbilityModifier() - they have different tables!
-            const conBonus = this.rulesEngine ? this.rulesEngine.getConstitutionBonus(this.currentCharacter.constitution) : 0;
-            const dieSize = parseInt(hitDice.substring(2));
-            const roll = Math.floor(Math.random() * dieSize) + 1;
-            this.wizardData.new_hp_rolled = Math.max(1, roll + conBonus);
-            this.updateWizardDisplay();
+        $(document).off('click', '#roll-levelup-hp-btn').on('click', '#roll-levelup-hp-btn', async () => {
+            await this.rollLevelUpHP();
+        });
+
+        $(document).off('click', '#reroll-hp-btn').on('click', '#reroll-hp-btn', async () => {
+            await this.rollLevelUpHP();
         });
         
         // Custom HP
-        $(document).on('click', '#set-custom-hp-btn', () => {
+        $(document).off('click', '#set-custom-hp-btn').on('click', '#set-custom-hp-btn', () => {
             const customHp = parseInt($('#custom-hp-input').val());
             if (customHp && customHp > 0) {
                 this.wizardData.new_hp_rolled = customHp;
@@ -655,6 +759,7 @@ class LevelUpWizard {
         
         $('#wizard-prev').prop('disabled', this.currentStep === 1);
         $('#wizard-next').text(this.currentStep === this.totalSteps ? 'Confirm Level Up' : 'Next');
+        $('#wizard-next').prop('disabled', this.currentStep === 2 && this.wizardData.new_hp_rolled === null);
         
         // Re-setup step handlers
         this.setupStepHandlers();
@@ -672,6 +777,13 @@ class LevelUpWizard {
      * Validate current step
      */
     async validateStep(step) {
+        if (step === 2 && this.wizardData.new_hp_rolled === null) {
+            if (this.app.modules.notifications) {
+                this.app.modules.notifications.show('Roll or set HP before continuing.', 'error');
+            }
+            return false;
+        }
+
         // All steps auto-validate for now
         return true;
     }
@@ -764,9 +876,22 @@ class LevelUpWizard {
             'thief': '1d4',
             'dwarf': '1d8',
             'elf': '1d6',
-            'halfling': '1d6'
+            'halfling': '1d6',
+            'barbarian': '1d8'
         };
         return hitDice[characterClass] || '1d6';
+    }
+
+    getFixedHPGain(characterClass, nextLevel) {
+        if (this.rulesEngine && typeof this.rulesEngine.getFixedHitPointGainForLevel === 'function') {
+            return this.rulesEngine.getFixedHitPointGainForLevel(characterClass, nextLevel);
+        }
+
+        if (characterClass === 'barbarian' && nextLevel > 9) {
+            return 3;
+        }
+
+        return null;
     }
     
     calculateNewTHAC0(characterClass, level) {
@@ -880,6 +1005,13 @@ class LevelUpWizard {
         // Fighter/Dwarf weapon mastery
         if ((characterClass === 'fighter' || characterClass === 'dwarf') && nextLevel % 3 === 0) {
             benefits.push({ icon: 'fa-dice', text: 'Improve weapon mastery' });
+        }
+
+        if (characterClass === 'barbarian') {
+            benefits.push({ icon: 'fa-fire', text: 'Rage duration and temporary HP increase' });
+            if ([4, 8, 12].includes(nextLevel)) {
+                benefits.push({ icon: 'fa-bolt', text: 'Gain another daily Rage use' });
+            }
         }
         
         return benefits;
@@ -1039,4 +1171,3 @@ class LevelUpWizard {
 
 // Export to window for use in app.js
 window.LevelUpWizard = LevelUpWizard;
-

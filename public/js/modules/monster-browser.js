@@ -185,7 +185,7 @@ class MonsterBrowserModule {
                                 <span class="stat-label">HD:</span>
                                 <span class="stat-value">${this.escapeHtml(monster.hit_dice)}</span>
                                 <span class="stat-label">Move:</span>
-                                <span class="stat-value">${this.escapeHtml(monster.move_ground || '—')}</span>
+                                <span class="stat-value">${this.escapeHtml(monster.move_ground || '-')}</span>
                             </div>
                             <div class="stat-row">
                                 <span class="stat-label">Attacks:</span>
@@ -278,8 +278,9 @@ class MonsterBrowserModule {
             // Remove existing modal
             $('#monster-instance-creation-modal').remove();
             
-            // Calculate default HP
-            const defaultHP = this.calculateHPFromHitDice(monster.hit_dice);
+            // Calculate suggested average HP for display only.
+            // Leaving the field blank should roll HP from Hit Dice per instance.
+            const suggestedHP = this.calculateHPFromHitDice(monster.hit_dice);
             
             // Create modal
             const modal = $(`
@@ -312,9 +313,11 @@ class MonsterBrowserModule {
                                 <div class="form-group">
                                     <label>Hit Points</label>
                                     <input type="number" id="monster-hp" class="form-control" 
-                                           min="1" value="${defaultHP}">
+                                           min="1" ${suggestedHP !== null ? `placeholder="${suggestedHP}"` : ''}>
                                     <small class="form-text text-muted">
-                                        Calculated from Hit Dice: ${monster.hit_dice} (default: ${defaultHP} HP)
+                                        ${suggestedHP !== null
+                                            ? `Leave blank to roll HP from Hit Dice (${monster.hit_dice}) for each instance. Suggested average: ${suggestedHP} HP.`
+                                            : `This monster's Hit Dice (${monster.hit_dice}) require manual HP entry or server-side clarification.`}
                                     </small>
                                 </div>
                                 
@@ -392,21 +395,159 @@ class MonsterBrowserModule {
      * Calculate HP from Hit Dice string
      * 
      * @param {string} hitDice - Hit Dice string (e.g., "3*", "11****", "1+1")
-     * @returns {number} Calculated HP
+     * @returns {number|null} Suggested average HP or null when manual clarification is needed
      */
     calculateHPFromHitDice(hitDice) {
-        // Parse Hit Dice string
-        const hdString = hitDice.replace(/[^0-9+]/g, '');
-        
-        // Handle formats like "1+1" (1d8+1)
-        if (hdString.includes('+')) {
-            const [dice, modifier] = hdString.split('+').map(n => parseInt(n) || 0);
-            return dice + (dice * 8) / 2 + modifier; // Average roll
+        const spec = this.parseHitDiceSpec(hitDice);
+
+        if (spec.kind === 'fixed') {
+            return spec.value;
         }
-        
-        // Standard format: just number (e.g., "3" = 3d8)
-        const dice = parseInt(hdString) || 1;
-        return dice + (dice * 8) / 2; // Average roll
+
+        if (spec.kind === 'half') {
+            return Math.max(1, Math.round(2.5 + (spec.bonus || 0)));
+        }
+
+        if (spec.kind === 'dice') {
+            return Math.max(1, Math.round((spec.diceCount * 4.5) + (spec.bonus || 0)));
+        }
+
+        if (spec.kind === 'range') {
+            const averageDiceCount = (spec.min + spec.max) / 2;
+            return Math.max(1, Math.round((averageDiceCount * 4.5) + (spec.bonus || 0)));
+        }
+
+        if (spec.kind === 'options') {
+            const totalOptions = spec.options.reduce((sum, value) => sum + value, 0);
+            const averageDiceCount = totalOptions / spec.options.length;
+            return Math.max(1, Math.round((averageDiceCount * 4.5) + (spec.bonus || 0)));
+        }
+
+        return null;
+    }
+
+    /**
+     * Parse BECMI hit dice text into a workable HP model.
+     *
+     * Ported from the encounter generator reference app to keep chargen
+     * and DM tooling aligned on the same HD edge cases.
+     */
+    parseHitDiceSpec(hitDice) {
+        const raw = String(hitDice || '').trim();
+        const lowered = raw.toLowerCase();
+
+        if (!raw) {
+            return { kind: 'unknown', label: '-', note: 'HD missing' };
+        }
+
+        if (lowered.includes('special')) {
+            return { kind: 'special', label: raw, note: 'HD is marked as Special' };
+        }
+
+        if (lowered.includes('som levende')) {
+            return { kind: 'special', label: raw, note: "HD is 'same as living' and needs manual clarification" };
+        }
+
+        const normalizedSafe = lowered
+            .replaceAll(' ', '')
+            .replace(/[\u2013\u2014]/g, '-')
+            .replace(/\u00bd/g, '1/2')
+            .replaceAll('*', '')
+            .replaceAll('(', '')
+            .replaceAll(')', '');
+
+        if (normalizedSafe === '1hp') {
+            return { kind: 'fixed', label: raw, value: 1 };
+        }
+
+        if (normalizedSafe === '1-1') {
+            return { kind: 'dice', label: raw, diceCount: 1, bonus: -1 };
+        }
+
+        const halfMatch = normalizedSafe.match(/^1\/2(?:\+(\d+))?$/);
+        if (halfMatch) {
+            return {
+                kind: 'half',
+                label: raw,
+                bonus: halfMatch[1] ? parseInt(halfMatch[1], 10) : 0
+            };
+        }
+
+        const threeOptionMatch = normalizedSafe.match(/^(\d+)\/(\d+)\/(\d+)(?:\+(\d+))?$/);
+        if (threeOptionMatch) {
+            return {
+                kind: 'options',
+                label: raw,
+                options: [
+                    parseInt(threeOptionMatch[1], 10),
+                    parseInt(threeOptionMatch[2], 10),
+                    parseInt(threeOptionMatch[3], 10)
+                ],
+                bonus: threeOptionMatch[4] ? parseInt(threeOptionMatch[4], 10) : 0
+            };
+        }
+
+        const twoOptionMatch = normalizedSafe.match(/^(\d+)\/(\d+)(?:\+(\d+))?$/);
+        if (twoOptionMatch) {
+            return {
+                kind: 'options',
+                label: raw,
+                options: [
+                    parseInt(twoOptionMatch[1], 10),
+                    parseInt(twoOptionMatch[2], 10)
+                ],
+                bonus: twoOptionMatch[3] ? parseInt(twoOptionMatch[3], 10) : 0
+            };
+        }
+
+        const rangeMatch = normalizedSafe.match(/^(\d+)-(\d+)(?:\+(\d+))?$/);
+        if (rangeMatch) {
+            const min = parseInt(rangeMatch[1], 10);
+            const max = parseInt(rangeMatch[2], 10);
+
+            if (min <= max) {
+                return {
+                    kind: 'range',
+                    label: raw,
+                    min,
+                    max,
+                    bonus: rangeMatch[3] ? parseInt(rangeMatch[3], 10) : 0
+                };
+            }
+        }
+
+        const plusMatch = normalizedSafe.match(/^(\d+)\+(\d+)$/);
+        if (plusMatch) {
+            return {
+                kind: 'dice',
+                label: raw,
+                diceCount: parseInt(plusMatch[1], 10),
+                bonus: parseInt(plusMatch[2], 10)
+            };
+        }
+
+        const plainMatch = normalizedSafe.match(/^(\d+)$/);
+        if (plainMatch) {
+            return {
+                kind: 'dice',
+                label: raw,
+                diceCount: parseInt(plainMatch[1], 10),
+                bonus: 0
+            };
+        }
+
+        const firstNumberMatch = normalizedSafe.match(/\d+/);
+        if (firstNumberMatch) {
+            return {
+                kind: 'dice',
+                label: raw,
+                diceCount: parseInt(firstNumberMatch[0], 10),
+                bonus: 0,
+                note: 'Partial HD parse'
+            };
+        }
+
+        return { kind: 'unknown', label: raw, note: 'Could not parse HD format' };
     }
     
     /**
@@ -416,9 +557,15 @@ class MonsterBrowserModule {
         try {
             const isNamedBoss = $('#is-named-boss').is(':checked');
             const instanceName = $('#instance-name').val().trim();
-            const hp = parseInt($('#monster-hp').val()) || 1;
+            const hpRaw = String($('#monster-hp').val() || '').trim();
+            const hp = hpRaw === '' ? null : parseInt(hpRaw, 10);
             const count = parseInt($('#instance-count').val()) || 1;
             const notes = $('#monster-notes').val().trim();
+
+            if (hpRaw !== '' && (!Number.isInteger(hp) || hp < 1)) {
+                this.app.showError('Hit Points must be blank or a whole number greater than 0');
+                return;
+            }
             
             if (isNamedBoss && !instanceName) {
                 this.app.showError('Instance name is required for named boss monsters');
@@ -431,25 +578,41 @@ class MonsterBrowserModule {
             }
             
             // Create instance(s)
-            const response = await this.apiClient.post('/api/monsters/create-instance.php', {
+            const requestData = {
                 monster_id: this.currentMonster.monster_id,
                 session_id: this.sessionId,
                 instance_name: instanceName || null,
                 is_named_boss: isNamedBoss,
-                custom_hp: hp,
                 notes: notes || null,
                 count: isNamedBoss ? 1 : count
-            });
+            };
+
+            if (hp !== null) {
+                requestData.custom_hp = hp;
+            }
+
+            const response = await this.apiClient.post('/api/monsters/create-instance.php', requestData);
             
             if (response.status === 'success') {
                 const instances = response.data.instances || [];
-                
-                // Add each instance to initiative
+
+                let addedToInitiative = 0;
                 for (const instance of instances) {
-                    await this.addToInitiative(instance.instance_id);
+                    const wasAdded = await this.addToInitiative(instance.instance_id);
+                    if (wasAdded) {
+                        addedToInitiative++;
+                    }
                 }
-                
-                this.app.showSuccess(`Created ${instances.length} monster instance(s) and added to initiative!`);
+
+                if (addedToInitiative === instances.length) {
+                    this.app.showSuccess(`Created ${instances.length} monster instance(s) and added them to initiative.`);
+                } else if (addedToInitiative > 0) {
+                    this.app.showSuccess(`Created ${instances.length} monster instance(s). ${addedToInitiative} were added to initiative.`);
+                    this.app.showError(`${instances.length - addedToInitiative} monster instance(s) were created but not added to initiative.`);
+                } else {
+                    this.app.showSuccess(`Created ${instances.length} monster instance(s).`);
+                    this.app.showError('The monster instance(s) were not added to initiative.');
+                }
                 
                 // Close modals
                 $('#monster-instance-creation-modal').remove();
@@ -477,13 +640,15 @@ class MonsterBrowserModule {
      */
     async addToInitiative(instanceId) {
         try {
-            await this.apiClient.post('/api/combat/add-monster.php', {
+            const response = await this.apiClient.post('/api/combat/add-monster.php', {
                 monster_instance_id: instanceId,
                 session_id: this.sessionId
             });
+
+            return response.status === 'success';
         } catch (error) {
             console.error('Failed to add monster to initiative:', error);
-            // Don't throw - we'll show success anyway since instance was created
+            return false;
         }
     }
     

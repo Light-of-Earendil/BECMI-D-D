@@ -8,7 +8,7 @@
  * Content-Type: multipart/form-data
  * 
  * Parameters:
- * - audio: file (MP3, max 10MB)
+ * - audio: file (MP3, max 10MB for music/sound, 15MB for ambiance)
  * - session_id: int
  * - track_name: string
  * - track_type: 'music', 'sound', or 'ambiance'
@@ -69,12 +69,27 @@ function getUploadErrorMessage($errorCode)
     }
 }
 
+function getAudioUploadLimitBytes(string $trackType): int
+{
+    return $trackType === 'ambiance'
+        ? 15 * 1024 * 1024
+        : 10 * 1024 * 1024;
+}
+
+function getAudioUploadLimitLabel(string $trackType): string
+{
+    return $trackType === 'ambiance' ? '15MB' : '10MB';
+}
+
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         Security::sendErrorResponse('Method not allowed', 405);
     }
 
     Security::requireAuth();
+    if (!Security::checkCSRFToken()) {
+        Security::sendErrorResponse('Invalid or missing CSRF token', 403);
+    }
     
     $db = getDB();
     $userId = Security::getCurrentUserId();
@@ -132,7 +147,7 @@ try {
     
     // Validate file
     $allowedTypes = ['audio/mpeg', 'audio/mp3', 'audio/x-mpeg-3'];
-    $maxSize = 10 * 1024 * 1024; // 10MB
+    $maxSize = getAudioUploadLimitBytes($trackType);
     
     // Verify MIME type using finfo
     $finfo = new finfo(FILEINFO_MIME_TYPE);
@@ -152,7 +167,7 @@ try {
     }
     
     if ($file['size'] > $maxSize) {
-        Security::sendValidationErrorResponse(['audio' => 'File too large. Maximum size is 10MB']);
+        Security::sendValidationErrorResponse(['audio' => 'File too large. Maximum size is ' . getAudioUploadLimitLabel($trackType)]);
     }
     
     // Read file data
@@ -244,8 +259,11 @@ try {
     ], 'Audio file uploaded successfully');
     
 } catch (Exception $e) {
-    error_log("AUDIO UPLOAD ERROR: " . $e->getMessage());
-    error_log("AUDIO UPLOAD ERROR STACK TRACE: " . $e->getTraceAsString());
-    Security::sendErrorResponse('Failed to upload audio file: ' . $e->getMessage(), 500);
+    Security::debugLog('Audio upload error', [
+        'message' => $e->getMessage(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine()
+    ]);
+    Security::sendErrorResponse('Failed to upload audio file', 500);
 }
 ?>

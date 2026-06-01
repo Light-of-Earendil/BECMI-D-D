@@ -9,6 +9,7 @@ class SessionManagementModule {
         this.app = app;
         this.apiClient = app.modules.apiClient;
         this.currentSession = null;
+        this.audioLibraryScope = null;
         this.isLoadingDashboard = false;
         this.lastDashboardLoad = null;
         this.gameTimeRealtimeClient = null;
@@ -209,6 +210,8 @@ class SessionManagementModule {
         
         content.html(`<div class="session-creation-form">
                 <form id="session-creation-form" class="session-form">
+                    <div class="session-form-feedback" aria-live="polite"></div>
+
                     <div class="form-group">
                         <label for="session-title">Session Title:</label>
                         <input type="text" id="session-title" name="session_title" required>
@@ -230,7 +233,7 @@ class SessionManagementModule {
                     <div class="form-group">
                         <label for="meet-link">Video Conference Link (Optional):</label>
                         <div class="input-with-button">
-                            <input type="url" id="meet-link" name="meet_link" placeholder="https://meet.google.com/xxx-xxxx-xxx" pattern="https?://.*">
+                            <input type="url" id="meet-link" name="meet_link" placeholder="Paste meeting link here (optional)" pattern="https?://.*">
                             <button type="button" class="btn btn-secondary" id="generate-meet-link-btn" title="Open Google Meet to create a new meeting">
                                 <i class="fas fa-video"></i> Generate Link
                             </button>
@@ -356,8 +359,19 @@ class SessionManagementModule {
      * Create session
      */
     async createSession() {
+        const form = document.getElementById('session-creation-form');
+        const submitButton = form ? form.querySelector('button[type="submit"]') : null;
+        const originalSubmitLabel = submitButton ? submitButton.innerHTML : '';
+
         try {
-            const formData = new FormData(document.getElementById('session-creation-form'));
+            this.clearSessionCreationFeedback();
+
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.innerHTML = 'Creating...';
+            }
+
+            const formData = new FormData(form);
             
             const campaignId = formData.get('campaign_id');
             const sessionData = {
@@ -372,7 +386,11 @@ class SessionManagementModule {
             
             // Validate required fields
             if (!sessionData.session_title || !sessionData.session_datetime) {
-                this.app.showError('Please fill in all required fields');
+                const message = 'Please fill in all required fields';
+                this.showSessionCreationFormError(message);
+                this.showSessionCreationFieldError('session_title', 'Session title is required');
+                this.showSessionCreationFieldError('session_datetime', 'Session date and time are required');
+                this.app.showError(message);
                 return;
             }
             
@@ -380,14 +398,21 @@ class SessionManagementModule {
             const sessionDate = new Date(sessionData.session_datetime);
             const now = new Date();
             if (sessionDate <= now) {
-                this.app.showError('Session date must be in the future');
+                const message = 'Session date must be in the future';
+                this.showSessionCreationFormError(message);
+                this.showSessionCreationFieldError('session_datetime', message);
+                this.app.showError(message);
                 return;
             }
             
             const response = await this.apiClient.post('/api/session/create.php', sessionData);
             
             if (response.status === 'success') {
-                this.app.showSuccess(`Session "${sessionData.session_title}"created successfully!`);
+                const autoInvitedCount = response.data?.auto_invited_campaign_players || 0;
+                const successMessage = autoInvitedCount > 0
+                    ? `Session "${sessionData.session_title}" created. ${autoInvitedCount} campaign player${autoInvitedCount === 1 ? ' was' : 's were'} invited automatically.`
+                    : `Session "${sessionData.session_title}" created successfully!`;
+                this.app.showSuccess(successMessage);
                 this.hideCreationModal();
                 
                 // Refresh session list
@@ -406,13 +431,125 @@ class SessionManagementModule {
                 }
                 
             } else {
-                this.app.showError(response.message || 'Failed to create session');
+                if (response.httpStatus === 422 && response.errors) {
+                    const validationMessages = Object.values(response.errors);
+                    const message = validationMessages[0] || 'Please correct the highlighted fields.';
+                    this.showSessionCreationValidationErrors(response.errors);
+                    this.app.showError(message);
+                    return;
+                }
+
+                const message = response.message || response.error || 'Failed to create session';
+                this.showSessionCreationFormError(message);
+                this.app.showError(message);
             }
             
         } catch (error) {
             console.error('Session creation error:', error);
-            this.app.showError('Failed to create session: '+ error.message);
+            const message = 'Failed to create session: ' + error.message;
+            this.showSessionCreationFormError(message);
+            this.app.showError(message);
+        } finally {
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalSubmitLabel;
+            }
         }
+    }
+
+    clearSessionCreationFeedback() {
+        const form = document.getElementById('session-creation-form');
+        if (!form) {
+            return;
+        }
+
+        const feedback = form.querySelector('.session-form-feedback');
+        if (feedback) {
+            feedback.innerHTML = '';
+        }
+
+        form.querySelectorAll('.field-error').forEach((element) => element.remove());
+        form.querySelectorAll('.is-invalid').forEach((field) => {
+            field.classList.remove('is-invalid');
+            field.removeAttribute('aria-invalid');
+        });
+    }
+
+    showSessionCreationFormError(message) {
+        const form = document.getElementById('session-creation-form');
+        if (!form) {
+            return;
+        }
+
+        const feedback = form.querySelector('.session-form-feedback');
+        if (!feedback) {
+            return;
+        }
+
+        feedback.innerHTML = `<div class="error-message" role="alert">${this.escapeHtml(message)}</div>`;
+    }
+
+    showSessionCreationValidationErrors(errors) {
+        this.clearSessionCreationFeedback();
+
+        const entries = Object.entries(errors || {});
+        if (!entries.length) {
+            return;
+        }
+
+        const summaryMessage = entries.map(([, message]) => message).join(' ');
+        this.showSessionCreationFormError(summaryMessage);
+
+        let focused = false;
+        entries.forEach(([fieldName, message]) => {
+            focused = this.showSessionCreationFieldError(fieldName, message, focused) || focused;
+        });
+    }
+
+    showSessionCreationFieldError(fieldName, message, alreadyFocused = false) {
+        const form = document.getElementById('session-creation-form');
+        if (!form) {
+            return alreadyFocused;
+        }
+
+        const fieldNames = fieldName === 'session_datetime'
+            ? ['session_date', 'session_time']
+            : [fieldName];
+
+        const messageFieldName = fieldNames[0];
+        let hasFocusedField = alreadyFocused;
+
+        fieldNames.forEach((name) => {
+            const field = form.querySelector(`[name="${name}"]`);
+            if (!field) {
+                return;
+            }
+
+            field.classList.add('is-invalid');
+            field.setAttribute('aria-invalid', 'true');
+
+            if (!hasFocusedField) {
+                field.focus();
+                hasFocusedField = true;
+            }
+
+            if (name !== messageFieldName) {
+                return;
+            }
+
+            const group = field.closest('.form-group');
+            if (!group) {
+                return;
+            }
+
+            const errorElement = document.createElement('div');
+            errorElement.className = 'field-error';
+            errorElement.dataset.field = fieldName;
+            errorElement.textContent = message;
+            group.appendChild(errorElement);
+        });
+
+        return hasFocusedField;
     }
     
     /**
@@ -428,6 +565,7 @@ class SessionManagementModule {
             
             if (session) {
                 this.currentSession = session;
+                this.audioLibraryScope = null;
                 this.app.updateState({ currentSession: this.currentSession });
                 console.log(`Session loaded: ${session.session_title}`);
                 return session;
@@ -1465,7 +1603,7 @@ class SessionManagementModule {
                     <div class="form-group">
                         <label for="edit-meet-link">Video Conference Link (Optional):</label>
                         <div class="input-with-button">
-                            <input type="url" id="edit-meet-link" name="meet_link" value="${session.meet_link || ''}" placeholder="https://meet.google.com/xxx-xxxx-xxx" pattern="https?://.*">
+                            <input type="url" id="edit-meet-link" name="meet_link" value="${session.meet_link || ''}" placeholder="Paste meeting link here (optional)" pattern="https?://.*">
                             <button type="button" class="btn btn-secondary" id="edit-generate-meet-link-btn" title="Open Google Meet to create a new meeting">
                                 <i class="fas fa-video"></i> Generate Link
                             </button>
@@ -1572,7 +1710,11 @@ class SessionManagementModule {
             });
             
             if (response.status === 'success') {
-                this.app.showSuccess('Session updated successfully!');
+                const autoInvitedCount = response.data?.auto_invited_campaign_players || 0;
+                const successMessage = autoInvitedCount > 0
+                    ? `Session updated. ${autoInvitedCount} campaign player${autoInvitedCount === 1 ? ' was' : 's were'} invited automatically.`
+                    : 'Session updated successfully!';
+                this.app.showSuccess(successMessage);
                 $('#session-creation-modal').hide();
                 
                 // Reload sessions from server
@@ -1590,16 +1732,9 @@ class SessionManagementModule {
      */
     async deleteSession(sessionId) {
         try {
-            console.log('=== DELETE SESSION DEBUG ===');
-            console.log('Raw sessionId:', sessionId);
-            console.log('Type of sessionId:', typeof sessionId);
-            console.log('Parsed sessionId:', parseInt(sessionId));
-            
             const payload = {
                 session_id: parseInt(sessionId)
             };
-            console.log('Delete payload:', payload);
-            console.log('Payload JSON:', JSON.stringify(payload));
             
             const response = await this.apiClient.delete('/api/session/delete.php', payload);
             
@@ -2449,8 +2584,9 @@ class SessionManagementModule {
             
             $('#content-area').html(dashboardHTML);
             
-            // Store current session ID for initiative updates
-            this.currentSession = { session_id: sessionId };
+            // Store current session details for downstream UI state like audio scope messaging.
+            this.currentSession = dashboardData.session;
+            this.audioLibraryScope = null;
             
             // Initialize map scratch-pad IMMEDIATELY (don't wait for setTimeout)
             if (this.app.modules.sessionMapScratchpad) {
@@ -2621,7 +2757,7 @@ class SessionManagementModule {
                     ` : players.map(player => this.renderDMPlayerCard(player, session.session_id)).join('')}
                 </div>
                 
-                ${this.renderSoundboard(session.session_id)}
+                ${this.renderSoundboard(session)}
                 
                 <div class="map-scratchpad-section">
                     <h2><i class="fas fa-map"></i> Map Scratch-Pad</h2>
@@ -2637,10 +2773,12 @@ class SessionManagementModule {
      * @param {number} sessionId - Session ID
      * @returns {string} HTML for soundboard
      */
-    renderSoundboard(sessionId) {
+    renderSoundboard(session) {
+        const sessionId = session?.session_id;
         return `
             <div class="soundboard-section">
                 <h2><i class="fas fa-music"></i> Audio & Soundboard</h2>
+                <div id="audio-library-scope">${this.getAudioLibraryScopeMarkup(null, session)}</div>
                 
                 <div class="soundboard-container">
                     <div class="soundboard-tabs">
@@ -2737,6 +2875,7 @@ class SessionManagementModule {
                                 <i class="fas fa-upload"></i> Upload MP3
                             </button>
                             <input type="text" id="ambiance-track-name" placeholder="Ambiance name" class="form-control" style="display: inline-block; width: 200px; margin-left: 10px;">
+                            <div class="upload-limit-note">Ambiance MP3 files can be up to 15MB.</div>
                         </div>
                         
                         <div class="ambiance-controls">
@@ -2772,6 +2911,85 @@ class SessionManagementModule {
                 </div>
             </div>
         `;
+    }
+
+    getAudioLibraryScopeMarkup(scope = null, sessionOverride = null) {
+        const resolvedScope = scope || this.audioLibraryScope || null;
+        const session = sessionOverride || this.currentSession || {};
+        const isCampaignScoped = resolvedScope
+            ? resolvedScope.type === 'campaign'
+            : Boolean(session.campaign_id);
+
+        if (isCampaignScoped) {
+            const sharedCount = resolvedScope && Number.isFinite(Number(resolvedScope.shared_session_count))
+                ? Number(resolvedScope.shared_session_count)
+                : null;
+            const scopeDetail = sharedCount && sharedCount > 1
+                ? `${sharedCount} linked sessions can use the same library.`
+                : 'All linked sessions in this campaign use the same library.';
+
+            return `
+                <div class="audio-library-notice is-shared">
+                    <div class="audio-library-notice-icon"><i class="fas fa-link"></i></div>
+                    <div class="audio-library-notice-copy">
+                        <strong>Shared across this campaign</strong>
+                        <p>Music, ambiance, sound effects and playlists uploaded in one linked session are available in the others. ${scopeDetail}</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="audio-library-notice is-local">
+                <div class="audio-library-notice-icon"><i class="fas fa-lock"></i></div>
+                <div class="audio-library-notice-copy">
+                    <strong>Only for this session</strong>
+                    <p>This session is not linked to a campaign, so its audio library stays local until the session is linked from the session editor.</p>
+                </div>
+            </div>
+        `;
+    }
+
+    updateAudioLibraryScope(scope = null) {
+        if (scope && typeof scope === 'object') {
+            this.audioLibraryScope = scope;
+        }
+
+        const container = $('#audio-library-scope');
+        if (container.length > 0) {
+            container.html(this.getAudioLibraryScopeMarkup());
+        }
+    }
+
+    getScopedEmptyAudioMessage(kind) {
+        const scopeType = this.audioLibraryScope?.type || (this.currentSession?.campaign_id ? 'campaign' : 'session');
+        const isCampaignScope = scopeType === 'campaign';
+
+        if (kind === 'music') {
+            return isCampaignScope ? 'No music uploaded in this campaign yet' : 'No music tracks uploaded in this session yet';
+        }
+
+        if (kind === 'sound') {
+            return isCampaignScope ? 'No sound effects uploaded in this campaign yet' : 'No sound effects uploaded in this session yet';
+        }
+
+        if (kind === 'ambiance') {
+            return isCampaignScope ? 'No ambiance uploaded in this campaign yet' : 'No ambiance sounds uploaded in this session yet';
+        }
+
+        if (kind === 'playlists') {
+            return isCampaignScope ? 'No playlists created in this campaign yet' : 'No playlists created in this session yet';
+        }
+
+        return 'Nothing available yet';
+    }
+
+    renderAudioOriginLabel(item) {
+        if (!item || !item.is_shared_from_campaign || !item.source_session_title) {
+            return '';
+        }
+
+        return `<span class="track-origin">Shared from ${this.escapeHtml(item.source_session_title)}</span>`;
     }
     
     /**
@@ -4005,12 +4223,13 @@ class SessionManagementModule {
                 throw new Error('No file selected');
             }
 
-            const maxSizeBytes = 10 * 1024 * 1024;
+            const maxSizeBytes = trackType === 'ambiance' ? 15 * 1024 * 1024 : 10 * 1024 * 1024;
+            const maxSizeLabel = trackType === 'ambiance' ? '15MB' : '10MB';
             if (!Number.isFinite(file.size) || file.size <= 0) {
                 throw new Error('Selected file appears empty or inaccessible');
             }
             if (file.size > maxSizeBytes) {
-                throw new Error('File too large. Maximum size is 10MB');
+                throw new Error(`File too large. Maximum size is ${maxSizeLabel}`);
             }
 
             const extension = (file.name.split('.').pop() || '').toLowerCase();
@@ -4042,12 +4261,20 @@ class SessionManagementModule {
 
                     if (xhr.status >= 200 && xhr.status < 300) {
                         if (response && response.status === 'success') {
-                            this.app.showSuccess(response.message || 'Audio file uploaded successfully');
+                            const baseMessage = response.message || 'Audio file uploaded successfully';
+                            const scopedMessage = (this.audioLibraryScope?.type === 'campaign' || this.currentSession?.campaign_id)
+                                ? `${baseMessage}. Available across this campaign.`
+                                : baseMessage;
+                            this.app.showSuccess(scopedMessage);
                             this.loadAudioTracks(sessionId).then(() => resolve(response)).catch(reject);
                         } else {
                             reject(new Error(this.extractApiErrorMessage(response, 'Upload failed')));
                         }
                     } else {
+                        if (xhr.status === 413) {
+                            reject(new Error('Server rejected the upload size before the audio endpoint could handle it. The host upload limit is still below the requested file size.'));
+                            return;
+                        }
                         reject(new Error(this.extractApiErrorMessage(response, `Upload failed (HTTP ${xhr.status})`)));
                     }
                 });
@@ -4062,15 +4289,13 @@ class SessionManagementModule {
                 });
                 
                 xhr.open('POST', url);
-                
-                // Add auth headers
-                const authToken = localStorage.getItem('auth_token');
-                if (authToken) {
-                    xhr.setRequestHeader('Authorization', `Bearer ${authToken}`);
+
+                const csrfToken = this.app.modules.apiClient.getCSRFToken();
+                if (csrfToken) {
+                    xhr.setRequestHeader('X-CSRF-Token', csrfToken);
                 }
-                
-                // Don't set Content-Type header - browser will set it with boundary for FormData
-                
+
+                xhr.setRequestHeader('Accept', 'application/json');
                 xhr.send(formData);
             });
         } catch (error) {
@@ -4122,6 +4347,12 @@ class SessionManagementModule {
             const musicResponse = musicResult.status === 'fulfilled' ? musicResult.value : null;
             const soundResponse = soundResult.status === 'fulfilled' ? soundResult.value : null;
             const ambianceResponse = ambianceResult.status === 'fulfilled' ? ambianceResult.value : null;
+            const scope = musicResponse?.data?.library_scope
+                || soundResponse?.data?.library_scope
+                || ambianceResponse?.data?.library_scope
+                || null;
+
+            this.updateAudioLibraryScope(scope);
              
             if (musicResponse && musicResponse.status === 'success' && musicResponse.data && musicResponse.data.tracks) {
                 this.renderMusicTracks(musicResponse.data.tracks);
@@ -4155,12 +4386,12 @@ class SessionManagementModule {
     renderMusicTracks(tracks) {
         const container = $('#music-tracks-container');
         if (!tracks || !Array.isArray(tracks)) {
-            container.html('<p class="text-muted">No music tracks uploaded yet</p>');
+            container.html(`<p class="text-muted">${this.getScopedEmptyAudioMessage('music')}</p>`);
             return;
         }
         
         if (tracks.length === 0) {
-            container.html('<p class="text-muted">No music tracks uploaded yet</p>');
+            container.html(`<p class="text-muted">${this.getScopedEmptyAudioMessage('music')}</p>`);
             return;
         }
         
@@ -4168,13 +4399,16 @@ class SessionManagementModule {
             <div class="track-item" data-track-id="${track.track_id}">
                 <div class="track-info">
                     <strong>${this.escapeHtml(track.track_name)}</strong>
-                    <span class="track-meta">${track.duration_seconds ? this.formatDuration(track.duration_seconds) : 'Unknown duration'}</span>
+                    <div class="track-meta-row">
+                        <span class="track-meta">${track.duration_seconds ? this.formatDuration(track.duration_seconds) : 'Unknown duration'}</span>
+                        ${this.renderAudioOriginLabel(track)}
+                    </div>
                 </div>
                 <div class="track-actions">
                     <button class="btn btn-sm btn-success play-track-btn" data-track-id="${track.track_id}" data-file-path="${track.file_path}">
                         <i class="fas fa-play"></i> Play
                     </button>
-                    <button class="btn btn-sm btn-danger delete-track-btn" data-track-id="${track.track_id}">
+                    <button class="btn btn-sm btn-danger delete-track-btn" data-track-id="${track.track_id}" data-source-session-title="${this.escapeHtml(track.source_session_title || '')}" data-is-shared="${track.is_shared_from_campaign ? '1' : '0'}">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -4209,8 +4443,15 @@ class SessionManagementModule {
         
         // Setup delete buttons
         $(document).off('click', '.delete-track-btn').on('click', '.delete-track-btn', async (e) => {
-            const trackId = $(e.currentTarget).data('track-id');
-            if (confirm('Are you sure you want to delete this track?')) {
+            const $button = $(e.currentTarget);
+            const trackId = $button.data('track-id');
+            const sourceSessionTitle = $button.data('source-session-title');
+            const isShared = String($button.data('is-shared')) === '1';
+            const message = isShared
+                ? `Delete this shared track from the campaign library?\n\nSource session: ${sourceSessionTitle || 'Unknown session'}`
+                : 'Are you sure you want to delete this track?';
+
+            if (confirm(message)) {
                 await this.deleteTrack(trackId);
             }
         });
@@ -4222,12 +4463,12 @@ class SessionManagementModule {
     renderSoundboardGrid(tracks) {
         const container = $('#soundboard-grid');
         if (!tracks || !Array.isArray(tracks)) {
-            container.html('<p class="text-muted">No sound effects uploaded yet</p>');
+            container.html(`<p class="text-muted">${this.getScopedEmptyAudioMessage('sound')}</p>`);
             return;
         }
         
         if (tracks.length === 0) {
-            container.html('<p class="text-muted">No sound effects uploaded yet</p>');
+            container.html(`<p class="text-muted">${this.getScopedEmptyAudioMessage('sound')}</p>`);
             return;
         }
         
@@ -4235,6 +4476,7 @@ class SessionManagementModule {
             <div class="soundboard-button" data-track-id="${track.track_id}" data-file-path="${track.file_path}">
                 <i class="fas fa-volume-up"></i>
                 <span>${this.escapeHtml(track.track_name)}</span>
+                ${track.is_shared_from_campaign ? `<small class="track-origin-badge">${this.escapeHtml(track.source_session_title)}</small>` : ''}
             </div>
         `).join('');
         
@@ -4271,12 +4513,12 @@ class SessionManagementModule {
     renderAmbianceGrid(tracks) {
         const container = $('#ambiance-grid');
         if (!tracks || !Array.isArray(tracks)) {
-            container.html('<p class="text-muted">No ambiance sounds uploaded yet</p>');
+            container.html(`<p class="text-muted">${this.getScopedEmptyAudioMessage('ambiance')}</p>`);
             return;
         }
         
         if (tracks.length === 0) {
-            container.html('<p class="text-muted">No ambiance sounds uploaded yet</p>');
+            container.html(`<p class="text-muted">${this.getScopedEmptyAudioMessage('ambiance')}</p>`);
             return;
         }
         
@@ -4284,6 +4526,7 @@ class SessionManagementModule {
             <div class="ambiance-button" data-track-id="${track.track_id}" data-file-path="${track.file_path}">
                 <i class="fas fa-tree"></i>
                 <span>${this.escapeHtml(track.track_name)}</span>
+                ${track.is_shared_from_campaign ? `<small class="track-origin-badge">${this.escapeHtml(track.source_session_title)}</small>` : ''}
             </div>
         `).join('');
         
@@ -4321,6 +4564,7 @@ class SessionManagementModule {
         try {
             const response = await this.app.modules.apiClient.get(`/api/audio/playlists/list.php?session_id=${sessionId}`);
             if (response.status === 'success' && response.data && response.data.playlists) {
+                this.updateAudioLibraryScope(response.data.library_scope || null);
                 this.renderPlaylists(response.data.playlists);
             } else {
                 this.renderPlaylists([]);
@@ -4337,12 +4581,12 @@ class SessionManagementModule {
     renderPlaylists(playlists) {
         const container = $('#playlists-container');
         if (!playlists || !Array.isArray(playlists)) {
-            container.html('<p class="text-muted">No playlists created yet</p>');
+            container.html(`<p class="text-muted">${this.getScopedEmptyAudioMessage('playlists')}</p>`);
             return;
         }
         
         if (playlists.length === 0) {
-            container.html('<p class="text-muted">No playlists created yet</p>');
+            container.html(`<p class="text-muted">${this.getScopedEmptyAudioMessage('playlists')}</p>`);
             return;
         }
         
@@ -4353,7 +4597,10 @@ class SessionManagementModule {
                 ? playlist.tracks.map((pt, idx) => `
                     <div class="playlist-track-item" data-playlist-track-id="${pt.playlist_track_id}">
                         <span class="track-order">${idx + 1}.</span>
-                        <span class="track-name">${this.escapeHtml(pt.track.track_name)}</span>
+                        <div class="playlist-track-copy">
+                            <span class="track-name">${this.escapeHtml(pt.track.track_name)}</span>
+                            ${this.renderAudioOriginLabel(pt.track)}
+                        </div>
                         <button class="btn btn-xs btn-danger remove-track-btn" data-playlist-id="${playlist.playlist_id}" data-track-id="${pt.track_id}" title="Remove from playlist">
                             <i class="fas fa-times"></i>
                         </button>
@@ -4364,7 +4611,10 @@ class SessionManagementModule {
             return `
             <div class="playlist-item" data-playlist-id="${playlist.playlist_id}">
                 <div class="playlist-header">
-                    <strong>${this.escapeHtml(playlist.playlist_name)}</strong>
+                    <div class="playlist-title-group">
+                        <strong>${this.escapeHtml(playlist.playlist_name)}</strong>
+                        ${this.renderAudioOriginLabel(playlist)}
+                    </div>
                     <span class="playlist-track-count">${playlist.tracks ? playlist.tracks.length : 0} tracks</span>
                 </div>
                 <div class="playlist-tracks-list">
@@ -4385,7 +4635,7 @@ class SessionManagementModule {
                         <input type="checkbox" class="playlist-loop-checkbox" data-playlist-id="${playlist.playlist_id}" style="width: 18px; height: 18px; accent-color: var(--brass-600);">
                         <span style="font-family: 'Lora', serif; color: #2a1409; font-weight: 500;">Repeat</span>
                     </label>
-                    <button class="btn btn-sm btn-danger delete-playlist-btn" data-playlist-id="${playlist.playlist_id}">
+                    <button class="btn btn-sm btn-danger delete-playlist-btn" data-playlist-id="${playlist.playlist_id}" data-source-session-title="${this.escapeHtml(playlist.source_session_title || '')}" data-is-shared="${playlist.is_shared_from_campaign ? '1' : '0'}">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -4491,9 +4741,16 @@ class SessionManagementModule {
         
         // Delete playlist
         $(document).off('click', '.delete-playlist-btn').on('click', '.delete-playlist-btn', async (e) => {
-            const playlistId = $(e.currentTarget).data('playlist-id');
+            const $button = $(e.currentTarget);
+            const playlistId = $button.data('playlist-id');
             const sessionId = this.currentSession?.session_id;
-            if (playlistId && sessionId && confirm('Are you sure you want to delete this playlist?')) {
+            const sourceSessionTitle = $button.data('source-session-title');
+            const isShared = String($button.data('is-shared')) === '1';
+            const message = isShared
+                ? `Delete this shared playlist from the campaign library?\n\nSource session: ${sourceSessionTitle || 'Unknown session'}`
+                : 'Are you sure you want to delete this playlist?';
+
+            if (playlistId && sessionId && confirm(message)) {
                 await this.deletePlaylist(sessionId, playlistId);
             }
         });
@@ -4541,7 +4798,10 @@ class SessionManagementModule {
                                             <div class="track-select-item ${isInPlaylist ? 'in-playlist' : ''}" data-track-id="${track.track_id}" style="padding: 0.5rem; margin-bottom: 0.25rem; border: 1px solid var(--wood-600); border-radius: 4px; ${isInPlaylist ? 'opacity: 0.6; background: rgba(0,0,0,0.1);' : ''}">
                                                 <label style="display: flex; align-items: center; gap: 0.5rem; cursor: ${isInPlaylist ? 'not-allowed' : 'pointer'};">
                                                     <input type="checkbox" ${isInPlaylist ? 'checked disabled' : ''} data-track-id="${track.track_id}">
-                                                    <span style="flex: 1;">${this.escapeHtml(track.track_name)}</span>
+                                                    <span style="flex: 1;">
+                                                        ${this.escapeHtml(track.track_name)}
+                                                        ${track.is_shared_from_campaign ? `<small class="track-origin-badge inline">${this.escapeHtml(track.source_session_title)}</small>` : ''}
+                                                    </span>
                                                     ${isInPlaylist ? '<span class="badge" style="background: var(--brass-500); color: var(--wood-900);">Already in Playlist</span>' : ''}
                                                 </label>
                                             </div>
@@ -5141,6 +5401,8 @@ class SessionManagementModule {
             this.audioManager.cleanup();
             this.audioManager = null;
         }
+
+        this.audioLibraryScope = null;
     }
 }
 

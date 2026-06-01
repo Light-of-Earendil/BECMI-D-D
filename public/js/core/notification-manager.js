@@ -11,6 +11,7 @@ class NotificationManager {
         this.permission = 'default';
         this.enabled = false;
         this.toastContainer = null;
+        this.isInitialized = false;
         
         // Initialize on construction
         this.init();
@@ -22,6 +23,12 @@ class NotificationManager {
      * Initialize notification manager
      */
     async init() {
+        if (this.isInitialized) {
+            return;
+        }
+
+        this.isInitialized = true;
+
         // Check browser support
         if (!('Notification' in window)) {
             console.warn('This browser does not support desktop notifications');

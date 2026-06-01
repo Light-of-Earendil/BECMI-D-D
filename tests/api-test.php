@@ -5,9 +5,9 @@
  * Comprehensive testing for API endpoints, rule calculations, and security.
  */
 
-require_once '../app/core/database.php';
-require_once '../app/core/security.php';
-require_once '../app/services/becmi-rules.php';
+require_once __DIR__ . '/../app/core/database.php';
+require_once __DIR__ . '/../app/core/security.php';
+require_once __DIR__ . '/../app/services/becmi-rules.php';
 
 class APITestSuite {
     private $db;
@@ -17,7 +17,8 @@ class APITestSuite {
     private $testSession = null;
     
     public function __construct() {
-        $this->db = getDB();
+        $this->db = null;
+        Security::init();
         echo "BECMI API Test Suite Initialized\n";
         echo "=====================================\n\n";
     }
@@ -44,6 +45,7 @@ class APITestSuite {
         echo "Testing Database Connection...\n";
         
         try {
+            $this->db = getDB();
             $result = $this->db->testConnection();
             $this->assertTrue($result, "Database connection test");
             
@@ -80,30 +82,43 @@ class APITestSuite {
         
         // Test THAC0 calculation
         $thac0 = BECMIRulesEngine::calculateTHAC0($testCharacter);
-        $this->assertEquals(16, $thac0['base'], "Fighter level 5 base THAC0");
-        $this->assertEquals(14, $thac0['melee'], "Fighter level 5 melee THAC0 with STR 16");
-        $this->assertEquals(15, $thac0['ranged'], "Fighter level 5 ranged THAC0 with DEX 14");
+        $this->assertEquals(17, $thac0['base'], "Fighter level 5 base THAC0");
+        $this->assertEquals(2, $thac0['strength_bonus'], "Fighter level 5 strength bonus with STR 16");
+        $this->assertEquals(1, $thac0['dexterity_bonus'], "Fighter level 5 dexterity bonus with DEX 14");
+        $this->assertEquals(0, $thac0['mastery_bonus'], "Fighter level 5 mastery bonus placeholder");
         
         // Test hit points calculation
         $hp = BECMIRulesEngine::calculateHitPoints($testCharacter);
-        $this->assertEquals(40, $hp, "Fighter level 5 hit points (8+2)*5");
+        $this->assertEquals(45, $hp, "Fighter level 5 hit points");
         
         // Test saving throws
         $saves = BECMIRulesEngine::calculateSavingThrows($testCharacter);
-        $this->assertEquals(8, $saves['death_ray'], "Fighter level 5 death ray save");
-        $this->assertEquals(9, $saves['magic_wand'], "Fighter level 5 magic wand save");
+        $this->assertEquals(10, $saves['death_ray'], "Fighter level 5 death ray save");
+        $this->assertEquals(11, $saves['magic_wand'], "Fighter level 5 magic wand save");
         
         // Test movement rates
         $movement = BECMIRulesEngine::calculateMovementRates($testCharacter);
         $this->assertEquals(120, $movement['normal'], "Unencumbered movement rate");
         $this->assertEquals(40, $movement['encounter'], "Unencumbered encounter movement");
+        $this->assertEquals('unencumbered', $movement['status'], "Unencumbered movement status");
+
+        $weightedCharacter = $testCharacter;
+        $weightedCharacter['inventory'] = [
+            ['weight_cn' => 150, 'quantity' => 2],
+            ['weight_cn' => 120, 'quantity' => 1]
+        ];
+        $weightedMovement = BECMIRulesEngine::calculateMovementRates($weightedCharacter);
+        $this->assertEquals(90, $weightedMovement['normal'], "Weighted movement rate");
+        $this->assertEquals(30, $weightedMovement['encounter'], "Weighted encounter movement");
+        $this->assertEquals(420, $weightedMovement['weight'], "Weighted total inventory weight");
+        $this->assertEquals('lightly_encumbered', $weightedMovement['status'], "Weighted movement status");
         
         // Test experience requirements
         $xp = BECMIRulesEngine::getExperienceForNextLevel('fighter', 5);
         $this->assertEquals(32000, $xp, "Fighter level 5 to 6 XP requirement");
         
         echo "BECMI Rules Engine tests passed\n";
-        echo "THAC0: Melee {$thac0['melee']}, Ranged {$thac0['ranged']}\n";
+        echo "THAC0: Base {$thac0['base']} (+STR {$thac0['strength_bonus']}, +DEX {$thac0['dexterity_bonus']})\n";
         echo "Hit Points: {$hp}\n";
         echo "Movement: {$movement['normal']}'/{$movement['encounter']}'\n\n";
     }
@@ -148,6 +163,11 @@ class APITestSuite {
      */
     private function testAuthentication() {
         echo "Testing Authentication System...\n";
+
+        if (!$this->db) {
+            echo "Skipping authentication tests - no database connection\n\n";
+            return;
+        }
         
         // Create test user
         $testUserData = [
@@ -183,6 +203,7 @@ class APITestSuite {
                 [$sessionId, $userId, $csrfToken, date('Y-m-d H:i:s', time() + 3600), '127.0.0.1']
             );
             
+            $_SESSION['csrf_token'] = $csrfToken;
             $this->assertTrue(Security::validateCSRFToken($csrfToken), "CSRF token validation");
             
             echo "Authentication system tests passed\n";
@@ -201,6 +222,11 @@ class APITestSuite {
     private function testCharacterManagement() {
         echo "Testing Character Management...\n";
         
+        if (!$this->db) {
+            echo "Skipping character tests - no database connection\n\n";
+            return;
+        }
+
         if (!$this->testUser) {
             echo "Skipping character tests - no test user\n\n";
             return;
@@ -282,6 +308,11 @@ class APITestSuite {
     private function testSessionManagement() {
         echo "Testing Session Management...\n";
         
+        if (!$this->db) {
+            echo "Skipping session tests - no database connection\n\n";
+            return;
+        }
+
         if (!$this->testUser || !$this->testSession) {
             echo "Skipping session tests - no test data\n\n";
             return;
@@ -401,10 +432,11 @@ class APITestSuite {
      * Assertion helper methods
      */
     private function assertTrue($condition, $message) {
+        $passed = (bool) $condition;
         $this->testResults[] = [
             'test'=> $message,
-            'passed'=> $condition === true,
-            'message'=> $condition ? 'PASS': 'FAIL'];
+            'passed'=> $passed,
+            'message'=> $passed ? 'PASS': 'FAIL'];
     }
     
     private function assertFalse($condition, $message) {

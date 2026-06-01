@@ -8,8 +8,9 @@ class AuthModule {
     constructor(app) {
         this.app = app;
         this.apiClient = app.modules.apiClient;
+        this.googleLoginRendered = false;
+        this.googleLoginRenderTimer = null;
         
-        console.log('Auth Module initialized');
     }
     
     /**
@@ -29,36 +30,12 @@ class AuthModule {
             this.setFormLoading(form, true);
             
             // Make login request
-            const response = await this.apiClient.post('/api/auth/login.php', loginData);
+            const response = await this.apiClient.post('/api/auth/login.php', loginData, {
+                expectedStatusCodes: [401, 403, 422, 429]
+            });
             
             if (response.status === 'success') {
-                // Store auth token
-                localStorage.setItem('auth_token', response.data.session_id);
-                
-                // Update app state
-                this.app.updateState({
-                    user: response.data,
-                    csrfToken: response.data.csrf_token
-                });
-                
-                // Hide modal && show app
-                $('.modal').removeClass('show');
-                this.app.updateUserInterface();
-                
-                // Load user data
-                await this.app.loadUserData();
-                
-                // Navigate to dashboard
-                this.app.navigateToView('dashboard');
-                
-                // Show success message
-                this.app.showSuccess('Welcome back, '+ response.data.username + '!');
-                
-                // Emit login event
-                if (this.app.eventBus) {
-                    this.app.eventBus.emit('user:login', response.data);
-                }
-                
+                await this.completeLogin(response, 'Welcome back, ' + response.data.username + '!');
             } else {
                 this.showFormError(form, response.message || 'Login failed');
             }
@@ -84,6 +61,135 @@ class AuthModule {
             this.setFormLoading(form, false);
         }
     }
+
+    /**
+     * Handle a Google Identity Services credential callback.
+     */
+    async handleGoogleCredential(googleResponse) {
+        const form = document.getElementById('login-form');
+        if (!form) {
+            return;
+        }
+
+        this.clearFormFeedback(form);
+
+        const credential = (googleResponse && googleResponse.credential) ? googleResponse.credential : '';
+        if (!credential) {
+            this.showFormError(form, 'Google login could not be completed. Please try again.');
+            return;
+        }
+
+        try {
+            const response = await this.apiClient.post('/api/auth/google-login.php', {
+                credential: credential
+            });
+
+            if (response.status === 'success') {
+                await this.completeLogin(response, 'Welcome, ' + response.data.username + '!');
+                return;
+            }
+
+            this.showFormError(form, response.message || 'Google login failed');
+        } catch (error) {
+            console.error('Google login error:', error);
+            this.showFormError(form, 'Google login failed. Please try again.');
+        }
+    }
+
+    /**
+     * Finish a successful authentication flow.
+     */
+    async completeLogin(response, successMessage) {
+        localStorage.removeItem('auth_token');
+
+        this.app.updateState({
+            user: response.data,
+            csrfToken: response.data.csrf_token
+        });
+
+        $('.modal').removeClass('show');
+        this.app.updateUserInterface();
+
+        await this.app.loadUserData();
+        this.app.navigateToView('dashboard');
+        this.app.showSuccess(successMessage);
+
+        if (this.app.eventBus) {
+            this.app.eventBus.emit('user:login', response.data);
+        }
+    }
+
+    /**
+     * Initialize Google Login button when configured.
+     */
+    setupGoogleLogin() {
+        const googleAuthConfig = window.BECMI_RUNTIME_CONFIG && window.BECMI_RUNTIME_CONFIG.googleAuth
+            ? window.BECMI_RUNTIME_CONFIG.googleAuth
+            : { enabled: false, clientId: '' };
+
+        const section = document.getElementById('google-login-section');
+        const buttonContainer = document.getElementById('google-login-button');
+        const status = document.getElementById('google-login-status');
+
+        if (!section || !buttonContainer || !status) {
+            return;
+        }
+
+        if (!googleAuthConfig.enabled || !googleAuthConfig.clientId) {
+            section.hidden = true;
+            this.googleLoginRendered = false;
+            return;
+        }
+
+        section.hidden = false;
+
+        const renderButton = () => {
+            if (!(window.google && window.google.accounts && window.google.accounts.id)) {
+                return false;
+            }
+
+            if (!this.googleLoginRendered) {
+                window.google.accounts.id.initialize({
+                    client_id: googleAuthConfig.clientId,
+                    callback: (response) => this.handleGoogleCredential(response),
+                    auto_select: false,
+                    cancel_on_tap_outside: true
+                });
+                this.googleLoginRendered = true;
+            }
+
+            buttonContainer.innerHTML = '';
+            window.google.accounts.id.renderButton(buttonContainer, {
+                theme: 'outline',
+                size: 'large',
+                shape: 'pill',
+                text: 'continue_with',
+                width: Math.max(260, Math.min(buttonContainer.clientWidth || 320, 360))
+            });
+            status.textContent = 'Continue with your Google account.';
+            return true;
+        };
+
+        if (renderButton()) {
+            if (this.googleLoginRenderTimer) {
+                clearTimeout(this.googleLoginRenderTimer);
+                this.googleLoginRenderTimer = null;
+            }
+            return;
+        }
+
+        status.textContent = 'Loading Google Login...';
+
+        if (this.googleLoginRenderTimer) {
+            clearTimeout(this.googleLoginRenderTimer);
+        }
+
+        this.googleLoginRenderTimer = setTimeout(() => {
+            if (!renderButton()) {
+                status.textContent = 'Google Login is temporarily unavailable.';
+            }
+        }, 750);
+    }
     
 /**
      * Handle registration form submission
@@ -95,31 +201,12 @@ class AuthModule {
         const passwordField = $('#reg-password');
         const confirmField = $('#reg-confirm-password');
 
-        console.log('Registration field check:', {
-            passwordFieldFound: passwordField.length > 0,
-            confirmFieldFound: confirmField.length > 0,
-            passwordFieldId: passwordField.attr('id'),
-            confirmFieldId: confirmField.attr('id'),
-            passwordFieldValue: passwordField.val(),
-            confirmFieldValue: confirmField.val()
-        });
-
         const registerData = {
             username: formData.get('username'),
             email: formData.get('email'),
             password: passwordField.val(),
             confirm_password: confirmField.val()
         };
-
-        console.log('Registration data:', {
-            username: registerData.username,
-            email: registerData.email,
-            password: registerData.password,
-            confirm_password: registerData.confirm_password,
-            passwordsMatch: registerData.password === registerData.confirm_password,
-            passwordLength: registerData.password.length,
-            confirmLength: registerData.confirm_password.length
-        });
 
         try {
             this.setFormLoading(form, true);
@@ -129,7 +216,9 @@ class AuthModule {
                 return;
             }
 
-            const response = await this.apiClient.post('/api/auth/register.php', registerData);
+            const response = await this.apiClient.post('/api/auth/register.php', registerData, {
+                expectedStatusCodes: [422, 429]
+            });
 
             if (response.status === 'success') {
                 this.showFormSuccess(form, 'Account created successfully! Please log in.');
@@ -144,7 +233,29 @@ class AuthModule {
                     this.app.eventBus.emit('user:register', response.data);
                 }
             } else {
-                this.showFormError(form, response.message || 'Registration failed');
+                const fieldErrors = response?.errors || response?.data?.errors || null;
+
+                if (fieldErrors && typeof fieldErrors === 'object') {
+                    this.showFormError(form, 'Please correct the highlighted fields.');
+
+                    const fieldSelectors = {
+                        username: '#reg-username',
+                        email: '#reg-email',
+                        password: '#reg-password',
+                        confirm_password: '#reg-confirm-password'
+                    };
+
+                    Object.entries(fieldSelectors).forEach(([fieldName, selector]) => {
+                        const message = fieldErrors[fieldName];
+                        const field = form.querySelector(selector);
+
+                        if (message && field) {
+                            this.showFieldError(field, message);
+                        }
+                    });
+                } else {
+                    this.showFormError(form, response.message || 'Registration failed');
+                }
             }
         } catch (error) {
             console.error('Registration error:', error);
@@ -195,7 +306,9 @@ class AuthModule {
 
             this.setFormLoading(form, true);
 
-            const response = await this.apiClient.post('/api/auth/request-password-reset.php', { email });
+            const response = await this.apiClient.post('/api/auth/request-password-reset.php', { email }, {
+                expectedStatusCodes: [422, 429]
+            });
 
             if (response.status === 'success') {
                 this.showFormSuccess(form, response.message || 'If the email exists, a reset link has been sent.');
@@ -226,44 +339,31 @@ class AuthModule {
         const confirmPassword = $('#reset-confirm-password').val();
 
         try {
-            console.log('=== PASSWORD RESET DEBUG ===');
-            console.log('Selector:', selector);
-            console.log('Token:', token);
-            console.log('Password length:', password.length);
-            console.log('Passwords match:', password === confirmPassword);
-            
             this.clearFormFeedback(form);
 
             if (password !== confirmPassword) {
-                console.log('ERROR: Passwords do not match');
                 this.showFormError(form, 'Passwords do not match');
                 return;
             }
 
             const validation = this.validatePassword(password);
             if (!validation.valid) {
-                console.log('ERROR: Password validation failed:', validation.message);
                 this.showFormError(form, validation.message);
                 return;
             }
 
             this.setFormLoading(form, true);
-            
-            console.log('Sending password reset request...');
 
             const response = await this.apiClient.post('/api/auth/reset-password.php', {
                 selector,
                 token,
                 password,
                 confirm_password: confirmPassword
+            }, {
+                expectedStatusCodes: [400, 422, 429]
             });
-            
-            console.log('Password reset response:', response);
-            console.log('Response status:', response.status);
-            console.log('Response message:', response.message);
 
             if (response.status === 'success') {
-                console.log('SUCCESS: Password reset successful');
                 this.showFormSuccess(form, response.message || 'Password updated successfully.');
                 setTimeout(() => {
                     $('#password-reset-modal').removeClass('show');
@@ -274,17 +374,9 @@ class AuthModule {
                     window.history.replaceState({}, document.title, window.location.pathname);
                 }
             } else {
-                console.log('ERROR: Response status not success');
-                console.log('Full response object:', JSON.stringify(response));
                 this.showFormError(form, response.message || 'Unable to reset password.');
             }
         } catch (error) {
-            console.error('=== PASSWORD RESET EXCEPTION ===');
-            console.error('Error type:', error.constructor.name);
-            console.error('Error message:', error.message);
-            console.error('Full error:', error);
-            console.error('Error stack:', error.stack);
-            
             let message = 'Unable to reset password. Please try again later.';
             if (error.message && error.message.includes('400')) {
                 message = 'Reset code is invalid or has expired.';
@@ -318,30 +410,13 @@ class AuthModule {
     }
 
     checkForPasswordResetToken() {
-        console.log('=== CHECKING FOR PASSWORD RESET TOKEN ===');
-        console.log('Full URL:', window.location.href);
-        console.log('Search params:', window.location.search);
-        
         const params = new URLSearchParams(window.location.search);
         const hasReset = params.get('password-reset');
         const selector = params.get('selector');
         const token = params.get('token');
-        
-        console.log('Parsed params:', {
-            hasReset,
-            selector,
-            selectorLength: selector ? selector.length : 0,
-            token,
-            tokenLength: token ? token.length : 0
-        });
 
         if (hasReset && selector && token) {
-            console.log('Opening password reset modal with:');
-            console.log('Selector:', selector);
-            console.log('Token:', token);
             this.showPasswordResetModal(selector, token);
-        } else {
-            console.log('Missing required parameters for password reset');
         }
     }
 
@@ -353,7 +428,8 @@ class AuthModule {
         form.querySelectorAll('.error-message, .success-message').forEach(el => el.remove());
         form.querySelectorAll('.field-error').forEach(el => el.remove());
         form.querySelectorAll('input').forEach(input => {
-            input.style.borderColor = '';
+            input.classList.remove('is-invalid');
+            input.removeAttribute('aria-invalid');
         });
     }
 
@@ -420,16 +496,15 @@ class AuthModule {
         
         const errorEl = document.createElement('div');
         errorEl.className = 'error-message';
-        errorEl.style.color = 'var(--error-color, #dc3545)';
-        errorEl.style.fontSize = 'var(--font-size-sm, 0.875rem)';
-        errorEl.style.marginTop = 'var(--spacing-sm, 0.5rem)';
-        errorEl.style.padding = 'var(--spacing-sm, 0.5rem)';
-        errorEl.style.backgroundColor = 'var(--error-bg, #f8d7da)';
-        errorEl.style.border = '1px solid var(--error-border, #f5c6cb)';
-        errorEl.style.borderRadius = 'var(--border-radius, 0.25rem)';
+        errorEl.setAttribute('role', 'alert');
         errorEl.textContent = message;
-        
-        form.appendChild(errorEl);
+
+        const actions = form.querySelector('.form-actions');
+        if (actions) {
+            form.insertBefore(errorEl, actions);
+        } else {
+            form.appendChild(errorEl);
+        }
     }
     
     /**
@@ -440,16 +515,15 @@ class AuthModule {
         
         const successEl = document.createElement('div');
         successEl.className = 'success-message';
-        successEl.style.color = 'var(--success-color, #155724)';
-        successEl.style.fontSize = 'var(--font-size-sm, 0.875rem)';
-        successEl.style.marginTop = 'var(--spacing-sm, 0.5rem)';
-        successEl.style.padding = 'var(--spacing-sm, 0.5rem)';
-        successEl.style.backgroundColor = 'var(--success-bg, #d4edda)';
-        successEl.style.border = '1px solid var(--success-border, #c3e6cb)';
-        successEl.style.borderRadius = 'var(--border-radius, 0.25rem)';
+        successEl.setAttribute('role', 'status');
         successEl.textContent = message;
-        
-        form.appendChild(successEl);
+
+        const actions = form.querySelector('.form-actions');
+        if (actions) {
+            form.insertBefore(successEl, actions);
+        } else {
+            form.appendChild(successEl);
+        }
     }
     
     /**
@@ -486,14 +560,7 @@ class AuthModule {
                 button.attr('aria-label', 'Show password');
             }
             
-            console.log('Password visibility toggled:', {
-                inputId: input.attr('id'),
-                newType: newType,
-                buttonFound: button.length > 0
-            });
         });
-        
-        console.log('Password visibility toggles initialized');
     }
     
     /**
@@ -587,36 +654,14 @@ class AuthModule {
     validatePasswordMatch(self = this) {
         const passwordField = $('#reg-password');
         const confirmField = $('#reg-confirm-password');
-        
-        // Debug: Check if fields are found
-        console.log('Field detection:', {
-            passwordFieldFound: passwordField.length > 0,
-            confirmFieldFound: confirmField.length > 0,
-            passwordFieldId: passwordField.attr('id'),
-            confirmFieldId: confirmField.attr('id'),
-            passwordFieldName: passwordField.attr('name'),
-            confirmFieldName: confirmField.attr('name')
-        });
-        
+
         if (passwordField.length === 0 || confirmField.length === 0) {
-            console.log('Fields not found!');
             return; // Fields don't exist
         }
         
         const password = passwordField.val();
         const confirmPassword = confirmField.val();
-        
-        // Debug logging with more details
-        console.log('Password validation:', {
-            password: password,
-            confirmPassword: confirmPassword,
-            passwordLength: password.length,
-            confirmLength: confirmPassword.length,
-            match: password === confirmPassword,
-            passwordType: typeof password,
-            confirmType: typeof confirmPassword
-        });
-        
+
         // Only validate if both fields have content
         if (password.length > 0 && confirmPassword.length > 0) {
             if (password !== confirmPassword) {
@@ -642,27 +687,29 @@ class AuthModule {
      */
     showFieldError(field, message) {
         this.clearFieldError(field);
+
+        const errorContainer = field.closest('.form-group') || field.parentNode;
         
         const errorEl = document.createElement('div');
         errorEl.className = 'field-error';
-        errorEl.style.color = 'var(--error-color)';
-        errorEl.style.fontSize = 'var(--font-size-xs)';
-        errorEl.style.marginTop = 'var(--spacing-xs)';
         errorEl.textContent = message;
         
-        field.parentNode.appendChild(errorEl);
-        field.style.borderColor = 'var(--error-color)';
+        errorContainer.appendChild(errorEl);
+        field.classList.add('is-invalid');
+        field.setAttribute('aria-invalid', 'true');
     }
     
     /**
      * Clear field-specific error
      */
     clearFieldError(field) {
-        const errorEl = field.parentNode.querySelector('.field-error');
+        const errorContainer = field.closest('.form-group') || field.parentNode;
+        const errorEl = errorContainer.querySelector('.field-error');
         if (errorEl) {
             errorEl.remove();
         }
-        field.style.borderColor = '';
+        field.classList.remove('is-invalid');
+        field.removeAttribute('aria-invalid');
     }
     
     /**
@@ -697,6 +744,7 @@ class AuthModule {
             document.getElementById("register-form").reset();
             $("#register-modal").removeClass('show');
             $("#login-modal").addClass('show');
+            self.setupGoogleLogin();
         });
 
         $(document).off("click", "#show-forgot-password").on("click", "#show-forgot-password", function(e) {
@@ -710,6 +758,7 @@ class AuthModule {
             document.getElementById("forgot-password-form").reset();
             $("#forgot-password-modal").removeClass('show');
             $("#login-modal").addClass('show');
+            self.setupGoogleLogin();
         });
 
         $(document).off("click", "#back-to-login-from-reset").on("click", "#back-to-login-from-reset", function(e) {
@@ -718,6 +767,7 @@ class AuthModule {
             document.getElementById("password-reset-form").reset();
             $("#password-reset-modal").removeClass('show');
             $("#login-modal").addClass('show');
+            self.setupGoogleLogin();
         });
 
         $(document).off("submit", "#forgot-password-form").on("submit", "#forgot-password-form", function(e) {
@@ -731,12 +781,10 @@ class AuthModule {
         });
 
         this.checkForPasswordResetToken();
+        this.setupGoogleLogin();
 
-        console.log("Auth Module initialized");
     }
 }
 
 // Export to window for use in app.js
 window.AuthModule = AuthModule;
-
-

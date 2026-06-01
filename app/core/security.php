@@ -8,11 +8,20 @@
 
 class Security {
     private static $csrfToken = null;
+    private static $requestId = null;
     
     /**
      * Initialize security settings
      */
     public static function init() {
+        if (self::$requestId === null) {
+            self::$requestId = self::buildRequestId();
+        }
+
+        if (!headers_sent()) {
+            header('X-Request-Id: ' . self::getRequestId());
+        }
+
         // CRITICAL: If session is already active, don't try to start it again
         if (session_status() === PHP_SESSION_ACTIVE) {
             // Session already active - just get CSRF token
@@ -116,6 +125,64 @@ class Security {
      */
     public static function generateCSRFToken() {
         return bin2hex(random_bytes(32));
+    }
+
+    /**
+     * Build a request correlation ID.
+     */
+    private static function buildRequestId(): string {
+        $incomingRequestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? '';
+        if (is_string($incomingRequestId) && preg_match('/^[A-Za-z0-9._-]{6,64}$/', $incomingRequestId)) {
+            return $incomingRequestId;
+        }
+
+        return 'req_' . bin2hex(random_bytes(8));
+    }
+
+    /**
+     * Get current request correlation ID.
+     */
+    public static function getRequestId(): string {
+        if (self::$requestId === null) {
+            self::$requestId = self::buildRequestId();
+        }
+
+        return self::$requestId;
+    }
+
+    /**
+     * Create a short error ID that can be shown to users and support.
+     */
+    public static function createErrorId(): string {
+        return 'err_' . bin2hex(random_bytes(8));
+    }
+
+    /**
+     * Check whether server-side debug mode is enabled.
+     */
+    public static function isDebugMode(): bool {
+        return defined('DEBUG') && DEBUG;
+    }
+
+    /**
+     * Emit a debug log only when explicit debug mode is enabled.
+     */
+    public static function debugLog(string $message, array $context = []): void {
+        if (!self::isDebugMode()) {
+            return;
+        }
+
+        $payload = [
+            'request_id' => self::getRequestId(),
+            'message' => $message
+        ];
+
+        if (!empty($context)) {
+            $payload['context'] = $context;
+        }
+
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        error_log('[BECMI DEBUG] ' . ($json !== false ? $json : $message));
     }
     
     /**
@@ -279,11 +346,19 @@ class Security {
             $formattedHeaders .= $key . ': ' . $value . "\r\n";
         }
 
-        // Log email attempt (FULL MESSAGE for debugging)
-        error_log("EMAIL ATTEMPT: Sending to {$to}, Subject: {$subject}");
-        error_log("EMAIL HEADERS: " . $formattedHeaders);
-        error_log("EMAIL MESSAGE (first 200 chars): " . substr($message, 0, 200));
-        error_log("EMAIL MESSAGE (FULL - for password reset debugging): " . $message);
+        $recipientDomain = '';
+        $atPosition = strrpos($to, '@');
+        if ($atPosition !== false) {
+            $recipientDomain = substr($to, $atPosition + 1);
+        }
+
+        self::debugLog('Email dispatch attempt', [
+            'to' => $to,
+            'subject' => $subject,
+            'header_names' => array_keys($merged),
+            'message_length' => strlen($message),
+            'message_preview' => substr(trim(strip_tags($message)), 0, 120)
+        ]);
 
         $sent = false;
         if (function_exists('mail')) {
@@ -294,19 +369,26 @@ class Security {
             $duration = microtime(true) - $startTime;
             
             if ($duration > 5) {
-                error_log("EMAIL WARNING: Email sending took {$duration} seconds (slow mail server)");
+                self::debugLog('Slow email dispatch', [
+                    'duration_seconds' => round($duration, 3)
+                ]);
             }
             
-            error_log("EMAIL RESULT: " . ($sent ? 'SUCCESS' : 'FAILED') . " (took {$duration}s)");
+            self::debugLog('Email dispatch result', [
+                'success' => $sent,
+                'duration_seconds' => round($duration, 3)
+            ]);
         } else {
-            error_log("EMAIL ERROR: mail() function does not exist");
+            self::debugLog('Email dispatch unavailable', [
+                'reason' => 'mail_function_missing'
+            ]);
         }
 
         if (!$sent) {
             self::logSecurityEvent('email_dispatch_fallback', [
-                'to' => $to,
                 'subject' => $subject,
-                'message_preview' => substr($message, 0, 200)
+                'recipient_domain' => $recipientDomain,
+                'message_length' => strlen($message)
             ]);
         }
 
@@ -460,28 +542,122 @@ class Security {
      * Rate limiting
      */
     public static function checkRateLimit($key, $maxAttempts = 10, $windowSeconds = 300) {
+        $rateLimitFile = self::getRateLimitFilePath((string) $key);
+        if ($rateLimitFile === null) {
+            return self::checkSessionRateLimit((string) $key, (int) $maxAttempts, (int) $windowSeconds);
+        }
+
+        $handle = @fopen($rateLimitFile, 'c+');
+        if ($handle === false) {
+            error_log('RATE LIMIT: Failed to open storage file for key hash ' . hash('sha256', (string) $key));
+            return self::checkSessionRateLimit((string) $key, (int) $maxAttempts, (int) $windowSeconds);
+        }
+
+        try {
+            if (!@flock($handle, LOCK_EX)) {
+                error_log('RATE LIMIT: Failed to lock storage file for key hash ' . hash('sha256', (string) $key));
+                return self::checkSessionRateLimit((string) $key, (int) $maxAttempts, (int) $windowSeconds);
+            }
+
+            rewind($handle);
+            $rawState = stream_get_contents($handle);
+            $now = time();
+            $rateLimit = self::parseRateLimitState(
+                is_string($rawState) ? $rawState : '',
+                $now,
+                (int) $windowSeconds
+            );
+
+            if ($now - $rateLimit['window_start'] > $windowSeconds) {
+                $rateLimit = [
+                    'count' => 0,
+                    'window_start' => $now,
+                    'window_seconds' => (int) $windowSeconds
+                ];
+            }
+
+            $rateLimit['count']++;
+
+            rewind($handle);
+            ftruncate($handle, 0);
+            fwrite($handle, json_encode($rateLimit, JSON_UNESCAPED_SLASHES));
+            fflush($handle);
+
+            return $rateLimit['count'] <= $maxAttempts;
+        } finally {
+            if (is_resource($handle)) {
+                @flock($handle, LOCK_UN);
+                fclose($handle);
+            }
+        }
+    }
+
+    /**
+     * Build a stable shared-storage path for IP-backed rate limits.
+     */
+    private static function getRateLimitFilePath(string $key): ?string {
+        $baseDir = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'becmi_rate_limits';
+
+        if (!is_dir($baseDir) && !@mkdir($baseDir, 0700, true) && !is_dir($baseDir)) {
+            error_log('RATE LIMIT: Failed to create storage directory ' . $baseDir);
+            return null;
+        }
+
+        return $baseDir . DIRECTORY_SEPARATOR . hash('sha256', $key) . '.json';
+    }
+
+    /**
+     * Parse stored rate-limit state, falling back to a fresh window when invalid.
+     */
+    private static function parseRateLimitState(string $rawState, int $now, int $windowSeconds): array {
+        $decoded = json_decode($rawState, true);
+
+        if (
+            is_array($decoded)
+            && isset($decoded['count'], $decoded['window_start'])
+            && is_numeric($decoded['count'])
+            && is_numeric($decoded['window_start'])
+            && (!isset($decoded['window_seconds']) || (int) $decoded['window_seconds'] === $windowSeconds)
+        ) {
+            return [
+                'count' => (int) $decoded['count'],
+                'window_start' => (int) $decoded['window_start'],
+                'window_seconds' => $windowSeconds
+            ];
+        }
+
+        return [
+            'count' => 0,
+            'window_start' => $now,
+            'window_seconds' => $windowSeconds
+        ];
+    }
+
+    /**
+     * Fallback limiter used only when shared storage cannot be opened.
+     */
+    private static function checkSessionRateLimit(string $key, int $maxAttempts, int $windowSeconds): bool {
         $cacheKey = "rate_limit_{$key}";
-        
+
         if (!isset($_SESSION[$cacheKey])) {
             $_SESSION[$cacheKey] = [
                 'count' => 0,
                 'window_start' => time()
             ];
         }
-        
+
         $rateLimit = $_SESSION[$cacheKey];
-        
-        // Reset window if expired
+
         if (time() - $rateLimit['window_start'] > $windowSeconds) {
             $rateLimit = [
                 'count' => 0,
                 'window_start' => time()
             ];
         }
-        
+
         $rateLimit['count']++;
         $_SESSION[$cacheKey] = $rateLimit;
-        
+
         return $rateLimit['count'] <= $maxAttempts;
     }
     
@@ -561,6 +737,8 @@ class Security {
      * Send unauthorized response
      */
     public static function sendUnauthorizedResponse() {
+        $errorId = self::createErrorId();
+
         // CRITICAL: Close session before sending response to release lock
         if (session_status() === PHP_SESSION_ACTIVE) {
             @session_write_close();
@@ -572,8 +750,12 @@ class Security {
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
             'status' => 'error',
+            'app_status' => 'error',
             'message' => 'Authentication required',
-            'code' => 'UNAUTHORIZED'
+            'code' => 'UNAUTHORIZED',
+            'http_status' => 401,
+            'request_id' => self::getRequestId(),
+            'error_id' => $errorId
         ]);
         exit;
     }
@@ -582,6 +764,8 @@ class Security {
      * Send forbidden response
      */
     public static function sendForbiddenResponse() {
+        $errorId = self::createErrorId();
+
         // CRITICAL: Close session before sending response to release lock
         if (session_status() === PHP_SESSION_ACTIVE) {
             @session_write_close();
@@ -593,8 +777,12 @@ class Security {
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
             'status' => 'error',
+            'app_status' => 'error',
             'message' => 'Access forbidden',
-            'code' => 'FORBIDDEN'
+            'code' => 'FORBIDDEN',
+            'http_status' => 403,
+            'request_id' => self::getRequestId(),
+            'error_id' => $errorId
         ]);
         exit;
     }
@@ -603,6 +791,8 @@ class Security {
      * Send validation error response
      */
     public static function sendValidationErrorResponse($errors) {
+        $errorId = self::createErrorId();
+
         // CRITICAL: Close session before sending response to release lock
         if (session_status() === PHP_SESSION_ACTIVE) {
             @session_write_close();
@@ -614,9 +804,13 @@ class Security {
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
             'status' => 'error',
+            'app_status' => 'error',
             'message' => 'Validation failed',
             'errors' => $errors,
-            'code' => 'VALIDATION_ERROR'
+            'code' => 'VALIDATION_ERROR',
+            'http_status' => 422,
+            'request_id' => self::getRequestId(),
+            'error_id' => $errorId
         ]);
         exit;
     }
@@ -639,7 +833,10 @@ class Security {
         
         $response = [
             'status' => 'success',
-            'message' => $message
+            'app_status' => 'success',
+            'message' => $message,
+            'http_status' => 200,
+            'request_id' => self::getRequestId()
         ];
         
         if ($data !== null) {
@@ -688,6 +885,8 @@ class Security {
      * Send error response
      */
     public static function sendErrorResponse($message = 'An error occurred', $code = 500) {
+        $errorId = self::createErrorId();
+
         // CRITICAL: Close session before sending response to release lock
         // This prevents session locks from blocking other requests
         if (session_status() === PHP_SESSION_ACTIVE) {
@@ -717,9 +916,23 @@ class Security {
         
         $response = [
             'status' => 'error',
+            'app_status' => 'error',
             'message' => $message,
-            'code' => 'ERROR'
+            'code' => 'ERROR',
+            'http_status' => $code,
+            'request_id' => self::getRequestId(),
+            'error_id' => $errorId
         ];
+
+        if ($code >= 500) {
+            @error_log(sprintf(
+                'API ERROR [%s] [%s] HTTP %d %s',
+                self::getRequestId(),
+                $errorId,
+                $code,
+                $message
+            ));
+        }
         
         // Encode JSON with error handling
         $json = json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

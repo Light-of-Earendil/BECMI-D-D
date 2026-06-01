@@ -1,19 +1,5 @@
 ﻿
--- Password reset tokens
-CREATE TABLE IF NOT EXISTS password_resets (
-    reset_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    selector CHAR(32) NOT NULL,
-    token_hash VARCHAR(255) NOT NULL,
-    requested_by_ip VARCHAR(45),
-    requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    expires_at DATETIME NOT NULL,
-    used_at DATETIME NULL,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    UNIQUE KEY unique_selector (selector)
-);
-
-CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);-- BECMI D&D Character and Session Management System
+-- BECMI D&D Character and Session Management System
 -- Database Schema for MySQL/MariaDB
 
 -- Create database
@@ -31,8 +17,25 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     is_active BOOLEAN DEFAULT TRUE,
+    is_moderator BOOLEAN DEFAULT FALSE,
     last_login TIMESTAMP NULL
 );
+
+-- Password reset tokens
+CREATE TABLE IF NOT EXISTS password_resets (
+    reset_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    selector CHAR(32) NOT NULL,
+    token_hash VARCHAR(255) NOT NULL,
+    requested_by_ip VARCHAR(45),
+    requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_selector (selector)
+);
+
+CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
 
 -- Game sessions table
 CREATE TABLE IF NOT EXISTS game_sessions (
@@ -80,7 +83,7 @@ CREATE TABLE IF NOT EXISTS characters (
     user_id INT NOT NULL,
     session_id INT NULL,  -- OPTIONAL: Characters can be created without a session
     character_name VARCHAR(50) NOT NULL,
-    class ENUM('fighter', 'magic_user', 'cleric', 'thief', 'dwarf', 'elf', 'halfling') NOT NULL,
+    class ENUM('fighter', 'magic_user', 'cleric', 'thief', 'dwarf', 'elf', 'halfling', 'druid', 'mystic', 'barbarian') NOT NULL,
     level INT DEFAULT 1,
     experience_points INT DEFAULT 0,
     current_hp INT NOT NULL,
@@ -151,7 +154,7 @@ CREATE TABLE IF NOT EXISTS items (
     range_long INT DEFAULT 0,
     
     -- Armor properties
-    ac_bonus INT DEFAULT 0,
+    ac_bonus INT DEFAULT 0, -- Armor: descending base AC value. Shields: AC adjustment (-1 for a normal shield).
     armor_type ENUM('leather', 'chain', 'plate', 'shield') DEFAULT 'leather',
     
     -- Item properties
@@ -239,12 +242,30 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
+-- Linked OAuth identities for external login providers
+CREATE TABLE IF NOT EXISTS user_oauth_accounts (
+    oauth_account_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    provider VARCHAR(32) NOT NULL,
+    provider_user_id VARCHAR(255) NOT NULL,
+    provider_email VARCHAR(255) NULL,
+    email_verified BOOLEAN DEFAULT FALSE,
+    given_name VARCHAR(100) NULL,
+    family_name VARCHAR(100) NULL,
+    picture_url TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_login_at TIMESTAMP NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE KEY uniq_oauth_provider_subject (provider, provider_user_id)
+);
+
 -- Insert default items (only if they don't exist)
 INSERT IGNORE INTO items (name, description, weight_cn, cost_gp, item_type, damage_die, damage_type, weapon_type, requires_proficiency) VALUES
 -- Weapons
 ('Dagger', 'A small, sharp blade', 10, 3.00, 'weapon', '1d4', 'piercing', 'melee', TRUE),
 ('Short Sword', 'A light, one-handed sword', 30, 10.00, 'weapon', '1d6', 'slashing', 'melee', TRUE),
-('Long Sword', 'A standard two-handed sword', 60, 15.00, 'weapon', '1d8', 'slashing', 'melee', TRUE),
+('Normal Sword', 'Standard one-handed sword', 60, 10.00, 'weapon', '1d8', 'slashing', 'melee', TRUE),
 ('Battle Axe', 'A heavy axe for combat', 50, 7.00, 'weapon', '1d8', 'slashing', 'melee', TRUE),
 ('Mace', 'A blunt weapon', 30, 5.00, 'weapon', '1d6', 'bludgeoning', 'melee', TRUE),
 ('Spear', 'A long thrusting weapon', 30, 1.00, 'weapon', '1d6', 'piercing', 'melee', TRUE),
@@ -264,10 +285,10 @@ INSERT IGNORE INTO items (name, description, weight_cn, cost_gp, item_type, dama
 ('Rations (1 day)', 'Food and water', 50, 0.50, 'consumable', NULL, NULL, NULL, FALSE);
 
 -- Update armor AC bonuses (only if items exist)
-UPDATE items SET ac_bonus = 2 WHERE name = 'Leather Armor' AND ac_bonus IS NULL;
+UPDATE items SET ac_bonus = 7 WHERE name = 'Leather Armor' AND ac_bonus IS NULL;
 UPDATE items SET ac_bonus = 5 WHERE name = 'Chain Mail' AND ac_bonus IS NULL;
-UPDATE items SET ac_bonus = 8 WHERE name = 'Plate Mail' AND ac_bonus IS NULL;
-UPDATE items SET ac_bonus = 1 WHERE name = 'Shield' AND ac_bonus IS NULL;
+UPDATE items SET ac_bonus = 3 WHERE name = 'Plate Mail' AND ac_bonus IS NULL;
+UPDATE items SET ac_bonus = -1 WHERE name = 'Shield' AND ac_bonus IS NULL;
 
 -- Create indexes for performance (only if they don't exist)
 CREATE INDEX IF NOT EXISTS idx_characters_user_session ON characters(user_id, session_id);
@@ -276,6 +297,8 @@ CREATE INDEX IF NOT EXISTS idx_session_players_user ON session_players(user_id);
 CREATE INDEX IF NOT EXISTS idx_session_reminders_datetime ON session_reminders(reminder_datetime);
 CREATE INDEX IF NOT EXISTS idx_character_inventory_equipped ON character_inventory(character_id, is_equipped);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_expires ON user_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_user_oauth_user ON user_oauth_accounts(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_oauth_provider_email ON user_oauth_accounts(provider, provider_email);
 CREATE INDEX IF NOT EXISTS idx_character_changes_character ON character_changes(character_id, changed_at);
 
 -- Combat Initiative Tables for BECMI Initiative System

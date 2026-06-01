@@ -1093,7 +1093,12 @@ class DMDashboardModule {
             return '<div class="no-items"><p class="text-muted">No items match your filters</p></div>';
         }
         
-        return flattened.map(item => `
+        return flattened.map(item => {
+            const armorDisplay = getBECMIArmorDisplay(item);
+            const damageDisplay = item.display_damage || item.damage_die;
+            const handsDisplay = item.can_use_two_handed ? '1 or 2' : (item.hands_required || null);
+
+            return `
             <div class="item-card" data-item-id="${item.item_id}">
                 <div class="item-header">
                     <h6 class="item-name">${item.name}</h6>
@@ -1102,13 +1107,14 @@ class DMDashboardModule {
                 <div class="item-stats">
                     <div class="stat"><strong>Cost:</strong> ${this.formatCost(item.cost_gp)}</div>
                     <div class="stat"><strong>Weight:</strong> ${this.formatWeight(item.weight_cn)}</div>
-                    ${item.damage_die ? `<div class="stat"><strong>Damage:</strong> ${item.damage_die}</div>` : ''}
-                    ${item.ac_bonus ? `<div class="stat"><strong>AC:</strong> +${item.ac_bonus}</div>` : ''}
+                    ${damageDisplay ? `<div class="stat"><strong>Damage:</strong> ${damageDisplay}</div>` : ''}
+                    ${armorDisplay.label ? `<div class="stat"><strong>${armorDisplay.detailLabel}:</strong> ${armorDisplay.label}</div>` : ''}
                     ${item.magical_bonus ? `<div class="stat"><strong>Bonus:</strong> +${item.magical_bonus}</div>` : ''}
                 </div>
                 ${item.description ? `<div class="item-description">${item.description}</div>` : ''}
             </div>
-        `).join('');
+        `;
+        }).join('');
     }
 
     /**
@@ -1127,6 +1133,10 @@ class DMDashboardModule {
      * @returns {string} HTML for item details
      */
     renderItemDetails(item) {
+        const armorDisplay = getBECMIArmorDisplay(item);
+        const damageDisplay = item.display_damage || item.damage_die;
+        const handsDisplay = item.can_use_two_handed ? '1 or 2' : (item.hands_required || null);
+
         return `
             <div class="item-details-card">
                 <div class="item-header">
@@ -1146,16 +1156,16 @@ class DMDashboardModule {
                         <span class="property-label">Weight:</span>
                         <span class="property-value">${this.formatWeight(item.weight_cn)}</span>
                     </div>
-                    ${item.damage_die ? `
+                    ${damageDisplay ? `
                     <div class="property-row">
                         <span class="property-label">Damage:</span>
-                        <span class="property-value">${item.damage_die} ${item.damage_type}</span>
+                        <span class="property-value">${damageDisplay}${item.damage_type ? ` ${item.damage_type}` : ''}</span>
                     </div>
                     ` : ''}
-                    ${item.ac_bonus ? `
+                    ${armorDisplay.label ? `
                     <div class="property-row">
-                        <span class="property-label">AC Bonus:</span>
-                        <span class="property-value">+${item.ac_bonus}</span>
+                        <span class="property-label">${armorDisplay.detailLabel}:</span>
+                        <span class="property-value">${armorDisplay.detailValue}</span>
                     </div>
                     ` : ''}
                     ${item.magical_bonus ? `
@@ -1170,10 +1180,10 @@ class DMDashboardModule {
                         <span class="property-value">${item.range_short}/${item.range_long} ft</span>
                     </div>
                     ` : ''}
-                    ${item.hands_required ? `
+                    ${handsDisplay ? `
                     <div class="property-row">
                         <span class="property-label">Hands Required:</span>
-                        <span class="property-value">${item.hands_required}</span>
+                        <span class="property-value">${handsDisplay}</span>
                     </div>
                     ` : ''}
                     ${item.requires_proficiency ? `

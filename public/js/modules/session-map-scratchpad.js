@@ -12,6 +12,8 @@ class SessionMapScratchpadModule {
         this.currentMapId = null;
         this.currentMap = null;
         this.maps = [];
+        this.campaignLibraryMaps = [];
+        this.mapLibraryScope = null;
         this.drawings = [];
         this.tokens = [];
         this.isDM = false;
@@ -156,21 +158,22 @@ class SessionMapScratchpadModule {
      */
     renderMapInterface() {
         const hasMaps = this.maps.length > 0;
-        const mapOptions = this.maps.map(map => 
-            `<option value="${map.map_id}" ${map.is_active ? 'selected' : ''}>${this.escapeHtml(map.map_name)}</option>`
-        ).join('');
+        const hasCampaignLibraryMaps = this.isDM && this.campaignLibraryMaps.length > 0;
+        const hasSelectableMaps = hasMaps || hasCampaignLibraryMaps;
+        const mapOptions = this.renderMapSelectorOptions();
         
         return `
             <div class="session-map-scratchpad">
+                ${this.renderMapLibraryBanner()}
                 <div class="map-toolbar">
                     ${this.isDM ? `
                         <button class="btn btn-primary" id="upload-map-btn">
                             <i class="fas fa-upload"></i> Upload Map
                         </button>
                     ` : ''}
-                    <select id="map-selector" class="form-control" ${!hasMaps || !this.isDM ? 'disabled' : ''} 
+                    <select id="map-selector" class="form-control" ${!hasSelectableMaps || !this.isDM ? 'disabled' : ''} 
                             title="${!this.isDM ? 'Only the Dungeon Master can switch maps' : ''}">
-                        ${hasMaps ? mapOptions : '<option>No maps available</option>'}
+                        ${hasSelectableMaps ? mapOptions : '<option>No maps available</option>'}
                     </select>
                     ${this.isDM && hasMaps ? `
                         <button class="btn btn-danger btn-sm" id="delete-map-btn">
@@ -276,9 +279,72 @@ class SessionMapScratchpadModule {
                         <div class="empty-state">
                             <i class="fas fa-map"></i>
                             <p>No maps uploaded yet</p>
-                            ${this.isDM ? '<p>Click "Upload Map" to add a map image</p>' : '<p>Ask the DM to upload a map</p>'}
+                            ${this.isDM
+                                ? hasCampaignLibraryMaps
+                                    ? '<p>Select a shared campaign map above or upload a new one.</p>'
+                                    : '<p>Click "Upload Map" to add a map image</p>'
+                                : '<p>Ask the DM to upload or import a campaign map</p>'}
                         </div>
                     `}
+                </div>
+            </div>
+        `;
+    }
+
+    renderMapSelectorOptions() {
+        const localOptions = this.maps.map(map => {
+            const sourceLabel = map.is_imported_from_campaign && map.source_session_title
+                ? ` (${this.escapeHtml(map.source_session_title)})`
+                : '';
+            return `<option value="${map.map_id}" ${map.is_active ? 'selected' : ''}>${this.escapeHtml(map.map_name)}${sourceLabel}</option>`;
+        }).join('');
+
+        if (!this.isDM || this.campaignLibraryMaps.length === 0) {
+            return localOptions;
+        }
+
+        const campaignOptions = this.campaignLibraryMaps.map(map =>
+            `<option value="library:${map.library_map_id}">${this.escapeHtml(map.map_name)} (${this.escapeHtml(map.source_session_title)})</option>`
+        ).join('');
+
+        if (localOptions) {
+            return `
+                <optgroup label="Session maps">
+                    ${localOptions}
+                </optgroup>
+                <optgroup label="Campaign library">
+                    ${campaignOptions}
+                </optgroup>
+            `;
+        }
+
+        return `
+            <optgroup label="Campaign library">
+                ${campaignOptions}
+            </optgroup>
+        `;
+    }
+
+    renderMapLibraryBanner() {
+        if (!this.mapLibraryScope || this.mapLibraryScope.type !== 'campaign') {
+            return '';
+        }
+
+        const sharedCount = this.campaignLibraryMaps.length;
+        const summary = this.isDM
+            ? (sharedCount > 0
+                ? `${sharedCount} shared map${sharedCount === 1 ? '' : 's'} can be added from other sessions in this campaign.`
+                : 'Maps uploaded in this campaign can be reused across sessions here.')
+            : 'Maps for this scratch-pad can be shared across linked sessions in the campaign.';
+
+        return `
+            <div class="map-library-banner">
+                <div class="map-library-icon">
+                    <i class="fas fa-link"></i>
+                </div>
+                <div class="map-library-copy">
+                    <strong>Shared across this campaign</strong>
+                    <span>${summary}</span>
                 </div>
             </div>
         `;
@@ -331,6 +397,8 @@ class SessionMapScratchpadModule {
             const response = await this.apiClient.get(`/api/session/maps/list.php?session_id=${sessionId}`);
             if (response.status === 'success') {
                 this.maps = response.data.maps || [];
+                this.campaignLibraryMaps = response.data.campaign_library_maps || [];
+                this.mapLibraryScope = response.data.library_scope || null;
                 console.log('[Map Scratch-Pad] loadMaps: Loaded', this.maps.length, 'maps');
                 if (this.maps.length > 0) {
                     console.log('[Map Scratch-Pad] loadMaps: Maps:', this.maps.map(m => ({
@@ -346,6 +414,8 @@ class SessionMapScratchpadModule {
         } catch (error) {
             console.error('[Map Scratch-Pad] loadMaps: Failed to load maps:', error);
             this.maps = [];
+            this.campaignLibraryMaps = [];
+            this.mapLibraryScope = null;
         }
     }
     
@@ -441,6 +511,39 @@ class SessionMapScratchpadModule {
         } catch (error) {
             console.error('Failed to switch map:', error);
             this.app.showError('Failed to load map: ' + error.message);
+        }
+    }
+
+    async importCampaignMap(sourceMapId) {
+        if (!this.isDM) {
+            this.app.showError('Only the Dungeon Master can import campaign maps');
+            return;
+        }
+
+        try {
+            const response = await this.apiClient.post('/api/session/maps/import.php', {
+                session_id: this.currentSessionId,
+                source_map_id: sourceMapId
+            });
+
+            if (response.status !== 'success') {
+                throw new Error(response.message || 'Failed to add campaign map');
+            }
+
+            await this.loadMaps(this.currentSessionId);
+            await this.loadMapData(response.data.map_id);
+
+            $('#map-selector').html(this.renderMapSelectorOptions());
+            $('#map-selector').val(String(response.data.map_id));
+
+            this.app.showSuccess(`Map "${response.data.map_name}" added from the campaign library`);
+        } catch (error) {
+            console.error('Failed to import campaign map:', error);
+            this.app.showError('Failed to add campaign map: ' + error.message);
+
+            if (this.currentMapId) {
+                $('#map-selector').val(String(this.currentMapId));
+            }
         }
     }
     
@@ -2070,8 +2173,17 @@ class SessionMapScratchpadModule {
                 }
                 return;
             }
-            
-            const mapId = parseInt(e.target.value);
+
+            const selectedValue = String(e.target.value || '');
+            if (selectedValue.startsWith('library:')) {
+                const sourceMapId = parseInt(selectedValue.replace('library:', ''), 10);
+                if (sourceMapId) {
+                    await this.importCampaignMap(sourceMapId);
+                }
+                return;
+            }
+
+            const mapId = parseInt(selectedValue, 10);
             if (mapId && mapId !== this.currentMapId) {
                 // Switch to selected map (this loads data, sets as active, and initializes canvas)
                 await this.switchActiveMap(mapId);
@@ -2265,12 +2377,13 @@ class SessionMapScratchpadModule {
             const url = this.apiClient.baseURL + '/api/session/maps/upload.php';
             
             xhr.open('POST', url);
-            
-            // Add auth header
-            const authToken = localStorage.getItem('auth_token');
-            if (authToken) {
-                xhr.setRequestHeader('Authorization', `Bearer ${authToken}`);
+
+            const csrfToken = this.apiClient.getCSRFToken();
+            if (csrfToken) {
+                xhr.setRequestHeader('X-CSRF-Token', csrfToken);
             }
+
+            xhr.setRequestHeader('Accept', 'application/json');
             
             xhr.onload = async () => {
                 console.log('Upload response status:', xhr.status);
@@ -2295,12 +2408,10 @@ class SessionMapScratchpadModule {
                             
                             // Load the new map data
                             await this.loadMapData(response.data.map_id);
-                            
+
                             // Update map selector
-                            const mapOptions = this.maps.map(map => 
-                                `<option value="${map.map_id}" ${map.is_active ? 'selected' : ''}>${this.escapeHtml(map.map_name)}</option>`
-                            ).join('');
-                            $('#map-selector').html(mapOptions);
+                            $('#map-selector').html(this.renderMapSelectorOptions());
+                            $('#map-selector').val(String(response.data.map_id));
                             
                             // Initialize canvas - always do this after upload
                             setTimeout(() => {

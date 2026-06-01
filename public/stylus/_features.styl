@@ -3,14 +3,115 @@
 // ==========================================================================
 
 // Dashboard Specific
+.dashboard-container
+  display: flex
+  flex-direction: column
+  gap: var(--space-6)
+
+.dashboard-header
+  margin: 0
+  padding: var(--space-8)
+  position: relative
+  overflow: hidden
+  border-radius: var(--radius-xl)
+  background: radial-gradient(140% 160% at 0% 0%, rgba(255,236,187,0.22), transparent 55%), linear-gradient(180deg, rgba(110,65,32,0.94), rgba(42,20,9,0.96))
+  border: 1px solid rgba(255,255,255,0.08)
+  box-shadow: 0 16px 40px rgba(0,0,0,0.28), var(--shadow-wood)
+
+  &::before
+    content: ""
+    position: absolute
+    inset: 8px
+    border-radius: calc(var(--radius-xl) - 8px)
+    box-shadow: inset 0 2px 0 rgba(255,255,255,0.2), inset 0 -2px 0 rgba(0,0,0,0.35)
+    pointer-events: none
+
+  h1,
+  p
+    position: relative
+    z-index: 1
+
+  h1
+    font-size: clamp(2.4rem, 4vw, 3.6rem)
+    margin-bottom: var(--space-2)
+    max-width: 10ch
+    line-height: 1.02
+
+  p
+    max-width: 44rem
+    color: var(--text-dim)
+    font-size: 1.05rem
+
 .dashboard-stats
   display: grid
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))
   gap: var(--space-4)
   margin-bottom: var(--space-6)
 
+.dashboard-grid
+  display: grid
+  grid-template-columns: repeat(2, minmax(0, 1fr))
+  gap: var(--space-6)
+
 .dashboard-card
-  margin: 50px 0
+  margin: 0
+  padding: var(--space-5)
+  position: relative
+  overflow: hidden
+  border-radius: var(--radius-xl)
+  background: linear-gradient(180deg, rgba(93,56,27,0.96), rgba(48,26,13,0.98))
+  border: 1px solid rgba(255,255,255,0.08)
+  box-shadow: 0 14px 28px rgba(0,0,0,0.2), var(--shadow-wood)
+
+  &::before
+    content: ""
+    position: absolute
+    inset: 6px
+    border-radius: calc(var(--radius-xl) - 6px)
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), inset 0 -1px 0 rgba(0,0,0,0.4)
+    pointer-events: none
+
+  .card-header
+    display: flex
+    justify-content: space-between
+    align-items: center
+    gap: var(--space-3)
+    margin-bottom: var(--space-4)
+    padding-bottom: var(--space-3)
+    border-bottom: 1px solid rgba(255,255,255,0.12)
+    position: relative
+    z-index: 1
+
+    h3
+      margin: 0
+      font-size: 1.2rem
+      color: var(--text-strong)
+
+    .nav-link
+      display: inline-flex
+      align-items: center
+      justify-content: center
+      padding: 8px 14px
+      border-radius: var(--radius-full)
+      border: 1px solid rgba(255,255,255,0.16)
+      background: rgba(255,255,255,0.06)
+      color: var(--text-strong)
+      font-size: 0.9rem
+      line-height: 1
+      text-decoration: none
+
+      &:hover
+        background: rgba(202,162,74,0.14)
+        border-color: rgba(202,162,74,0.38)
+
+  .card-content
+    position: relative
+    z-index: 1
+    min-height: 240px
+    padding: var(--space-5)
+    border-radius: var(--radius-lg)
+    background: radial-gradient(120% 120% at 20% 0%, rgba(255,255,255,0.36), transparent), linear-gradient(180deg, var(--parchment-50), var(--parchment-300))
+    box-shadow: inset 0 2px 0 rgba(255,255,255,0.4), inset 0 -3px 0 rgba(0,0,0,0.18)
 
 .stat-card
   background: linear-gradient(180deg, var(--wood-600), var(--wood-800))
@@ -19,6 +120,12 @@
   padding: var(--space-5)
   text-align: center
   position: relative
+  min-height: 132px
+  display: flex
+  flex-direction: column
+  align-items: center
+  justify-content: center
+  gap: var(--space-2)
 
   &::before
     content: ""
@@ -48,6 +155,51 @@
   display: flex
   gap: var(--space-4)
   flex-wrap: wrap
+
+.quick-actions
+  display: grid
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr))
+  gap: var(--space-3)
+
+  .btn
+    min-height: 60px
+    width: 100%
+    justify-content: flex-start
+    padding-inline: var(--space-4)
+    font-weight: 600
+
+.status-grid
+  display: grid
+  grid-template-columns: repeat(2, minmax(0, 1fr))
+  gap: var(--space-3)
+
+.status-item
+  display: flex
+  align-items: center
+  gap: var(--space-2)
+  padding: var(--space-3) var(--space-4)
+  border-radius: var(--radius-md)
+  border: 1px solid rgba(0,0,0,0.12)
+  background: linear-gradient(180deg, rgba(255,255,255,0.62), rgba(255,255,255,0.24))
+  color: var(--wood-900)
+  font-weight: 600
+
+  i
+    width: 20px
+    text-align: center
+
+  &.healthy
+    border-color: rgba(109,159,85,0.28)
+    color: #2d5d22
+
+  &.wounded
+    border-color: rgba(197,147,52,0.28)
+    color: #7c5310
+
+  &.critical,
+  &.unconscious
+    border-color: rgba(195,83,59,0.28)
+    color: #7a2419
 
 .invitations-section
   margin-bottom: var(--space-6)
@@ -1282,6 +1434,8 @@ input.hp-input
 .character-creation-content,
 .character-edit-content,
 .session-creation-content,
+#character-creation-content,
+#character-edit-content,
 #session-creation-content
   padding: var(--space-6)
   background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
@@ -1289,11 +1443,51 @@ input.hp-input
   border-radius: var(--radius-md)
   margin: var(--space-4) var(--space-6)
 
+#character-creation-content,
+#character-edit-content,
+#session-creation-content
+  flex: 1 1 auto
+  min-height: 0
+  overflow-y: auto
+  padding-top: var(--space-4)
+  padding-bottom: var(--space-6)
+  scrollbar-gutter: stable
+
+#character-edit-content
+  display: flex
+  flex-direction: column
+  overflow: hidden
+  padding-bottom: var(--space-4)
+
 .character-form
   background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
   border-radius: var(--radius-md)
   padding: var(--space-6)
   color: var(--text-ink)
+
+.character-edit-form
+  flex: 1 1 auto
+  display: flex
+  flex-direction: column
+  min-height: 0
+  height: 100%
+  padding: 0
+  background: transparent
+
+.character-edit-form-body
+  flex: 1 1 auto
+  min-height: 0
+  overflow-y: auto
+  padding: var(--space-2) var(--space-1) var(--space-4)
+  scrollbar-gutter: stable
+
+.character-edit-actions
+  flex-shrink: 0
+  justify-content: space-between
+  padding-top: var(--space-4)
+  padding-bottom: var(--space-1)
+  background: linear-gradient(180deg, rgba(224,215,187,0), rgba(224,215,187,0.94) 24%, rgba(214,203,172,0.99))
+  border-top: 1px solid rgba(92,55,26,0.12)
 
 // Session creation form styling (form is inside #session-creation-content which already has background)
 .session-creation-form,
@@ -1302,6 +1496,23 @@ input.hp-input
   border-radius: 0
   padding: 0
   color: var(--text-ink)
+
+  .session-form-feedback
+    margin-bottom: var(--space-4)
+
+  .error-message
+    padding: var(--space-3) var(--space-4)
+    border-radius: var(--radius-md)
+    border: 1px solid rgba(151,47,34,0.4)
+    background: linear-gradient(180deg, rgba(195,83,59,0.16), rgba(116,29,22,0.08))
+    color: #6f1f16
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3)
+
+  .field-error
+    margin-top: var(--space-2)
+    color: var(--danger-500)
+    font-size: 0.8rem
+    font-weight: 700
   
   // Ensure labels are readable
   label
@@ -1335,6 +1546,10 @@ input.hp-input
       color: var(--wood-900) !important
       background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300)) !important
       border-color: var(--brass-500) !important
+
+    &.is-invalid
+      border-color: var(--danger-500) !important
+      box-shadow: 0 0 0 3px rgba(195,83,59,0.16), inset 0 1px 0 rgba(255,255,255,0.7) !important
   
   // Form hints
   .form-hint
@@ -1355,6 +1570,14 @@ input.hp-input
     button
       flex-shrink: 0
       white-space: nowrap
+
+  .form-actions
+    position: sticky
+    bottom: 0
+    padding-top: var(--space-4)
+    padding-bottom: var(--space-1)
+    background: linear-gradient(180deg, rgba(224,215,187,0), rgba(224,215,187,0.94) 24%, rgba(214,203,172,0.99))
+    border-top: 1px solid rgba(92,55,26,0.12)
 
 .class-selection
   display: grid
@@ -1488,6 +1711,464 @@ input.hp-input
     border-color: var(--wood-800)
     color: var(--text-soft)
 
+.hp-roll-section,
+.starting-gold-section
+  display: flex
+  flex-direction: column
+  gap: var(--space-5)
+
+.hp-info,
+.gold-info,
+.hp-roll-result,
+.gold-roll-result,
+.hp-roll-container,
+.gold-roll-container
+  padding: var(--space-4)
+  border-radius: var(--radius-lg)
+  background: radial-gradient(140% 110% at 0% 0%, rgba(255,255,255,0.52), transparent 42%), linear-gradient(180deg, rgba(255,255,255,0.64), rgba(241,231,202,0.96))
+  border: 1px solid rgba(92,55,26,0.18)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.48), 0 6px 18px rgba(0,0,0,0.08)
+  color: var(--wood-900)
+
+  h2,
+  h3,
+  h4,
+  p
+    margin: 0
+    text-on-light()
+
+  p + p
+    margin-top: var(--space-2)
+
+  strong
+    color: var(--wood-900)
+
+.hp-roll-result,
+.gold-roll-result,
+.hp-roll-container,
+.gold-roll-container
+  display: flex
+  flex-direction: column
+  align-items: flex-start
+  gap: var(--space-3)
+
+.hp-info,
+.gold-info
+  h4
+    margin-bottom: var(--space-2)
+    font-family: "Cinzel", Georgia, serif
+    font-size: 1.1rem
+
+  p
+    color: var(--wood-800)
+
+.roll-animation
+  width: 52px
+  height: 52px
+  display: grid
+  place-items: center
+  border-radius: 50%
+  background: linear-gradient(180deg, var(--brass-300), var(--brass-500))
+  border: 1px solid var(--brass-600)
+  color: var(--wood-900)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.45)
+
+  i
+    font-size: 1.25rem
+
+.roll-instructions
+  display: flex
+  align-items: flex-start
+  gap: var(--space-3)
+
+  i
+    font-size: 1.125rem
+    color: var(--brass-600)
+    margin-top: 2px
+
+  p
+    color: var(--wood-800)
+
+.hp-roll-result
+  h2
+    font-size: 1.8rem
+
+.hp-roll,
+.total-hp,
+.gold-amount
+  color: var(--brass-700)
+
+.roll-breakdown
+  color: var(--wood-700) !important
+
+.equipment-purchase-section
+  display: flex
+  flex-direction: column
+  gap: var(--space-5)
+
+.purchase-summary
+  display: grid
+  grid-template-columns: repeat(3, minmax(0, 1fr))
+  gap: var(--space-3)
+
+.summary-stat
+  display: flex
+  align-items: flex-start
+  gap: var(--space-3)
+  padding: var(--space-3) var(--space-4)
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+  border: 2px solid rgba(92, 55, 26, 0.18)
+  border-radius: var(--radius-md)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 12px rgba(0,0,0,0.08)
+
+  i
+    color: var(--brass-600)
+    font-size: 1.125rem
+    margin-top: 2px
+
+  .label
+    display: block
+    font-family: "Cinzel", Georgia, serif
+    font-size: 0.75rem
+    font-weight: 700
+    letter-spacing: 0.04em
+    text-transform: uppercase
+    color: var(--wood-700)
+    margin-bottom: var(--space-1)
+
+  .value
+    display: block
+    font-family: 'Lora', Georgia, 'Times New Roman', serif
+    color: var(--wood-900)
+    font-size: 1rem
+    font-weight: 600
+    line-height: 1.4
+
+  &.unencumbered
+    border-color: rgba(63, 126, 93, 0.28)
+
+  &.lightly_encumbered
+    border-color: rgba(202, 162, 74, 0.36)
+
+  &.heavily_encumbered,
+  &.severely_encumbered,
+  &.overloaded,
+  &.immobile
+    border-color: rgba(151, 47, 34, 0.36)
+
+.cc-equipment-toolbar
+  display: flex
+  flex-direction: column
+  gap: var(--space-3)
+
+.cc-equipment-search
+  position: relative
+
+  i
+    position: absolute
+    left: var(--space-3)
+    top: 50%
+    transform: translateY(-50%)
+    color: var(--brass-500)
+    pointer-events: none
+
+.cc-equipment-search__input
+  width: 100%
+  padding: var(--space-3) var(--space-4) var(--space-3) 2.75rem
+  border-radius: var(--radius-md)
+  border: 2px solid var(--wood-600)
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+  font-family: 'Lora', Georgia, 'Times New Roman', serif
+  font-size: 1rem
+  color: var(--wood-900)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 4px 10px rgba(0,0,0,0.08)
+
+  &:focus
+    outline: none
+    border-color: var(--brass-500)
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 0 0 4px rgba(202, 162, 74, 0.14)
+
+.cc-equipment-toolbar__meta
+  display: flex
+  flex-wrap: wrap
+  justify-content: space-between
+  gap: var(--space-2)
+
+.cc-equipment-results
+  font-family: "Cinzel", Georgia, serif
+  font-size: 0.875rem
+  font-weight: 700
+  color: var(--wood-900)
+
+.cc-equipment-help
+  font-family: 'Lora', Georgia, 'Times New Roman', serif
+  font-size: 0.875rem
+  color: var(--wood-700)
+
+.cc-equipment-layout
+  display: grid
+  grid-template-columns: minmax(0, 1.65fr) minmax(300px, 0.95fr)
+  gap: var(--space-4)
+  align-items: start
+
+.cc-equipment-panel
+  background: linear-gradient(180deg, rgba(247, 242, 223, 0.96), rgba(225, 214, 184, 0.98))
+  border: 2px solid rgba(92, 55, 26, 0.18)
+  border-radius: var(--radius-lg)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 8px 24px rgba(0,0,0,0.12)
+  overflow: hidden
+
+.cc-equipment-panel__header
+  padding: var(--space-4) var(--space-4) var(--space-3)
+  border-bottom: 1px solid rgba(92, 55, 26, 0.12)
+  background: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.08))
+
+  h4
+    margin: 0
+    font-family: "Cinzel", Georgia, serif
+    font-size: 1.125rem
+    color: var(--wood-900)
+
+.cc-equipment-catalog
+  min-width: 0
+
+.cc-equipment-filters
+  display: flex
+  flex-wrap: wrap
+  gap: var(--space-2)
+  padding: var(--space-3) var(--space-4) 0
+
+.cc-filter-btn
+  padding: var(--space-2) var(--space-3)
+  border-radius: var(--radius-md)
+  border: 1px solid rgba(92, 55, 26, 0.18)
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+  font-family: "Cinzel", Georgia, serif
+  font-size: 0.8125rem
+  font-weight: 700
+  color: var(--wood-800)
+  cursor: pointer
+  transition: all var(--t-fast) var(--ease)
+
+  &:hover
+    transform: translateY(-1px)
+    border-color: var(--brass-500)
+
+  &.active
+    background: linear-gradient(180deg, var(--brass-300), var(--brass-500))
+    border-color: var(--brass-600)
+    color: var(--wood-900)
+    box-shadow: 0 4px 12px rgba(202, 162, 74, 0.24)
+
+.cc-equipment-catalog__list
+  padding: var(--space-4)
+
+.cc-equipment-section + .cc-equipment-section
+  margin-top: var(--space-5)
+
+.cc-equipment-section__title
+  margin: 0 0 var(--space-3)
+  font-family: "Cinzel", Georgia, serif
+  font-size: 1rem
+  color: var(--wood-900)
+  padding-bottom: var(--space-2)
+  border-bottom: 1px solid rgba(92, 55, 26, 0.14)
+
+.cc-equipment-list
+  display: grid
+  grid-template-columns: repeat(2, minmax(0, 1fr))
+  gap: var(--space-3)
+
+.cc-equipment-card
+  display: flex
+  flex-direction: column
+  gap: var(--space-3)
+  padding: var(--space-3)
+  border-radius: var(--radius-md)
+  border: 1px solid rgba(92, 55, 26, 0.16)
+  background: linear-gradient(180deg, rgba(255,255,255,0.62), rgba(245, 238, 214, 0.92))
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 4px 12px rgba(0,0,0,0.08)
+  min-width: 0
+
+  &.is-disabled
+    opacity: 0.7
+    border-color: rgba(151, 47, 34, 0.24)
+
+  .add-to-cart[disabled]
+    cursor: not-allowed
+    opacity: 0.8
+
+.cc-equipment-card__header
+  display: flex
+  gap: var(--space-3)
+  align-items: flex-start
+
+.cc-equipment-card__icon
+  width: 42px
+  height: 42px
+  border-radius: 50%
+  display: grid
+  place-items: center
+  flex-shrink: 0
+  background: linear-gradient(180deg, var(--brass-300), var(--brass-500))
+  border: 1px solid var(--brass-600)
+  color: var(--wood-900)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.45)
+
+.cc-equipment-card__title-group
+  min-width: 0
+
+  h5
+    margin: 0 0 var(--space-1)
+    font-family: "Cinzel", Georgia, serif
+    font-size: 1rem
+    color: var(--wood-900)
+    line-height: 1.25
+
+.cc-equipment-card__meta
+  margin: 0
+  font-family: "VT323", monospace
+  font-size: 0.95rem
+  color: var(--wood-700)
+
+.cc-equipment-card__description
+  margin: 0
+  font-family: 'Lora', Georgia, 'Times New Roman', serif
+  font-size: 0.875rem
+  line-height: 1.45
+  color: var(--wood-800)
+
+.cc-equipment-card__tags
+  display: flex
+  flex-wrap: wrap
+  gap: var(--space-2)
+
+.cc-equipment-tag
+  display: inline-flex
+  align-items: center
+  padding: 0.2rem 0.55rem
+  border-radius: 999px
+  background: linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
+  border: 1px solid rgba(92, 55, 26, 0.14)
+  font-family: "VT323", monospace
+  font-size: 0.85rem
+  color: var(--wood-800)
+
+.cc-equipment-card__note
+  margin: 0
+  font-family: 'Lora', Georgia, 'Times New Roman', serif
+  font-size: 0.8125rem
+  color: var(--wood-700)
+  font-style: italic
+
+.cc-equipment-empty
+  margin: 0
+  padding: var(--space-5)
+  text-align: center
+  font-family: 'Lora', Georgia, 'Times New Roman', serif
+  color: var(--wood-700)
+
+.cc-shopping-cart
+  position: sticky
+  top: calc(60px + var(--space-4))
+
+.cart-items
+  display: flex
+  flex-direction: column
+  gap: var(--space-3)
+  padding: var(--space-4)
+
+.cc-cart-item
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: var(--space-3)
+  padding: var(--space-3)
+  border-radius: var(--radius-md)
+  background: linear-gradient(180deg, rgba(255,255,255,0.54), rgba(244, 236, 210, 0.92))
+  border: 1px solid rgba(92, 55, 26, 0.14)
+
+.cc-cart-item__details
+  min-width: 0
+
+  h5
+    margin: 0 0 var(--space-1)
+    font-family: "Cinzel", Georgia, serif
+    font-size: 0.95rem
+    color: var(--wood-900)
+
+.cc-cart-item__meta
+  margin: 0
+  font-family: "VT323", monospace
+  color: var(--wood-700)
+
+.cc-cart-item__actions
+  display: flex
+  align-items: center
+  gap: var(--space-2)
+
+  .quantity
+    min-width: 1.5rem
+    text-align: center
+    font-family: "VT323", monospace
+    font-size: 1rem
+    color: var(--wood-900)
+
+.cc-cart-empty
+  margin: 0
+  padding: var(--space-4)
+  border-radius: var(--radius-md)
+  background: linear-gradient(180deg, rgba(255,255,255,0.42), rgba(244, 236, 210, 0.8))
+  border: 1px dashed rgba(92, 55, 26, 0.2)
+  font-family: 'Lora', Georgia, 'Times New Roman', serif
+  color: var(--wood-700)
+  text-align: center
+
+.cc-cart-totals
+  display: flex
+  flex-direction: column
+  gap: var(--space-2)
+  padding: 0 var(--space-4) var(--space-4)
+
+  .total-row
+    display: flex
+    justify-content: space-between
+    gap: var(--space-3)
+    font-family: "Cinzel", Georgia, serif
+    font-size: 0.875rem
+    color: var(--wood-800)
+
+    span:last-child
+      font-family: "VT323", monospace
+      font-size: 1rem
+      color: var(--wood-900)
+
+  .remaining
+    margin-top: var(--space-2)
+    padding-top: var(--space-2)
+    border-top: 1px solid rgba(92, 55, 26, 0.12)
+
+@media (max-width: 980px)
+  .purchase-summary
+    grid-template-columns: 1fr
+
+  .cc-equipment-layout
+    grid-template-columns: 1fr
+
+  .cc-shopping-cart
+    position: static
+
+@media (max-width: 720px)
+  .cc-equipment-list
+    grid-template-columns: 1fr
+
+  .cc-cart-item
+    flex-direction: column
+    align-items: stretch
+
+  .cc-cart-item__actions
+    justify-content: flex-end
+
 .roll-section
   background: var(--parchment-100)
   border-radius: var(--radius-sm)
@@ -1531,19 +2212,18 @@ input.hp-input
     color: var(--brass-800)
 
 .dashboard-card .character-list
-  display: flex
-  flex-wrap: wrap
+  display: grid
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))
   gap: var(--space-3)
   margin: 0
 
 .dashboard-card .character-item
-  flex: 0 0 calc(33.333% - var(--space-2))
-  min-width: 200px
-  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+  min-width: 0
+  background: radial-gradient(140% 100% at 0% 0%, rgba(255,255,255,0.55), transparent 42%), linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
   border-radius: var(--radius-md)
   padding: var(--space-4)
-  border: 2px solid rgba(0,0,0,0.2)
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 8px rgba(0,0,0,0.15)
+  border: 1px solid rgba(88,54,28,0.16)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 10px 18px rgba(47,26,13,0.08)
   cursor: pointer
   transition: all var(--t-fast) var(--ease)
   display: flex
@@ -1616,21 +2296,22 @@ input.hp-input
     display: flex
     gap: var(--space-2)
     margin-top: auto
+    width: 100%
+    justify-content: center
 
 .dashboard-card .session-list
-  display: flex
-  flex-wrap: wrap
+  display: grid
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))
   gap: var(--space-3)
   margin: 0
 
 .dashboard-card .session-item
-  flex: 0 0 calc(33.333% - var(--space-2))
-  min-width: 200px
-  background: linear-gradient(180deg, var(--parchment-200), var(--parchment-400))
+  min-width: 0
+  background: radial-gradient(140% 100% at 0% 0%, rgba(255,255,255,0.55), transparent 42%), linear-gradient(180deg, var(--parchment-100), var(--parchment-300))
   border-radius: var(--radius-md)
   padding: var(--space-4)
-  border: 2px solid rgba(0,0,0,0.2)
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 8px rgba(0,0,0,0.15)
+  border: 1px solid rgba(88,54,28,0.16)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 10px 18px rgba(47,26,13,0.08)
   cursor: pointer
   transition: all var(--t-fast) var(--ease)
   display: flex
@@ -4459,6 +5140,42 @@ input.hp-input
     margin-bottom: var(--space-4)
     color: var(--text-dim)
 
+.dashboard-card .empty-state
+  min-height: 0
+  padding: var(--space-8) var(--space-5)
+  display: flex
+  flex-direction: column
+  align-items: center
+  justify-content: center
+  gap: var(--space-3)
+  border-radius: var(--radius-lg)
+  border: 1px dashed rgba(92,55,26,0.25)
+  background: radial-gradient(120% 120% at 50% 0%, rgba(255,255,255,0.45), transparent 48%), linear-gradient(180deg, rgba(255,255,255,0.42), rgba(255,255,255,0.12))
+  color: var(--wood-900)
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.36), inset 0 -1px 0 rgba(88,54,28,0.08)
+
+  i
+    width: 72px
+    height: 72px
+    display: grid
+    place-items: center
+    border-radius: 50%
+    margin-bottom: 0
+    color: var(--brass-500)
+    background: linear-gradient(180deg, rgba(202,162,74,0.22), rgba(92,55,26,0.08))
+    font-size: 2rem
+
+  p
+    margin: 0
+    color: var(--wood-700)
+    max-width: 28ch
+
+  .btn
+    margin-top: var(--space-2)
+
+.dashboard-card .text-muted
+  color: var(--wood-700)
+
 // ==========================================================================
 // Video Conference Integration
 // ==========================================================================
@@ -4735,6 +5452,42 @@ textarea:focus-visible
   box-shadow: var(--shadow-wood)
   padding: var(--space-4)
   margin: var(--space-4) 0
+
+.map-library-banner
+  display: flex
+  align-items: center
+  gap: var(--space-3)
+  margin-bottom: var(--space-4)
+  padding: var(--space-3)
+  border-radius: var(--radius-sm)
+  border: 1px solid rgba(236, 220, 185, 0.4)
+  background: linear-gradient(135deg, rgba(245, 232, 198, 0.94), rgba(218, 188, 122, 0.92))
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 8px 18px rgba(41, 18, 3, 0.18)
+
+.map-library-icon
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 2.75rem
+  height: 2.75rem
+  border-radius: 999px
+  background: rgba(77, 40, 12, 0.88)
+  color: var(--brass-300)
+  box-shadow: 0 8px 20px rgba(41, 18, 3, 0.22)
+
+.map-library-copy
+  display: flex
+  flex-direction: column
+  gap: 0.15rem
+  color: var(--wood-950)
+
+  strong
+    font-size: 1rem
+    letter-spacing: 0.03em
+
+  span
+    font-size: 0.95rem
+    line-height: 1.5
 
 .map-header
   display: flex

@@ -1,0 +1,31 @@
+- generic [active] [ref=e1]:
+  - text:       +  +  
+  - generic [ref=e43]:
+    - generic [ref=e44]:
+      - heading "Create New Account" [level=2] [ref=e45]
+      - paragraph [ref=e46]: Join the BECMI Manager
+    - generic [ref=e48]:
+      - generic [ref=e49]:
+        - generic [ref=e50]: "Username:"
+        - textbox "Username:" [ref=e51]
+      - generic [ref=e52]:
+        - generic [ref=e53]: "Email:"
+        - textbox "Email:" [ref=e54]
+      - generic [ref=e55]:
+        - generic [ref=e56]: "Password:"
+        - generic [ref=e57]:
+          - textbox "Password:" [ref=e58]
+          - button "Show password" [ref=e59] [cursor=pointer]:
+            - generic: 
+      - generic [ref=e60]:
+        - generic [ref=e61]: "Confirm Password:"
+        - generic [ref=e62]:
+          - textbox "Confirm Password:" [ref=e63]
+          - button "Show password" [ref=e64] [cursor=pointer]:
+            - generic: 
+      - generic [ref=e65]:
+        - button "Register" [ref=e66] [cursor=pointer]
+        - button "Back to Login" [ref=e67] [cursor=pointer]
+  - text: 
+  - generic:
+    - generic: 2 3 3 4 4 3 3 2 1 2 3 4 5 6 1 2 3 4 5 6 7 8 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 10 11 12 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20

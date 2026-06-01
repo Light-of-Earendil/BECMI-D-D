@@ -219,11 +219,15 @@ class BECMIRulesEngine {
                 9, 9, 9, 9, 9,  // 26-30
                 7, 7, 7, 7, 7,  // 31-35
                 5                      // 36
+            ],
+            'barbarian' => [
+                19, 19, 18, 17, 16, 15, 14,
+                14, 13, 12, 12, 11, 10, 10
             ]
         ];
         
-        // Cap at level 36 (max in official table)
-        $levelIndex = min($level - 1, 35);
+        // Cap at the available table length for the selected class.
+        $levelIndex = min($level - 1, count($thac0Table[$class] ?? []) - 1);
         return $thac0Table[$class][$levelIndex] ?? 19;
     }
     
@@ -361,11 +365,19 @@ class BECMIRulesEngine {
     public static function calculateMovementRates($character) {
         $strength = $character['strength'];
         $totalWeight = self::calculateTotalWeight($character);
+        $overlandByStatus = [
+            'unencumbered' => 24,
+            'lightly_encumbered' => 18,
+            'heavily_encumbered' => 12,
+            'severely_encumbered' => 6,
+            'overloaded' => 3,
+            'immobile' => 0
+        ];
         
         // BECMI Character Movement Rates and Encumbrance Table (Chapter 6)
         // Encumbrance levels are fixed, not adjusted by strength
         if ($totalWeight <= 400) {
-            return [
+            $movement = [
                 'normal' => 120,
                 'encounter' => 40,
                 'running' => 120,
@@ -374,7 +386,7 @@ class BECMIRulesEngine {
                 'limit' => 400
             ];
         } elseif ($totalWeight <= 800) {
-            return [
+            $movement = [
                 'normal' => 90,
                 'encounter' => 30,
                 'running' => 90,
@@ -383,7 +395,7 @@ class BECMIRulesEngine {
                 'limit' => 800
             ];
         } elseif ($totalWeight <= 1200) {
-            return [
+            $movement = [
                 'normal' => 60,
                 'encounter' => 20,
                 'running' => 60,
@@ -392,7 +404,7 @@ class BECMIRulesEngine {
                 'limit' => 1200
             ];
         } elseif ($totalWeight <= 1600) {
-            return [
+            $movement = [
                 'normal' => 30,
                 'encounter' => 10,
                 'running' => 30,
@@ -401,7 +413,7 @@ class BECMIRulesEngine {
                 'limit' => 1600
             ];
         } elseif ($totalWeight <= 2400) {
-            return [
+            $movement = [
                 'normal' => 15,
                 'encounter' => 5,
                 'running' => 15,
@@ -410,7 +422,7 @@ class BECMIRulesEngine {
                 'limit' => 2400
             ];
         } else {
-            return [
+            $movement = [
                 'normal' => 0,
                 'encounter' => 0,
                 'running' => 0,
@@ -419,15 +431,118 @@ class BECMIRulesEngine {
                 'limit' => 2400
             ];
         }
+
+        $movement['overland'] = $overlandByStatus[$movement['status']] ?? 0;
+
+        if (($character['class'] ?? null) === 'barbarian') {
+            $movement = self::applyBarbarianFleetOfFoot($movement, $character, $totalWeight);
+        }
+
+        return $movement;
+    }
+
+    /**
+     * Apply Barbarian Fleet of Foot movement bonuses when armor and load allow it.
+     */
+    private static function applyBarbarianFleetOfFoot($movement, $character, $totalWeight) {
+        $armorType = self::getEquippedArmorType($character['inventory'] ?? []);
+        $fleetBonus = 0;
+
+        if ($totalWeight <= 1200) {
+            if ($armorType === null || $armorType === 'leather') {
+                $fleetBonus = 10;
+            } elseif ($armorType === 'chain') {
+                $fleetBonus = 5;
+            }
+        }
+
+        if ($fleetBonus > 0) {
+            $movement['normal'] += $fleetBonus;
+            $movement['running'] += $fleetBonus;
+            $movement['encounter'] += (int) floor($fleetBonus / 3);
+        }
+
+        if ($totalWeight <= 800 && $movement['overland'] > 0 && in_array($armorType, [null, 'leather'], true)) {
+            $movement['overland'] = (int) round($movement['overland'] * 1.25);
+        }
+
+        $movement['fleet_bonus'] = $fleetBonus;
+
+        return $movement;
+    }
+
+    /**
+     * Return equipped armor type for class feature calculations.
+     */
+    private static function getEquippedArmorType($inventory) {
+        if (empty($inventory) || !is_array($inventory)) {
+            return null;
+        }
+
+        foreach ($inventory as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $isEquipped = isset($item['is_equipped']) ? (bool) $item['is_equipped'] : true;
+            $itemType = $item['item_type'] ?? 'unknown';
+
+            if (!$isEquipped || $itemType !== 'armor') {
+                continue;
+            }
+
+            if (!empty($item['armor_type'])) {
+                return strtolower(trim($item['armor_type']));
+            }
+
+            $name = strtolower(trim($item['name'] ?? ''));
+            if (strpos($name, 'leather') !== false) {
+                return 'leather';
+            }
+            if (strpos($name, 'chain') !== false) {
+                return 'chain';
+            }
+            if (strpos($name, 'plate') !== false || strpos($name, 'suit') !== false) {
+                return 'plate';
+            }
+
+            return 'other';
+        }
+
+        return null;
     }
     
     /**
      * Calculate total weight of character's inventory
      */
     private static function calculateTotalWeight($character) {
-        // This would need to query the character_inventory table
-        // For now, return a placeholder value
-        return 0;
+        if (empty($character['inventory']) || !is_array($character['inventory'])) {
+            return 0;
+        }
+
+        $totalWeight = 0;
+
+        foreach ($character['inventory'] as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            if (isset($item['total_weight_cn']) && is_numeric($item['total_weight_cn'])) {
+                $totalWeight += max(0, (int) $item['total_weight_cn']);
+                continue;
+            }
+
+            $quantity = 1;
+            if (isset($item['quantity']) && is_numeric($item['quantity'])) {
+                $quantity = max(1, (int) $item['quantity']);
+            }
+
+            if (isset($item['weight_cn']) && is_numeric($item['weight_cn'])) {
+                $totalWeight += max(0, (int) $item['weight_cn']) * $quantity;
+            }
+        }
+
+        return $totalWeight;
     }
     
     /**
@@ -578,6 +693,13 @@ class BECMIRulesEngine {
                 'paralysis' => ['1-3' => 14, '4-6' => 12, '7-9' => 10, '10-12' => 8, '13-15' => 7, '16-18' => 6, '19-21' => 6, '22-24' => 5, '25-27' => 5, '28-30' => 4, '31-33' => 3, '34-36' => 2],
                 'dragon_breath' => ['1-3' => 15, '4-6' => 13, '7-9' => 11, '10-12' => 9, '13-15' => 8, '16-18' => 7, '19-21' => 6, '22-24' => 5, '25-27' => 4, '28-30' => 3, '31-33' => 2, '34-36' => 2],
                 'spells' => ['1-3' => 16, '4-6' => 14, '7-9' => 12, '10-12' => 10, '13-15' => 9, '16-18' => 8, '19-21' => 7, '22-24' => 6, '25-27' => 5, '28-30' => 4, '31-33' => 3, '34-36' => 2]
+            ],
+            'barbarian' => [
+                'death_ray' => ['1-3' => 12, '4-6' => 10, '7-9' => 8, '10-12' => 6, '13-14' => 4],
+                'magic_wand' => ['1-3' => 13, '4-6' => 11, '7-9' => 9, '10-12' => 7, '13-14' => 5],
+                'paralysis' => ['1-3' => 14, '4-6' => 12, '7-9' => 10, '10-12' => 8, '13-14' => 6],
+                'dragon_breath' => ['1-3' => 15, '4-6' => 13, '7-9' => 10, '10-12' => 8, '13-14' => 5],
+                'spells' => ['1-3' => 16, '4-6' => 14, '7-9' => 12, '10-12' => 10, '13-14' => 8]
             ]
         ];
         
@@ -663,7 +785,8 @@ class BECMIRulesEngine {
             'elf' => 6,
             'halfling' => 6,
             'druid' => 6,
-            'mystic' => 6
+            'mystic' => 6,
+            'barbarian' => 8
         ];
         
         $hitDie = $hitDice[$class] ?? 6;
@@ -676,6 +799,11 @@ class BECMIRulesEngine {
         
         // Add hit points for additional levels
         for ($i = 2; $i <= $level; $i++) {
+            if ($class === 'barbarian' && $i > 9) {
+                $baseHP += 3;
+                continue;
+            }
+
             $baseHP += max(1, $hitDie + $conBonus);
         }
         
@@ -693,20 +821,87 @@ class BECMIRulesEngine {
             'thief' => [0, 1200, 2400, 4800, 9600, 19200, 38400, 76800, 153600, 307200, 460800, 614400, 768000, 921600, 1075200, 1228800, 1382400, 1536000, 1689600, 1843200],
             'dwarf' => [0, 2200, 4400, 8800, 17600, 35200, 70400, 140800, 281600, 563200, 844800, 1126400, 1408000, 1689600, 1971200, 2252800, 2534400, 2816000, 3097600, 3379200],
             'elf' => [0, 4000, 8000, 16000, 32000, 64000, 128000, 256000, 512000, 1024000, 1536000, 2048000, 2560000, 3072000, 3584000, 4096000, 4608000, 5120000, 5632000, 6144000],
-            'halfling' => [0, 2000, 4000, 8000, 16000, 32000, 64000, 128000, 256000, 512000, 768000, 1024000, 1280000, 1536000, 1788000, 2048000, 2304000, 2560000, 2816000, 3072000]
+            'halfling' => [0, 2000, 4000, 8000, 16000, 32000, 64000, 128000, 256000, 512000, 768000, 1024000, 1280000, 1536000, 1788000, 2048000, 2304000, 2560000, 2816000, 3072000],
+            'barbarian' => [0, 2500, 5000, 10000, 20000, 40000, 80000, 160000, 250000, 370000, 490000, 610000, 730000, 850000]
         ];
         
-        // Check max level by class
-        $maxLevels = [
-            'fighter' => 36, 'dwarf' => 12, 'elf' => 10, 'halfling' => 8,
-            'cleric' => 36, 'magic_user' => 36, 'thief' => 36, 'druid' => 36, 'mystic' => 36
-        ];
-        
-        if ($currentLevel >= ($maxLevels[$class] ?? 20)) {
+        if ($currentLevel >= self::getMaxLevelForClass($class)) {
             return null; // Max level reached
         }
         
         return $xpTable[$class][$currentLevel] ?? null;
+    }
+
+    /**
+     * Get maximum supported class level.
+     */
+    public static function getMaxLevelForClass($class) {
+        $maxLevels = [
+            'fighter' => 36,
+            'dwarf' => 12,
+            'elf' => 10,
+            'halfling' => 8,
+            'cleric' => 36,
+            'magic_user' => 36,
+            'thief' => 36,
+            'druid' => 36,
+            'mystic' => 36,
+            'barbarian' => 14
+        ];
+
+        return $maxLevels[$class] ?? 20;
+    }
+
+    /**
+     * Get Barbarian Rage progression for a level.
+     */
+    public static function getBarbarianRageStats($level) {
+        $level = max(1, min(14, (int) $level));
+        $usesPerDay = 1;
+
+        if ($level >= 12) {
+            $usesPerDay = 4;
+        } elseif ($level >= 8) {
+            $usesPerDay = 3;
+        } elseif ($level >= 4) {
+            $usesPerDay = 2;
+        }
+
+        return [
+            'uses_per_day' => $usesPerDay,
+            'duration_rounds' => max(3, $level),
+            'temporary_hp' => $level,
+            'attack_bonus' => 2,
+            'damage_bonus' => 2,
+            'save_bonus_death_poison_breath' => 2,
+            'ac_penalty' => 2,
+            'cooldown_turns' => 1
+        ];
+    }
+
+    /**
+     * Get Barbarian Wilderness Mastery values for a level.
+     */
+    public static function getBarbarianWildernessMastery($level) {
+        $level = max(1, min(14, (int) $level));
+        $table = [
+            1 => ['track_percent' => 25, 'forage' => '1-2', 'hunt' => '1-2', 'navigate' => '1-3', 'hide_percent' => 10],
+            2 => ['track_percent' => 30, 'forage' => '1-3', 'hunt' => '1-2', 'navigate' => '1-3', 'hide_percent' => 15],
+            3 => ['track_percent' => 35, 'forage' => '1-3', 'hunt' => '1-3', 'navigate' => '1-4', 'hide_percent' => 20],
+            4 => ['track_percent' => 40, 'forage' => '1-4', 'hunt' => '1-3', 'navigate' => '1-4', 'hide_percent' => 25],
+            5 => ['track_percent' => 45, 'forage' => '1-4', 'hunt' => '1-4', 'navigate' => '1-4', 'hide_percent' => 30],
+            6 => ['track_percent' => 50, 'forage' => '1-5', 'hunt' => '1-4', 'navigate' => '1-5', 'hide_percent' => 35],
+            7 => ['track_percent' => 55, 'forage' => '1-5', 'hunt' => '1-5', 'navigate' => '1-5', 'hide_percent' => 40],
+            8 => ['track_percent' => 60, 'forage' => '1-5', 'hunt' => '1-5', 'navigate' => '1-5', 'hide_percent' => 45],
+            9 => ['track_percent' => 65, 'forage' => '1-6', 'hunt' => '1-5', 'navigate' => '1-6', 'hide_percent' => 50],
+            10 => ['track_percent' => 70, 'forage' => '1-6', 'hunt' => '1-6', 'navigate' => '1-6', 'hide_percent' => 55],
+            11 => ['track_percent' => 75, 'forage' => '1-6', 'hunt' => '1-6', 'navigate' => '1-6', 'hide_percent' => 60],
+            12 => ['track_percent' => 80, 'forage' => '1-6', 'hunt' => '1-6', 'navigate' => '1-6', 'hide_percent' => 65],
+            13 => ['track_percent' => 85, 'forage' => '1-6', 'hunt' => '1-6', 'navigate' => '1-6', 'hide_percent' => 70],
+            14 => ['track_percent' => 90, 'forage' => '1-6', 'hunt' => '1-6', 'navigate' => '1-6', 'hide_percent' => 75]
+        ];
+
+        return $table[$level];
     }
     
     /**
@@ -861,7 +1056,7 @@ class BECMIRulesEngine {
     
     /**
      * Calculate armor class according to BECMI rules.
-     * BECMI uses descending AC where lower is better (AC 9 = no armor, AC 2 = plate mail).
+     * BECMI uses descending AC where lower is better (AC 9 = no armor, AC 3 = plate mail).
      * 
      * @param array $character Character data with:
      *   - `dexterity` (int) - Dexterity score (3-18)
@@ -870,7 +1065,7 @@ class BECMIRulesEngine {
      *   - `is_equipped` (bool) - Whether item is equipped
      *   - `item_type` (string) - Item type ('armor' for armor)
      *   - `item_name` (string) - Item name (e.g., 'leather armor', 'chain mail')
-     * @return int Armor class (lower is better, range typically 2-9)
+     * @return int Armor class (lower is better; range varies with Dexterity, shields, and magic)
      * 
      * @example
      * // Calculate AC for character with DEX 14 and leather armor
@@ -888,7 +1083,7 @@ class BECMIRulesEngine {
      * - No armor: 9
      * - Leather armor: 7
      * - Chain mail: 5
-     * - Plate mail: 2
+     * - Plate mail: 3
      * - Shield: -1 (additional)
      * 
      * **Dexterity Adjustments:**
@@ -1017,7 +1212,8 @@ class BECMIRulesEngine {
             'elf' => ['strength', 'intelligence'],
             'halfling' => ['strength', 'dexterity'],
             'druid' => ['wisdom'],
-            'mystic' => ['strength', 'dexterity']
+            'mystic' => ['strength', 'dexterity'],
+            'barbarian' => ['strength']
         ];
         
         return $primeRequisites[$class] ?? [];
@@ -1041,7 +1237,8 @@ class BECMIRulesEngine {
             'elf' => ['intelligence' => 9],
             'halfling' => ['dexterity' => 9, 'constitution' => 9],
             'druid' => [], // Cannot be created at 1st level
-            'mystic' => ['wisdom' => 13, 'dexterity' => 13]
+            'mystic' => ['wisdom' => 13, 'dexterity' => 13],
+            'barbarian' => ['strength' => 9, 'constitution' => 9]
         ];
         
         // Special case: Druid
@@ -1049,6 +1246,13 @@ class BECMIRulesEngine {
             return [
                 'valid' => false,
                 'error' => 'Druid characters must start as Neutral Clerics and become Druids at 9th level. Please select Cleric class instead.'
+            ];
+        }
+
+        if ($class === 'barbarian' && isset($abilities['alignment']) && $abilities['alignment'] === 'lawful') {
+            return [
+                'valid' => false,
+                'error' => 'Barbarians must be neutral or chaotic, not lawful.'
             ];
         }
         
@@ -1199,10 +1403,22 @@ class BECMIRulesEngine {
             'elf' => 6,
             'halfling' => 6,
             'druid' => 6,
-            'mystic' => 6
+            'mystic' => 6,
+            'barbarian' => 8
         ];
         
         return $hitDice[$class] ?? 6;
+    }
+
+    /**
+     * Return fixed HP gain for classes that stop rolling hit dice after name level.
+     */
+    public static function getFixedHitPointGainForLevel($class, $newLevel) {
+        if ($class === 'barbarian' && (int) $newLevel > 9) {
+            return 3;
+        }
+
+        return null;
     }
     
     /**
@@ -1215,6 +1431,13 @@ class BECMIRulesEngine {
      */
     public static function getExperienceBonus($class, $abilities) {
         $primeReqs = self::getClassPrimeRequisites($class);
+
+        if ($class === 'barbarian') {
+            $strength = $abilities['strength'] ?? 10;
+            if ($strength >= 16) return 1.10;
+            if ($strength >= 13) return 1.05;
+            return 1.0;
+        }
         
         // Special handling for classes with two prime requisites
         if (count($primeReqs) === 2) {

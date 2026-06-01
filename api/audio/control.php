@@ -28,6 +28,7 @@
 require_once '../../app/core/database.php';
 require_once '../../app/core/security.php';
 require_once '../../app/services/event-broadcaster.php';
+require_once '../../app/services/audio-library.php';
 
 Security::init();
 header('Content-Type: application/json; charset=utf-8');
@@ -78,6 +79,11 @@ try {
     if ($session['dm_user_id'] != $userId) {
         Security::sendErrorResponse('Only the Dungeon Master can control audio', 403);
     }
+
+    $audioLibrary = getAudioLibraryContext($db, $sessionId);
+    if (!$audioLibrary) {
+        Security::sendErrorResponse('Session not found', 404);
+    }
     
     // Prepare event data based on action
     $eventData = [
@@ -93,46 +99,26 @@ try {
         
         if (isset($data['track_id'])) {
             $trackId = (int) $data['track_id'];
-            // Verify track exists and belongs to session
-            $track = $db->selectOne(
-                "SELECT track_id, track_name, track_type, file_path, duration_seconds
-                 FROM session_audio_tracks
-                 WHERE track_id = ? AND session_id = ?",
-                [$trackId, $sessionId]
-            );
+            $track = fetchAudioTrackInLibrary($db, $trackId, $audioLibrary);
             
             if (!$track) {
-                Security::sendErrorResponse('Track not found or does not belong to this session', 404);
+                Security::sendErrorResponse('Track not found in this session or linked campaign', 404);
             }
             
             $eventData['track_id'] = $trackId;
             $eventData['track_name'] = $track['track_name'];
             $eventData['track_type'] = $track['track_type'];
-            $filePath = $track['file_path'];
-            // Ensure path starts with / and doesn't have public/ prefix
-            $fileUrl = $filePath;
-            if (strpos($filePath, 'public/') === 0) {
-                $fileUrl = substr($filePath, 7); // Remove 'public/' prefix
-            }
-            if (strpos($fileUrl, '/') !== 0) {
-                $fileUrl = '/' . $fileUrl;
-            }
+            $fileUrl = normalizeAudioPublicPath($track['file_path']);
             $eventData['file_path'] = $fileUrl;
             $eventData['duration_seconds'] = $track['duration_seconds'];
         }
         
         if (isset($data['playlist_id'])) {
             $playlistId = (int) $data['playlist_id'];
-            // Verify playlist exists and belongs to session
-            $playlist = $db->selectOne(
-                "SELECT playlist_id, playlist_name
-                 FROM session_audio_playlists
-                 WHERE playlist_id = ? AND session_id = ?",
-                [$playlistId, $sessionId]
-            );
+            $playlist = fetchAudioPlaylistInLibrary($db, $playlistId, $audioLibrary);
             
             if (!$playlist) {
-                Security::sendErrorResponse('Playlist not found or does not belong to this session', 404);
+                Security::sendErrorResponse('Playlist not found in this session or linked campaign', 404);
             }
             
             $eventData['playlist_id'] = $playlistId;
@@ -153,15 +139,7 @@ try {
                 $eventData['track_id'] = (int) $firstTrack['track_id'];
                 $eventData['track_name'] = $firstTrack['track_name'];
                 $eventData['track_type'] = $firstTrack['track_type'];
-                $filePath = $firstTrack['file_path'];
-                // Ensure path starts with / and doesn't have public/ prefix
-                $fileUrl = $filePath;
-                if (strpos($filePath, 'public/') === 0) {
-                    $fileUrl = substr($filePath, 7); // Remove 'public/' prefix
-                }
-                if (strpos($fileUrl, '/') !== 0) {
-                    $fileUrl = '/' . $fileUrl;
-                }
+                $fileUrl = normalizeAudioPublicPath($firstTrack['file_path']);
                 $eventData['file_path'] = $fileUrl;
                 $eventData['duration_seconds'] = $firstTrack['duration_seconds'];
                 
@@ -177,14 +155,7 @@ try {
                 );
                 
                 $formattedTracks = array_map(function($track) {
-                    $filePath = $track['file_path'];
-                    $fileUrl = $filePath;
-                    if (strpos($filePath, 'public/') === 0) {
-                        $fileUrl = substr($filePath, 7);
-                    }
-                    if (strpos($fileUrl, '/') !== 0) {
-                        $fileUrl = '/' . $fileUrl;
-                    }
+                    $fileUrl = normalizeAudioPublicPath($track['file_path']);
                     
                     return [
                         'playlist_track_id' => (int) $track['playlist_track_id'],
@@ -270,16 +241,10 @@ try {
         }
         
         $playlistId = (int) $data['playlist_id'];
-        // Verify playlist exists and belongs to session
-        $playlist = $db->selectOne(
-            "SELECT playlist_id, playlist_name
-             FROM session_audio_playlists
-             WHERE playlist_id = ? AND session_id = ?",
-            [$playlistId, $sessionId]
-        );
+        $playlist = fetchAudioPlaylistInLibrary($db, $playlistId, $audioLibrary);
         
         if (!$playlist) {
-            Security::sendErrorResponse('Playlist not found or does not belong to this session', 404);
+            Security::sendErrorResponse('Playlist not found in this session or linked campaign', 404);
         }
         
         $eventData['playlist_id'] = $playlistId;

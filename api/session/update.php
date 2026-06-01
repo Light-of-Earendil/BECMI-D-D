@@ -7,6 +7,7 @@
 
 require_once '../../app/core/database.php';
 require_once '../../app/core/security.php';
+require_once '../../app/services/campaign-player-sync.php';
 
 Security::init();
 
@@ -124,7 +125,7 @@ try {
 
     // Verify user owns this session
     $existingSession = $db->selectOne(
-        'SELECT dm_user_id FROM game_sessions WHERE session_id = ?',
+        'SELECT dm_user_id, campaign_id FROM game_sessions WHERE session_id = ?',
         [$sessionId]
     );
 
@@ -162,12 +163,22 @@ try {
         ]
     );
 
+    $autoInvitedCampaignPlayers = 0;
+    $previousCampaignId = isset($existingSession['campaign_id']) && $existingSession['campaign_id']
+        ? (int) $existingSession['campaign_id']
+        : null;
+
+    if ($campaignId !== null && $campaignId > 0 && $campaignId !== $previousCampaignId) {
+        $autoInvitedCampaignPlayers = syncCampaignPlayersToSession($db, $campaignId, $sessionId);
+    }
+
     Security::logSecurityEvent('session_updated', [
         'session_id' => $sessionId,
         'dm_user_id' => $userId
     ]);
 
     Security::sendSuccessResponse([
+        'auto_invited_campaign_players' => $autoInvitedCampaignPlayers,
         'session' => [
             'session_id' => $sessionId,
             'dm_user_id' => $userId,

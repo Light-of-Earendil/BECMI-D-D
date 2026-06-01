@@ -345,6 +345,7 @@ For detailed installation instructions, see [docs/INSTALLATION.md](docs/INSTALLA
 
 ## 📚 Documentation
 
+- **[AI Agents Guide](docs/AI_AGENTS.md)** - Shared entrypoints for Codex, Claude, Gemini, Copilot, Cursor, and repo-local skills
 - **[Installation Guide](docs/INSTALLATION.md)** - Detailed setup instructions
 - **[Character Creation System](docs/CHARACTER_CREATION_SYSTEM.md)** - Character creation process
 - **[Hex Maps System](docs/HEX_MAPS_SYSTEM.md)** - Hex map editor documentation

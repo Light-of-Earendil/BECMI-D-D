@@ -17,6 +17,9 @@ class RealtimeClient {
         this.eventHandlers = {};
         this.isConnected = false;
         this.pollTimeoutMs = 25000; // true long-poll timeout
+        this.connectionState = 'idle';
+        this.lastSyncAt = null;
+        this.lastErrorMessage = '';
         
         console.log(`Real-time client initialized for session ${sessionId}`);
     }
@@ -32,6 +35,7 @@ class RealtimeClient {
         
         this.isPolling = true;
         this.isConnected = true;
+        this.updateConnectionStatus('connecting');
         console.log('Starting real-time polling...');
         
         // Trigger connection event
@@ -44,7 +48,7 @@ class RealtimeClient {
     /**
      * Stop polling
      */
-    stop() {
+    stop(state = 'disconnected') {
         this.isPolling = false;
         this.isConnected = false;
         
@@ -58,8 +62,128 @@ class RealtimeClient {
             this.activeRequest = null;
         }
         
+        this.updateConnectionStatus(state);
         console.log('Stopped real-time polling');
         this.trigger('disconnected', {});
+    }
+
+    /**
+     * Update the visible realtime connection state.
+     */
+    updateConnectionStatus(state, meta = {}) {
+        this.connectionState = state;
+
+        if (meta.lastErrorMessage !== undefined) {
+            this.lastErrorMessage = meta.lastErrorMessage;
+        }
+        if (meta.lastSyncAt !== undefined) {
+            this.lastSyncAt = meta.lastSyncAt;
+        }
+
+        this.renderConnectionIndicator();
+    }
+
+    /**
+     * Render a small realtime status indicator for degraded states and debug sessions.
+     */
+    renderConnectionIndicator() {
+        const debugEnabled = Boolean(window.__BECMI_DEBUG__ || window.DEBUG_MODE);
+        const shouldShow = debugEnabled || (this.connectionState !== 'connected' && this.connectionState !== 'idle');
+        const existing = document.getElementById('becmi-realtime-status');
+
+        if (!shouldShow) {
+            if (existing) {
+                existing.remove();
+            }
+            return;
+        }
+
+        const indicator = existing || document.createElement('div');
+        indicator.id = 'becmi-realtime-status';
+        indicator.style.position = 'fixed';
+        indicator.style.right = '16px';
+        indicator.style.bottom = '16px';
+        indicator.style.zIndex = '2000';
+        indicator.style.maxWidth = '320px';
+        indicator.style.padding = '12px 14px';
+        indicator.style.borderRadius = '12px';
+        indicator.style.boxShadow = '0 12px 32px rgba(0, 0, 0, 0.2)';
+        indicator.style.fontSize = '13px';
+        indicator.style.lineHeight = '1.4';
+        indicator.style.color = '#fff';
+
+        let background = '#4f6b4f';
+        let title = 'Realtime connected';
+
+        if (this.connectionState === 'connecting') {
+            background = '#786437';
+            title = 'Connecting...';
+        } else if (this.connectionState === 'reconnecting') {
+            background = '#8a6d1d';
+            title = 'Reconnecting...';
+        } else if (this.connectionState === 'failed') {
+            background = '#8b2d2d';
+            title = 'Realtime failed';
+        } else if (this.connectionState === 'disconnected') {
+            background = '#5a5a5a';
+            title = 'Realtime stopped';
+        }
+
+        const lastSyncText = this.lastSyncAt
+            ? new Date(this.lastSyncAt).toLocaleTimeString()
+            : 'No sync yet';
+        const errorText = this.lastErrorMessage
+            ? `<div style="margin-top:6px;opacity:0.9;">${this.escapeHtml(this.lastErrorMessage)}</div>`
+            : '';
+        const showRetry = this.connectionState === 'reconnecting' || this.connectionState === 'failed' || this.connectionState === 'disconnected';
+        const retryMarkup = showRetry
+            ? `<button type="button" id="becmi-realtime-retry" style="margin-top:10px;border:0;border-radius:8px;padding:6px 10px;background:#fff;color:#222;font-weight:600;cursor:pointer;">Retry now</button>`
+            : '';
+
+        indicator.style.background = background;
+        indicator.innerHTML = `
+            <div style="font-weight:700;">${title}</div>
+            <div style="margin-top:4px;opacity:0.9;">Last sync: ${this.escapeHtml(lastSyncText)}</div>
+            <div style="opacity:0.9;">Last event ID: ${this.escapeHtml(String(this.lastEventId))}</div>
+            ${errorText}
+            ${retryMarkup}
+        `;
+
+        if (!existing) {
+            document.body.appendChild(indicator);
+        }
+
+        const retryButton = document.getElementById('becmi-realtime-retry');
+        if (retryButton) {
+            retryButton.onclick = () => {
+                this.errorCount = 0;
+                this.lastErrorMessage = '';
+
+                if (!this.isPolling) {
+                    this.start();
+                    return;
+                }
+
+                if (this.pollTimeout) {
+                    clearTimeout(this.pollTimeout);
+                    this.pollTimeout = null;
+                }
+
+                this.poll();
+            };
+        }
+    }
+
+    /**
+     * Escape text before injecting into the status indicator.
+     */
+    escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
     
     /**
@@ -84,8 +208,7 @@ class RealtimeClient {
                 {
                     method: 'GET',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+                        'Accept': 'application/json'
                     },
                     signal: controller.signal
                 }
@@ -103,6 +226,10 @@ class RealtimeClient {
             if (data.status === 'success') {
                 const events = data.data.events || [];
                 const onlineUsers = data.data.online_users || [];
+                this.updateConnectionStatus('connected', {
+                    lastSyncAt: new Date().toISOString(),
+                    lastErrorMessage: ''
+                });
                 
                 console.log(`[RealtimeClient] Received ${events.length} event(s), ${onlineUsers.length} user(s) online`);
                 
@@ -137,21 +264,28 @@ class RealtimeClient {
             }
             
         } catch (error) {
-            if (error.name === 'AbortError') {
-                // Expected when client stops or request times out.
-                if (this.isPolling) {
-                    this.errorCount = 0;
-                }
-            } else {
-                console.error('Polling error:', error);
+                if (error.name === 'AbortError') {
+                    // Expected when client stops or request times out.
+                    if (this.isPolling) {
+                        this.errorCount = 0;
+                        this.updateConnectionStatus('connected', {
+                            lastSyncAt: new Date().toISOString(),
+                            lastErrorMessage: ''
+                        });
+                    }
+                } else {
+                    console.error('Polling error:', error);
 
-                // Increment error count
-                this.errorCount = (this.errorCount || 0) + 1;
+                    // Increment error count
+                    this.errorCount = (this.errorCount || 0) + 1;
+                    this.updateConnectionStatus('reconnecting', {
+                        lastErrorMessage: error.message
+                    });
 
-                // If too many consecutive errors, stop polling and notify
-                if (this.errorCount >= 3) {
-                    this.stop();
-                    this.trigger('connection_error', { error: error.message });
+                    // If too many consecutive errors, stop polling and notify
+                    if (this.errorCount >= 3) {
+                        this.stop('failed');
+                        this.trigger('connection_error', { error: error.message });
 
                     if (this.app.modules.notifications) {
                         this.app.modules.notifications.show('Lost connection to server. Refresh to reconnect.', 'error');

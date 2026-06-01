@@ -23,6 +23,42 @@ const BECMI_CLASS_DATA = {
             '16-18': 0.10
         }
     },
+    barbarian: {
+        name: 'Barbarian',
+        primeRequisites: ['strength'],
+        minRequirements: {
+            strength: 9,
+            constitution: 9
+        },
+        alignmentRestriction: 'neutral_or_chaotic',
+        hitDie: 8,
+        maxLevel: 14,
+        armor: 'Leather armor, chain mail, and shields allowed; no plate mail or heavier armor',
+        weapons: 'Any weapons; improvised weapons use -2 instead of -4',
+        specialAbilities: 'Rage, Danger Sense, Iron Constitution, Fleet of Foot, Wilderness Mastery, Barbaric Intimidation',
+        description: 'A non-lawful wilderness warrior with d8 hit dice, Fighter-style combat progression, Rage, survival talents, and strong physical defenses.',
+        xpBonus: {
+            '13-15': 0.05,
+            '16-18': 0.10
+        },
+        startingGear: [
+            'Hand axe or spear',
+            'Hunting knife or dagger',
+            'Leather armor',
+            'Shield',
+            'Bedroll',
+            'Rope',
+            'Flint and steel'
+        ],
+        classFeatures: {
+            rage: '+2 to hit and damage with melee or thrown attacks; temporary HP equal to level; +2 saves vs Death/Poison and Breath; AC worsens by 2 while raging',
+            dangerSense: 'Party is surprised only on 1 on d6 while the Barbarian leads, unless extraordinary stealth or magic applies',
+            ironConstitution: '+2 saves vs poison and disease; natural healing gains +1 HP per day',
+            fleetOfFoot: '+10 ft movement in no armor or leather, +5 ft in chain, while not beyond moderate encumbrance',
+            wildernessMastery: 'Tracking, foraging, hunting, navigation, and hiding improve by level',
+            barbaricIntimidation: 'May force a reaction roll with +2 in their favor against creatures with HD no higher than Barbarian level'
+        }
+    },
     cleric: {
         name: 'Cleric',
         primeRequisites: ['wisdom'],
@@ -225,6 +261,13 @@ function validateClassRequirements(className, abilities) {
         return {
             valid: false,
             error: 'Druids must start as Neutral Clerics and become Druids at 9th level'
+        };
+    }
+
+    if (className === 'barbarian' && abilities.alignment === 'lawful') {
+        return {
+            valid: false,
+            error: 'Barbarians must be neutral or chaotic, not lawful'
         };
     }
     

@@ -54,6 +54,9 @@ class CharacterCreationModule {
          * @type {CharacterCreationEquipment|null}
          */
         this.equipmentCart = null;
+
+        this.equipmentFilterCategory = 'all';
+        this.equipmentSearchQuery = '';
         
         console.log('Character Creation Module initialized');
     }
@@ -71,6 +74,8 @@ class CharacterCreationModule {
         // Reset helpers
         this.goldCalculator = null;
         this.equipmentCart = null;
+        this.equipmentFilterCategory = 'all';
+        this.equipmentSearchQuery = '';
         
         this.renderStep();
     }
@@ -78,7 +83,14 @@ class CharacterCreationModule {
     /**
      * Hide character creation modal
      */
-    hideModal() {
+    hideModal(skipConfirmation = false) {
+        // Skip discard confirmation after a successful save.
+        if (skipConfirmation) {
+            $('#character-creation-modal').removeClass('show');
+            this.resetForm();
+            return;
+        }
+
         // Check if user has made progress (beyond step 1)
         if (this.currentStep > 1 || (this.characterData && Object.keys(this.characterData).length > 0)) {
             // Ask for confirmation before closing
@@ -214,6 +226,7 @@ class CharacterCreationModule {
         // Build class options with requirements
         const classOptions = [
             { value: 'fighter', label: 'Fighter', requirements: {} },
+            { value: 'barbarian', label: 'Barbarian', requirements: { strength: 9, constitution: 9 } },
             { value: 'cleric', label: 'Cleric', requirements: {} },
             { value: 'magic_user', label: 'Magic-User', requirements: {} },
             { value: 'thief', label: 'Thief', requirements: {} },
@@ -224,6 +237,7 @@ class CharacterCreationModule {
         ];
         
         const abilities = this.characterData;
+        const isBarbarian = this.characterData.class === 'barbarian';
         
         return `<div class="character-creation-step">
                 <div class="step-header">
@@ -300,7 +314,7 @@ class CharacterCreationModule {
                         <label for="character-alignment">Alignment:</label>
                         <select id="character-alignment" name="alignment" required>
                             <option value="">Select alignment...</option>
-                            <option value="lawful"${this.characterData.alignment === 'lawful' ? ' selected' : ''}>Lawful (Good, honorable, follows rules)</option>
+                            <option value="lawful"${this.characterData.alignment === 'lawful' && !isBarbarian ? ' selected' : ''}${isBarbarian ? ' disabled' : ''}>Lawful (Good, honorable, follows rules)</option>
                             <option value="neutral"${this.characterData.alignment === 'neutral' ? ' selected' : ''}>Neutral (Balanced, pragmatic)</option>
                             <option value="chaotic"${this.characterData.alignment === 'chaotic' ? ' selected' : ''}>Chaotic (Freedom, unpredictable, selfish)</option>
                         </select>
@@ -827,6 +841,7 @@ class CharacterCreationModule {
         const strength = this.characterData.strength || 10;
         const encumbrance = this.equipmentCart.calculateEncumbrance(strength);
         const remainingGold = this.equipmentCart.getRemainingGold();
+        const resultsLabel = this.getEquipmentResultsLabel(this.equipmentFilterCategory, this.equipmentSearchQuery);
 
         return `<div class="character-creation-step">
                 <div class="step-header">
@@ -862,34 +877,55 @@ class CharacterCreationModule {
                             <i class="fas fa-walking"></i>
                             <div>
                                 <span class="label">Movement:</span>
-                                <span class="value" id="movement-rate">${encumbrance.movementRate} ft/round</span>
+                                <span class="value" id="movement-rate">${encumbrance.normalSpeed}' normal, ${encumbrance.encounterSpeed}' encounter</span>
                             </div>
                         </div>
                     </div>
 
-                    <div class="equipment-shop-container">
+                    <div class="cc-equipment-toolbar">
+                        <div class="cc-equipment-search">
+                            <i class="fas fa-search" aria-hidden="true"></i>
+                            <input
+                                type="search"
+                                id="equipment-search-input"
+                                class="cc-equipment-search__input"
+                                placeholder="Search weapons, armor, gear, rations, rope..."
+                                value="${escapeHtml(this.equipmentSearchQuery)}"
+                            >
+                        </div>
+                        <div class="cc-equipment-toolbar__meta">
+                            <span class="cc-equipment-results" id="equipment-results-count">${resultsLabel}</span>
+                            <span class="cc-equipment-help">Starter shop only shows mundane gear useful for a new adventurer.</span>
+                        </div>
+                    </div>
+
+                    <div class="cc-equipment-layout">
                         <!-- Left side: Equipment catalog -->
-                        <div class="equipment-catalog">
-                            <h4>Available Equipment</h4>
-                            <div class="equipment-filters">
-                                <button class="filter-btn active" data-category="all">All</button>
-                                <button class="filter-btn" data-category="weapon">Weapons</button>
-                                <button class="filter-btn" data-category="armor">Armor</button>
-                                <button class="filter-btn" data-category="gear">Gear</button>
-                                <button class="filter-btn" data-category="container">Containers</button>
+                        <div class="cc-equipment-panel cc-equipment-catalog">
+                            <div class="cc-equipment-panel__header">
+                                <h4>Available Equipment</h4>
                             </div>
-                            <div class="equipment-list" id="equipment-list">
-                                ${this.renderEquipmentList('all')}
+                            <div class="cc-equipment-filters">
+                                <button class="cc-filter-btn ${this.equipmentFilterCategory === 'all' ? 'active' : ''}" data-category="all" type="button">All</button>
+                                <button class="cc-filter-btn ${this.equipmentFilterCategory === 'weapon' ? 'active' : ''}" data-category="weapon" type="button">Weapons</button>
+                                <button class="cc-filter-btn ${this.equipmentFilterCategory === 'armor' ? 'active' : ''}" data-category="armor" type="button">Armor</button>
+                                <button class="cc-filter-btn ${this.equipmentFilterCategory === 'gear' ? 'active' : ''}" data-category="gear" type="button">Gear</button>
+                                <button class="cc-filter-btn ${this.equipmentFilterCategory === 'container' ? 'active' : ''}" data-category="container" type="button">Containers</button>
+                            </div>
+                            <div class="cc-equipment-catalog__list" id="equipment-list">
+                                ${this.renderEquipmentList(this.equipmentFilterCategory, this.equipmentSearchQuery)}
                             </div>
                         </div>
 
                         <!-- Right side: Shopping cart -->
-                        <div class="shopping-cart">
-                            <h4>Shopping Cart</h4>
+                        <div class="cc-equipment-panel cc-shopping-cart">
+                            <div class="cc-equipment-panel__header">
+                                <h4>Shopping Cart</h4>
+                            </div>
                             <div class="cart-items" id="cart-items">
                                 ${this.renderShoppingCart()}
                             </div>
-                            <div class="cart-totals">
+                            <div class="cc-cart-totals">
                                 <div class="total-row">
                                     <span>Starting Gold:</span>
                                     <span>${this.characterData.starting_gold} gp</span>
@@ -1165,7 +1201,7 @@ class CharacterCreationModule {
                 <div class="skills-info">
                     <h4>Select General Skills</h4>
                     <p>You have <strong>${availableSlots}</strong> skill slot(s) available.</p>
-                    <p class="rules-reference"><i class="fas fa-book"></i> Per Rules Cyclopedia p. 81: Base 4 slots + Intelligence modifier. Roll 1d20 + ability modifier vs. difficulty when using skills.</p>
+                    <p class="rules-reference"><i class="fas fa-book"></i> Per Rules Cyclopedia p. 81-82: Base 4 slots + Intelligence modifier. Roll 1d20 against the governing ability score; a roll of 20 always fails.</p>
                     <div class="selection-counter">
                         <span class="counter-label">Selected:</span>
                         <span class="counter-value ${selectedCount >= availableSlots ? 'complete' : ''}" id="skills-counter">
@@ -1340,43 +1376,164 @@ class CharacterCreationModule {
      * @returns {string} HTML for equipment list
      * @private
      */
-    renderEquipmentList(category) {
+    renderEquipmentList(category, searchQuery = '') {
         if (!this.equipmentCart) {
             return '<p>Error: Equipment cart not initialized</p>';
         }
 
-        let items;
-        if (category === 'all') {
-            items = this.equipmentCart.getAvailableEquipment();
-        } else {
-            items = this.equipmentCart.getEquipmentByCategory(category);
-        }
+        const items = this.equipmentCart.searchEquipment(searchQuery, category);
 
         if (items.length === 0) {
-            return '<p class="no-items">No equipment in this category.</p>';
+            return '<p class="cc-equipment-empty">No starter equipment matches the current filter.</p>';
         }
 
-        return items.map(item => {
-            const imageSlug = this.getEquipmentImageSlug(item.name);
-            const imagePath = imageSlug ? `images/equipment/${imageSlug}.png` : '';
-            
-            return `
-            <div class="equipment-item" data-item-id="${item.item_id}">
-                ${imagePath ? `<div class="item-image">
-                    <img src="${imagePath}?v=${Date.now()}" alt="${item.name}" onerror="this.style.display='none'">
-                </div>` : ''}
-                <div class="item-info">
-                    <h5>${item.name}</h5>
-                    <div class="item-stats">
-                        <span class="item-cost">${item.cost_gp} gp</span>
-                        <span class="item-weight">${item.weight_cn} cn</span>
+        const groupedAllView = category === 'all' && !(searchQuery || '').trim();
+
+        if (groupedAllView) {
+            const sections = [
+                { key: 'armor', title: 'Armor & Shields' },
+                { key: 'weapon', title: 'Weapons & Ammunition' },
+                { key: 'container', title: 'Containers' },
+                { key: 'gear', title: 'Adventuring Gear' }
+            ];
+
+            return sections.map(section => {
+                const sectionItems = items.filter(item => item.ui_category === section.key);
+                if (sectionItems.length === 0) {
+                    return '';
+                }
+
+                return `
+                    <section class="cc-equipment-section">
+                        <h5 class="cc-equipment-section__title">${section.title}</h5>
+                        <div class="cc-equipment-list">
+                            ${sectionItems.map(item => this.renderEquipmentCard(item)).join('')}
+                        </div>
+                    </section>
+                `;
+            }).join('');
+        }
+
+        return `<div class="cc-equipment-list">${items.map(item => this.renderEquipmentCard(item)).join('')}</div>`;
+    }
+
+    renderEquipmentCard(item) {
+        const display = this.equipmentCart.getItemDisplayProperties(item);
+        const remainingGold = this.equipmentCart.getRemainingGold();
+        const tooExpensive = item.cost_gp > remainingGold;
+        const tags = [];
+
+        if (display.damage) {
+            tags.push(`${display.damage} damage`);
+        }
+
+        if (display.range) {
+            tags.push(`Range ${display.range}`);
+        }
+
+        if (display.handsDisplay) {
+            tags.push(display.handsDisplay);
+        }
+
+        if (display.acLabel) {
+            tags.push(display.acLabel);
+        }
+
+        if (item.capacity_cn) {
+            tags.push(`Capacity ${item.capacity_cn} cn`);
+        }
+
+        if (item.item_category === 'ammunition') {
+            tags.push('Ammunition');
+        }
+
+        const note = this.getEquipmentCardNote(item);
+        const icon = this.getEquipmentCardIcon(item);
+
+        return `
+            <article class="cc-equipment-card ${tooExpensive ? 'is-disabled' : ''}" data-item-id="${item.item_id}">
+                <div class="cc-equipment-card__header">
+                    <div class="cc-equipment-card__icon">
+                        <i class="fas ${icon}" aria-hidden="true"></i>
+                    </div>
+                    <div class="cc-equipment-card__title-group">
+                        <h5>${escapeHtml(item.name)}</h5>
+                        <p class="cc-equipment-card__meta">${this.equipmentCart.formatCost(item.cost_gp)} · ${this.equipmentCart.formatWeight(item.weight_cn)}</p>
                     </div>
                 </div>
-                <button class="btn btn-sm btn-primary add-to-cart" data-item-id="${item.item_id}">
-                    <i class="fas fa-plus"></i> Add
+                ${item.description ? `<p class="cc-equipment-card__description">${escapeHtml(item.description)}</p>` : ''}
+                ${tags.length > 0 ? `<div class="cc-equipment-card__tags">${tags.map(tag => `<span class="cc-equipment-tag">${escapeHtml(tag)}</span>`).join('')}</div>` : ''}
+                ${note ? `<p class="cc-equipment-card__note">${escapeHtml(note)}</p>` : ''}
+                <button class="btn btn-sm btn-primary add-to-cart" data-item-id="${item.item_id}" type="button" ${tooExpensive ? 'disabled' : ''}>
+                    <i class="fas fa-plus"></i> ${tooExpensive ? 'Too Expensive' : 'Add'}
                 </button>
-            </div>
-        `}).join('');
+            </article>
+        `;
+    }
+
+    getEquipmentResultsLabel(category, searchQuery = '') {
+        if (!this.equipmentCart) {
+            return 'Loading equipment...';
+        }
+
+        const items = this.equipmentCart.searchEquipment(searchQuery, category);
+        const count = items.length;
+        const labelMap = {
+            all: 'items',
+            weapon: 'weapons',
+            armor: 'armor pieces',
+            gear: 'gear items',
+            container: 'containers'
+        };
+        const baseLabel = labelMap[category] || 'items';
+
+        return `Showing ${count} ${baseLabel}`;
+    }
+
+    getEquipmentCardIcon(item) {
+        if (item.item_type === 'armor') {
+            return 'fa-shield-halved';
+        }
+
+        if (item.item_type === 'shield' || item.item_category === 'shield') {
+            return 'fa-shield';
+        }
+
+        if (item.item_type === 'weapon') {
+            return item.weapon_type === 'ranged' || item.item_category === 'ammunition'
+                ? 'fa-bullseye'
+                : 'fa-sword';
+        }
+
+        if (item.item_category === 'container') {
+            return 'fa-box-open';
+        }
+
+        if (item.item_category === 'light') {
+            return 'fa-fire-flame-curved';
+        }
+
+        if (item.item_category === 'food') {
+            return 'fa-drumstick-bite';
+        }
+
+        return 'fa-toolbox';
+    }
+
+    getEquipmentCardNote(item) {
+        if (!item.class_restrictions) {
+            return '';
+        }
+
+        if (Array.isArray(item.class_restrictions)) {
+            return `Class restricted: ${item.class_restrictions.join(', ')}`;
+        }
+
+        if (typeof item.class_restrictions === 'string' && item.class_restrictions.trim()) {
+            return `Class restricted: ${item.class_restrictions}`;
+        }
+
+        return '';
     }
     
     /**
@@ -1392,7 +1549,9 @@ class CharacterCreationModule {
             'Dagger': 'dagger',
             'Sword': 'short-sword',
             'Short Sword': 'short-sword',
+            'Bastard Sword': 'long-sword',
             'Two-handed Sword': 'long-sword',
+            'Long Sword': 'long-sword',
             'Normal Sword': 'long-sword',
             'Battle Axe': 'battle-axe',
             'Hand Axe': 'battle-axe',
@@ -1429,16 +1588,17 @@ class CharacterCreationModule {
      */
     renderShoppingCart() {
         if (!this.equipmentCart || this.equipmentCart.cart.length === 0) {
-            return '<p class="cart-empty">Cart is empty</p>';
+            return '<p class="cc-cart-empty">No gear selected yet. Add the basics you want to start with.</p>';
         }
 
         return this.equipmentCart.cart.map(cartItem => `
-            <div class="cart-item">
-                <div class="item-details">
-                    <h5>${cartItem.item.name}</h5>
-                    <p class="item-meta">${cartItem.item.cost_gp} gp × ${cartItem.quantity} = ${cartItem.item.cost_gp * cartItem.quantity} gp</p>
+            <div class="cc-cart-item">
+                <div class="cc-cart-item__details">
+                    <h5>${escapeHtml(cartItem.item.name)}</h5>
+                    <p class="cc-cart-item__meta">${this.equipmentCart.formatCost(cartItem.item.cost_gp)} each · ${this.equipmentCart.formatWeight(cartItem.item.weight_cn)}</p>
+                    <p class="cc-cart-item__meta">x${cartItem.quantity} = ${this.equipmentCart.formatCost(cartItem.item.cost_gp * cartItem.quantity)}</p>
                 </div>
-                <div class="item-quantity">
+                <div class="cc-cart-item__actions">
                     <button class="btn btn-xs quantity-decrease" data-item-id="${cartItem.item.item_id}">
                         <i class="fas fa-minus"></i>
                     </button>
@@ -1692,6 +1852,69 @@ class CharacterCreationModule {
         `;
     }
     
+    async handleHitPointRoll() {
+        const characterClass = this.characterData.class || 'fighter';
+        const classData = window.BECMI_CLASS_DATA[characterClass];
+        const hitDie = parseInt(classData.hitDie, 10);
+        const constitution = this.characterData.constitution || 10;
+        const conBonus = this.getConstitutionHPBonus(constitution);
+        const $button = $('#roll-hit-points');
+
+        try {
+            $button.prop('disabled', true);
+
+            let roll = Math.floor(Math.random() * hitDie) + 1;
+
+            if (this.app.modules.diceRoller) {
+                const diceResult = await this.app.modules.diceRoller.rollDie({
+                    sides: hitDie,
+                    title: 'Starting Hit Points',
+                    modifier: conBonus,
+                    text: `${classData.name} hit die with CON ${conBonus >= 0 ? '+' : ''}${conBonus}`
+                });
+
+                roll = diceResult.rolls[0];
+            }
+
+            this.characterData.hp_roll = roll;
+            this.characterData.hit_points = Math.max(1, roll + conBonus);
+            await this.renderStep();
+        } finally {
+            $button.prop('disabled', false);
+        }
+    }
+
+    async handleStartingGoldRoll() {
+        if (!this.goldCalculator) {
+            this.goldCalculator = new CharacterCreationGold();
+        }
+
+        const characterClass = this.characterData.class || 'fighter';
+        const formula = this.goldCalculator.getStartingGoldFormula(characterClass);
+        const result = this.goldCalculator.rollStartingGold(characterClass);
+        const $button = $('#roll-starting-gold');
+
+        try {
+            $button.prop('disabled', true);
+
+            if (this.app.modules.diceRoller) {
+                await this.app.modules.diceRoller.rollExpression({
+                    expression: `${formula.dice}d${formula.sides}`,
+                    title: 'Starting Gold',
+                    resolvedRolls: result.rolls,
+                    total: result.total,
+                    text: `${formula.description} × ${formula.multiplier} = ${result.gold} gp`
+                });
+            }
+
+            this.characterData.starting_gold = result.gold;
+            this.characterData.gold_roll_details = result.description;
+            await this.renderStep();
+        } finally {
+            $button.prop('disabled', false);
+        }
+    }
+
     
     /**
      * Calculate character statistics
@@ -1744,8 +1967,10 @@ class CharacterCreationModule {
         
         // Class change handler
         $('#character-class').off('change').on('change', () => {
+            this.updateAlignmentOptionsForClass();
             this.checkClassRequirements();
         });
+        this.updateAlignmentOptionsForClass();
 
         // ===== STEP 3: Adjust Ability Scores =====
         $('#prev-step-3').off('click').on('click', () => this.prevStep());
@@ -1769,20 +1994,8 @@ class CharacterCreationModule {
         $('#next-step-5').off('click').on('click', () => this.nextStep());
         
         // Roll starting gold button
-        $('#roll-starting-gold').off('click').on('click', () => {
-            if (!this.goldCalculator) {
-                this.goldCalculator = new CharacterCreationGold();
-            }
-            
-            const characterClass = this.characterData.class || 'fighter';
-            const result = this.goldCalculator.rollStartingGold(characterClass);
-            
-            // Save to character data
-            this.characterData.starting_gold = result.gold;
-            this.characterData.gold_roll_details = result.description;
-            
-            // Re-render step to show result
-            this.renderStep();
+        $('#roll-starting-gold').off('click').on('click', async () => {
+            await this.handleStartingGoldRoll();
         });
         
         // Re-roll gold button
@@ -1800,23 +2013,8 @@ class CharacterCreationModule {
         $('#next-step-4').off('click').on('click', () => this.nextStep());
         
         // Roll hit points button
-        $('#roll-hit-points').off('click').on('click', () => {
-            const characterClass = this.characterData.class || 'fighter';
-            const classData = window.BECMI_CLASS_DATA[characterClass];
-            const hitDie = classData.hitDie;
-            const constitution = this.characterData.constitution || 10;
-            const conBonus = this.getConstitutionHPBonus(constitution);
-            
-            // Roll the die
-            const roll = Math.floor(Math.random() * hitDie) + 1;
-            const totalHP = Math.max(1, roll + conBonus);
-            
-            // Save to character data
-            this.characterData.hp_roll = roll;
-            this.characterData.hit_points = totalHP;
-            
-            // Re-render step to show result
-            this.renderStep();
+        $('#roll-hit-points').off('click').on('click', async () => {
+            await this.handleHitPointRoll();
         });
         
         // Re-roll hit points button
@@ -1834,20 +2032,8 @@ class CharacterCreationModule {
         $('#next-step-5').off('click').on('click', () => this.nextStep());
         
         // Roll starting gold button
-        $('#roll-starting-gold').off('click').on('click', () => {
-            if (!this.goldCalculator) {
-                this.goldCalculator = new CharacterCreationGold();
-            }
-            
-            const characterClass = this.characterData.class || 'fighter';
-            const result = this.goldCalculator.rollStartingGold(characterClass);
-            
-            // Save to character data
-            this.characterData.starting_gold = result.gold;
-            this.characterData.gold_roll_details = result.description;
-            
-            // Re-render step to show result
-            this.renderStep();
+        $('#roll-starting-gold').off('click').on('click', async () => {
+            await this.handleStartingGoldRoll();
         });
         
         // Re-roll gold button
@@ -1903,14 +2089,15 @@ class CharacterCreationModule {
         });
 
         // Equipment category filters
-        $('.filter-btn').off('click').on('click', (e) => {
-            $('.filter-btn').removeClass('active');
-            $(e.target).addClass('active');
-            
-            const category = $(e.target).data('category');
-            $('#equipment-list').html(this.renderEquipmentList(category));
-            
-            // Re-attach add to cart buttons
+        $('.cc-filter-btn').off('click').on('click', (e) => {
+            this.equipmentFilterCategory = $(e.currentTarget).data('category');
+            this.refreshEquipmentCatalog();
+            this.setupEquipmentCartHandlers();
+        });
+
+        $('#equipment-search-input').off('input').on('input', (e) => {
+            this.equipmentSearchQuery = $(e.currentTarget).val();
+            this.refreshEquipmentCatalog();
             this.setupEquipmentCartHandlers();
         });
         
@@ -2055,14 +2242,26 @@ class CharacterCreationModule {
         
         // Update encumbrance class
         $('.summary-stat.weight')
-            .removeClass('light normal heavy overloaded')
+            .removeClass('unencumbered lightly_encumbered heavily_encumbered severely_encumbered overloaded immobile')
             .addClass(encumbrance.level);
         
         // Re-render cart items
         $('#cart-items').html(this.renderShoppingCart());
+        this.refreshEquipmentCatalog();
         
         // Re-attach handlers
         this.setupEquipmentCartHandlers();
+    }
+
+    refreshEquipmentCatalog() {
+        if (!this.equipmentCart) {
+            return;
+        }
+
+        $('#equipment-list').html(this.renderEquipmentList(this.equipmentFilterCategory, this.equipmentSearchQuery));
+        $('#equipment-results-count').text(this.getEquipmentResultsLabel(this.equipmentFilterCategory, this.equipmentSearchQuery));
+        $('.cc-filter-btn').removeClass('active');
+        $(`.cc-filter-btn[data-category="${this.equipmentFilterCategory}"]`).addClass('active');
     }
 
     /**
@@ -2248,6 +2447,11 @@ class CharacterCreationModule {
 
         if (!name || !classType || !alignment) {
             this.app.showError('Please fill in all required fields');
+            return false;
+        }
+
+        if (classType === 'barbarian' && alignment === 'lawful') {
+            this.app.showError('Barbarians must be neutral or chaotic, not lawful');
             return false;
         }
 
@@ -2525,6 +2729,28 @@ class CharacterCreationModule {
     }
 
     /**
+     * Keep alignment choices in sync with class restrictions.
+     */
+    updateAlignmentOptionsForClass() {
+        const classType = $('#character-class').val();
+        const $alignment = $('#character-alignment');
+        const $lawful = $alignment.find('option[value="lawful"]');
+
+        if (!$alignment.length || !$lawful.length) {
+            return;
+        }
+
+        if (classType === 'barbarian') {
+            $lawful.prop('disabled', true);
+            if ($alignment.val() === 'lawful') {
+                $alignment.val('');
+            }
+        } else {
+            $lawful.prop('disabled', false);
+        }
+    }
+
+    /**
      * Check class requirements
      */
     checkClassRequirements() {
@@ -2717,8 +2943,17 @@ class CharacterCreationModule {
                 class: this.characterData.class,
                 gender: $('#character-gender').val(),
                 age: $('#character-age').val(),
+                height: $('#character-height').val(),
+                weight: $('#character-weight').val(),
                 hair_color: $('#character-hair').val(),
-                eye_color: $('#character-eyes').val()
+                eye_color: $('#character-eyes').val(),
+                background: $('#character-background').val(),
+                strength: this.characterData.strength,
+                dexterity: this.characterData.dexterity,
+                constitution: this.characterData.constitution,
+                intelligence: this.characterData.intelligence,
+                wisdom: this.characterData.wisdom,
+                charisma: this.characterData.charisma
             };
             
             console.log('Generating portrait with data:', portraitData);
@@ -2797,7 +3032,7 @@ class CharacterCreationModule {
             
             if (response.status === 'success') {
                 this.app.showSuccess(`Character "${this.characterData.character_name}" created successfully!`);
-                this.hideModal();
+                this.hideModal(true);
                 
                 // Refresh character list
                 if (this.app.loadUserData) {
@@ -2980,6 +3215,10 @@ class CharacterCreationModule {
     resetForm() {
         this.currentStep = 1;
         this.characterData = {};
+        this.goldCalculator = null;
+        this.equipmentCart = null;
+        this.equipmentFilterCategory = 'all';
+        this.equipmentSearchQuery = '';
         $('#character-creation-content').empty();
     }
 
@@ -3008,14 +3247,3 @@ class CharacterCreationModule {
 
 // Export to window for use in app.js
 window.CharacterCreationModule = CharacterCreationModule;
-
-
-
-
-
-
-
-
-
-
-

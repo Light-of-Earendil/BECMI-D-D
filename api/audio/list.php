@@ -28,6 +28,7 @@
 
 require_once '../../app/core/database.php';
 require_once '../../app/core/security.php';
+require_once '../../app/services/audio-library.php';
 
 // Disable output compression
 if (function_exists('apache_setenv')) {
@@ -86,34 +87,37 @@ try {
         Security::sendErrorResponse('You do not have access to this session', 403);
     }
     
+    $audioLibrary = getAudioLibraryContext($db, $sessionId);
+    if (!$audioLibrary) {
+        Security::sendErrorResponse('Session not found', 404);
+    }
+
+    $scopeSessionIds = $audioLibrary['scope_session_ids'];
+    $placeholders = buildAudioLibraryPlaceholders($scopeSessionIds);
+
     // Build query with optional type filter
-    $query = "SELECT track_id, session_id, file_path, track_name, track_type, 
-                     duration_seconds, file_size_bytes, created_at
-              FROM session_audio_tracks
-              WHERE session_id = ?";
-    $params = [$sessionId];
+    $query = "SELECT t.track_id, t.session_id, t.file_path, t.track_name, t.track_type,
+                     t.duration_seconds, t.file_size_bytes, t.created_at, s.session_title
+              FROM session_audio_tracks t
+              JOIN game_sessions s ON t.session_id = s.session_id
+              WHERE t.session_id IN ($placeholders)";
+    $params = $scopeSessionIds;
     
     if ($trackType) {
-        $query .= " AND track_type = ?";
+        $query .= " AND t.track_type = ?";
         $params[] = $trackType;
     }
     
-    $query .= " ORDER BY track_type ASC, track_name ASC";
+    $query .= " ORDER BY CASE WHEN t.session_id = ? THEN 0 ELSE 1 END, t.track_type ASC, s.session_title ASC, t.track_name ASC";
+    $params[] = $sessionId;
     
     // Get all tracks for session
     $tracks = $db->select($query, $params);
     
     // Format response - ensure file_path is correct URL
-    $formattedTracks = array_map(function($track) {
+    $formattedTracks = array_map(function($track) use ($audioLibrary, $sessionId) {
         $filePath = $track['file_path'];
-        // Ensure path starts with / and doesn't have public/ prefix
-        $fileUrl = $filePath;
-        if (strpos($filePath, 'public/') === 0) {
-            $fileUrl = substr($filePath, 7); // Remove 'public/' prefix
-        }
-        if (strpos($fileUrl, '/') !== 0) {
-            $fileUrl = '/' . $fileUrl;
-        }
+        $fileUrl = normalizeAudioPublicPath($filePath);
         
         // Verify file exists
         $fullPath = dirname(dirname(__DIR__)) . '/public' . $fileUrl;
@@ -126,10 +130,13 @@ try {
         return [
             'track_id' => (int) $track['track_id'],
             'session_id' => (int) $track['session_id'],
+            'source_session_id' => (int) $track['session_id'],
+            'source_session_title' => $track['session_title'],
             'track_name' => $track['track_name'],
             'track_type' => $track['track_type'],
             'file_path' => $fileUrl,
             'file_exists' => $fileExists,
+            'is_shared_from_campaign' => $audioLibrary['scope_type'] === 'campaign' && (int) $track['session_id'] !== $sessionId,
             'duration_seconds' => $track['duration_seconds'] !== null ? (int) $track['duration_seconds'] : null,
             'file_size_bytes' => (int) $track['file_size_bytes'],
             'created_at' => $track['created_at']
@@ -137,7 +144,14 @@ try {
     }, $tracks);
     
     Security::sendSuccessResponse([
-        'tracks' => $formattedTracks
+        'tracks' => $formattedTracks,
+        'library_scope' => [
+            'type' => $audioLibrary['scope_type'],
+            'campaign_id' => $audioLibrary['campaign_id'],
+            'session_id' => $audioLibrary['session_id'],
+            'session_title' => $audioLibrary['session_title'],
+            'shared_session_count' => count($audioLibrary['scope_session_ids'])
+        ]
     ]);
     
 } catch (Exception $e) {

@@ -26,7 +26,7 @@ if (!$apiKey) {
 }
 
 $apiUrl = 'https://api.together.xyz/v1/images/generations';
-$model = 'black-forest-labs/FLUX.1-schnell-Free';
+$model = 'black-forest-labs/FLUX.2-pro';
 
 // Function to create prompt for equipment image
 function createEquipmentPrompt($item) {
@@ -67,10 +67,6 @@ function generateEquipmentImage($item, $apiKey, $apiUrl, $model) {
     $requestData = [
         'model' => $model,
         'prompt' => $prompt,
-        'width' => 1024,
-        'height' => 768,
-        'steps' => 4,
-        'n' => 1,
         'response_format' => 'b64_json'
     ];
     

@@ -1,0 +1,31 @@
+- generic [active] [ref=e1]:
+  - text:       +  + 
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - heading "Welcome to BECMI Manager" [level=2] [ref=e5]
+      - paragraph [ref=e6]: Please log in to continue
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - generic [ref=e10]: "Username or Email:"
+        - textbox "Username or Email:" [ref=e11]
+      - generic [ref=e12]:
+        - generic [ref=e13]: "Password:"
+        - generic [ref=e14]:
+          - textbox "Password:" [ref=e15]
+          - button "Show password" [ref=e16] [cursor=pointer]:
+            - generic: 
+      - generic [ref=e17]:
+        - button "Login" [ref=e18] [cursor=pointer]
+        - button "Register" [ref=e19] [cursor=pointer]
+      - generic [ref=e20]:
+        - generic [ref=e22]: or
+        - iframe [ref=e73]:
+          - button "Fortsæt med Google. Åbnes på en ny fane" [ref=f6e3] [cursor=pointer]:
+            - generic [ref=f6e5]:
+              - img [ref=f6e7]
+              - generic [ref=f6e14]: Fortsæt med Google
+        - paragraph [ref=e38]: Continue with your Google account.
+      - button "Forgot password?" [ref=e40] [cursor=pointer]
+  - text:   
+  - generic:
+    - generic: 2 3 3 4 4 3 3 2 1 2 3 4 5 6 1 2 3 4 5 6 7 8 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 10 11 12 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20

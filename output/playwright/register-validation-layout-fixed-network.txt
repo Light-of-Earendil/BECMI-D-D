@@ -1,0 +1,12 @@
+[GET] https://becmi.snilld-api.dk/api/auth/verify.php?soft=1 => [200] 
+[GET] https://becmi.snilld-api.dk/api/auth/verify.php?soft=1 => [200] 
+[GET] https://becmi.snilld-api.dk/api/auth/verify.php?soft=1 => [200] 
+[GET] https://becmi.snilld-api.dk/api/auth/verify.php?soft=1 => [200] 
+[GET] https://becmi.snilld-api.dk/api/auth/verify.php?soft=1 => [200] 
+[GET] https://becmi.snilld-api.dk/api/auth/verify.php?soft=1 => [200] 
+[GET] https://accounts.google.com/gsi/button?theme=outline&size=large&shape=pill&text=continue_with&width=320&is_fedcm_supported=true&client_id=393192737499-agjpmq79qctkssn1c18rdvrn6nu8vj6n.apps.googleusercontent.com&iframe_id=gsi_980027_963562&cas=mmsH6lUs6s%2BkXGPB%2FW%2FbSVru8KwVNJER7qxGtvHgPWk => [FAILED] net::ERR_ABORTED
+[GET] https://becmi.snilld-api.dk/api/auth/verify.php?soft=1 => [200] 
+[GET] https://accounts.google.com/gsi/button?theme=outline&size=large&shape=pill&text=continue_with&width=320&is_fedcm_supported=true&client_id=393192737499-agjpmq79qctkssn1c18rdvrn6nu8vj6n.apps.googleusercontent.com&iframe_id=gsi_980027_963562&cas=mmsH6lUs6s%2BkXGPB%2FW%2FbSVru8KwVNJER7qxGtvHgPWk => [FAILED] net::ERR_ABORTED
+[POST] https://play.google.com/log?format=json&hasfast=true&authuser=0 => [200] 
+[POST] https://becmi.snilld-api.dk/api/auth/register.php => [422] 
+[GET] https://becmi.snilld-api.dk/api/auth/verify.php?soft=1 => [200] 

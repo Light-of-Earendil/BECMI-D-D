@@ -1,3 +1,19 @@
+<?php
+$googleOAuthConfigFile = __DIR__ . '/../config/google-oauth.php';
+$googleOAuthConfig = file_exists($googleOAuthConfigFile)
+    ? require $googleOAuthConfigFile
+    : [
+        'enabled' => (getenv('GOOGLE_LOGIN_ENABLED') ?: '1') !== '0',
+        'client_id' => getenv('GOOGLE_CLIENT_ID') ?: ''
+    ];
+
+$googleClientId = trim((string) ($googleOAuthConfig['client_id'] ?? ''));
+$googleLoginEnabled = !empty($googleClientId) && (($googleOAuthConfig['enabled'] ?? true) !== false);
+$googleAuthPublicConfig = [
+    'enabled' => $googleLoginEnabled,
+    'clientId' => $googleLoginEnabled ? $googleClientId : ''
+];
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,6 +24,13 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="css/main.css?t=<?php echo time(); ?>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <?php if ($googleLoginEnabled): ?>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <?php endif; ?>
+    <script>
+        window.BECMI_RUNTIME_CONFIG = window.BECMI_RUNTIME_CONFIG || {};
+        window.BECMI_RUNTIME_CONFIG.googleAuth = <?php echo json_encode($googleAuthPublicConfig, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_SLASHES); ?>;
+    </script>
 </head>
 <body>
     <!-- Loading Screen -->
@@ -158,12 +181,12 @@
                 <form id="login-form" class="auth-form">
                     <div class="form-group">
                         <label for="username">Username or Email:</label>
-                        <input type="text" id="username" name="username" required>
+                        <input type="text" id="username" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required>
                     </div>
                     <div class="form-group">
                         <label for="password">Password:</label>
                         <div class="password-input-wrapper">
-                            <input type="password" id="password" name="password" required>
+                            <input type="password" id="password" name="password" autocomplete="current-password" required>
                             <button type="button" class="password-toggle-btn" aria-label="Show password">
                                 <i class="fas fa-eye"></i>
                             </button>
@@ -172,6 +195,13 @@
                     <div class="form-actions">
                         <button type="submit" class="btn btn-primary">Login</button>
                         <button type="button" id="show-register" class="btn btn-secondary">Register</button>
+                    </div>
+                    <div id="google-login-section" class="social-login-section" hidden>
+                        <div class="auth-divider">
+                            <span>or</span>
+                        </div>
+                        <div id="google-login-button" class="google-login-button" aria-live="polite"></div>
+                        <p class="google-login-status" id="google-login-status">Continue with your Google account.</p>
                     </div>
                     <div class="form-footnote">
                         <button type="button" id="show-forgot-password" class="link-button">Forgot password?</button>
@@ -192,16 +222,16 @@
                 <form id="register-form" class="auth-form">
                     <div class="form-group">
                         <label for="reg-username">Username:</label>
-                        <input type="text" id="reg-username" name="username" required>
+                        <input type="text" id="reg-username" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required>
                     </div>
                     <div class="form-group">
                         <label for="reg-email">Email:</label>
-                        <input type="email" id="reg-email" name="email" required>
+                        <input type="email" id="reg-email" name="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" required>
                     </div>
                     <div class="form-group">
                         <label for="reg-password">Password:</label>
                         <div class="password-input-wrapper">
-                            <input type="password" id="reg-password" name="password" required>
+                            <input type="password" id="reg-password" name="password" autocomplete="new-password" required>
                             <button type="button" class="password-toggle-btn" aria-label="Show password">
                                 <i class="fas fa-eye"></i>
                             </button>
@@ -210,7 +240,7 @@
                     <div class="form-group">
                         <label for="reg-confirm-password">Confirm Password:</label>
                         <div class="password-input-wrapper">
-                            <input type="password" id="reg-confirm-password" name="confirm_password" required>
+                            <input type="password" id="reg-confirm-password" name="confirm_password" autocomplete="new-password" required>
                             <button type="button" class="password-toggle-btn" aria-label="Show password">
                                 <i class="fas fa-eye"></i>
                             </button>
@@ -236,7 +266,7 @@
                 <form id="forgot-password-form" class="auth-form">
                     <div class="form-group">
                         <label for="forgot-email">Email:</label>
-                        <input type="email" id="forgot-email" name="email" required>
+                        <input type="email" id="forgot-email" name="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" required>
                     </div>
                     <div class="form-actions">
                         <button type="submit" class="btn btn-primary">Send Reset Link</button>
@@ -258,19 +288,19 @@
                 <form id="password-reset-form" class="auth-form">
                     <div class="form-group">
                         <label for="reset-selector">Reset Selector:</label>
-                        <input type="text" id="reset-selector" name="selector" required>
+                        <input type="text" id="reset-selector" name="selector" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" required>
                     </div>
                     <div class="form-group">
                         <label for="reset-token">Reset Token:</label>
-                        <input type="text" id="reset-token" name="token" required>
+                        <input type="text" id="reset-token" name="token" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" required>
                     </div>
                     <div class="form-group">
                         <label for="reset-password">New Password:</label>
-                        <input type="password" id="reset-password" name="password" required>
+                        <input type="password" id="reset-password" name="password" autocomplete="new-password" required>
                     </div>
                     <div class="form-group">
                         <label for="reset-confirm-password">Confirm New Password:</label>
-                        <input type="password" id="reset-confirm-password" name="confirm_password" required>
+                        <input type="password" id="reset-confirm-password" name="confirm_password" autocomplete="new-password" required>
                     </div>
                     <div class="form-actions">
                         <button type="submit" class="btn btn-primary">Update Password</button>
@@ -312,6 +342,9 @@
             <div class="modal-header">
                 <h2>Edit Character</h2>
                 <p>Update your character's information</p>
+                <button type="button" class="modal-close" id="close-character-edit-modal" aria-label="Close edit character dialog">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
             <div id="character-edit-content">
                 <!-- Character edit form will be loaded here -->
@@ -337,6 +370,7 @@
     <script src="js/core/notification-manager.js?t=<?php echo time(); ?>"></script>
     <script src="js/core/error-handler.js?t=<?php echo time(); ?>"></script>
     <script src="js/core/offline-detector.js?t=<?php echo time(); ?>"></script>
+    <script src="js/core/dice-roller.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/auth.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/dashboard.js?t=<?php echo time(); ?>"></script>
     <script src="js/modules/character-sheet.js?t=<?php echo time(); ?>"></script>

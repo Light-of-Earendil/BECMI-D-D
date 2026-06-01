@@ -1,0 +1,7 @@
+Total messages: 2 (Errors: 2, Warnings: 0)
+
+[ERROR] [2026-03-27T01:18:27.849Z] Global error caught: {errorId: client_mn87q39l_6ypic7, error: Object, context: Object} @ https://becmi.snilld-api.dk/public/js/main.js?t=1774574307:18
+[ERROR] [2026-03-27T01:18:27.850Z] Global error: Error: Synthetic release-risk probe
+    at eval (eval at evaluate (:301:30), <anonymous>:9:12)
+    at UtilityScript.evaluate (<anonymous>:303:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44) @ https://becmi.snilld-api.dk/public/js/main.js?t=1774574307:18

@@ -255,8 +255,11 @@ try {
             // Check if character qualifies for level-up
             $canLevelUp = false;
             $nextLevel = $currentLevel + 1;
+            $xpRequiredForNextLevel = BECMIRulesEngine::getExperienceForNextLevel($character['class'], $currentLevel);
             
-            if (isset($xpThresholds[$nextLevel]) && $newXp >= $xpThresholds[$nextLevel]) {
+            if ($xpRequiredForNextLevel !== null && $newXp >= $xpRequiredForNextLevel) {
+                $canLevelUp = true;
+            } elseif ($xpRequiredForNextLevel === null && isset($xpThresholds[$nextLevel]) && $newXp >= $xpThresholds[$nextLevel]) {
                 $canLevelUp = true;
             }
             
@@ -295,7 +298,7 @@ try {
             
             if ($canLevelUp) {
                 $characterData['next_level'] = $nextLevel;
-                $characterData['xp_for_next_level'] = $xpThresholds[$nextLevel];
+                $characterData['xp_for_next_level'] = $xpRequiredForNextLevel ?? $xpThresholds[$nextLevel];
                 $charactersReadyToLevelUp[] = $characterData;
             }
             
@@ -371,4 +374,3 @@ try {
     
     Security::sendErrorResponse($errorMessage, 500);
 }
-

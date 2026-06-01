@@ -26,6 +26,7 @@
     const debugEnabled = debugFromQuery === '1' || debugFromStorage === '1';
 
     window.__BECMI_DEBUG__ = debugEnabled;
+    window.DEBUG_MODE = debugEnabled; // Backward-compatible alias for older debug checks.
 
     // Keep warnings/errors visible; silence console.log/info/debug unless debug is enabled.
     console.log = debugEnabled ? addTimestamp(originalLog) : noOp;
@@ -214,7 +215,8 @@ window.BECMIUtils = {
         const requirements = {
             'dwarf': { constitution: 9 },
             'elf': { intelligence: 9, constitution: 9 },
-            'halfling': { dexterity: 9, constitution: 9 }
+            'halfling': { dexterity: 9, constitution: 9 },
+            'barbarian': { strength: 9, constitution: 9 }
         };
         
         const req = requirements[classType];
@@ -283,7 +285,8 @@ window.BECMIConstants = {
         { value: 'thief', label: 'Thief', hitDie: 4 },
         { value: 'dwarf', label: 'Dwarf', hitDie: 8 },
         { value: 'elf', label: 'Elf', hitDie: 6 },
-        { value: 'halfling', label: 'Halfling', hitDie: 6 }
+        { value: 'halfling', label: 'Halfling', hitDie: 6 },
+        { value: 'barbarian', label: 'Barbarian', hitDie: 8 }
     ],
     
     ALIGNMENTS: [
@@ -324,17 +327,14 @@ window.BECMIConstants = {
  * 
  * @param {string} skillName - Name of the skill
  * @param {number} abilityScore - The ability score to roll against
- * @param {number} abilityModifier - The ability modifier (added to the roll)
+ * @param {number} abilityModifier - Legacy parameter kept for compatibility; not applied to the roll
  */
-window.rollSkillCheck = function(skillName, abilityScore, abilityModifier) {
-    console.log(`Rolling skill check for ${skillName} (Ability: ${abilityScore}, Modifier: ${abilityModifier})`);
+window.rollSkillCheck = async function(skillName, abilityScore, abilityModifier = 0) {
+    console.log(`Rolling skill check for ${skillName} (Ability: ${abilityScore})`);
     
     // Roll 1d20
     const roll = Math.floor(Math.random() * 20) + 1;
-    
-    // Add ability modifier to the roll
-    const modifiedRoll = roll + abilityModifier;
-    
+
     // Per BECMI rules: Roll of 20 always fails, no matter how high the ability score
     let success = false;
     let message = '';
@@ -342,12 +342,23 @@ window.rollSkillCheck = function(skillName, abilityScore, abilityModifier) {
     if (roll === 20) {
         success = false;
         message = `Rolled a natural 20 - automatic failure!`;
-    } else if (modifiedRoll <= abilityScore) {
+    } else if (roll <= abilityScore) {
         success = true;
-        message = `Success! Rolled ${roll}${abilityModifier !== 0 ? ` + ${abilityModifier} = ${modifiedRoll}` : ''} (needed ≤ ${abilityScore})`;
+        message = `Success! Rolled ${roll} (needed <= ${abilityScore})`;
     } else {
         success = false;
-        message = `Failure! Rolled ${roll}${abilityModifier !== 0 ? ` + ${abilityModifier} = ${modifiedRoll}` : ''} (needed ≤ ${abilityScore})`;
+        message = `Failure! Rolled ${roll} (needed <= ${abilityScore})`;
+    }
+
+    if (window.becmiApp && window.becmiApp.modules && window.becmiApp.modules.diceRoller) {
+        await window.becmiApp.modules.diceRoller.rollDie({
+            sides: 20,
+            title: `${skillName} Check`,
+            result: roll,
+            needed: `Need <= ${abilityScore}`,
+            text: `General skill check against ability ${abilityScore}`,
+            outcome: roll === 20 ? 'fumble' : (success ? 'success' : 'failure')
+        });
     }
     
     // Show result notification
@@ -371,7 +382,7 @@ window.rollSkillCheck = function(skillName, abilityScore, abilityModifier) {
         skillName: skillName,
         roll: roll,
         abilityModifier: abilityModifier,
-        modifiedRoll: modifiedRoll,
+        modifiedRoll: roll,
         abilityScore: abilityScore,
         success: success,
         message: message
@@ -384,7 +395,7 @@ window.rollSkillCheck = function(skillName, abilityScore, abilityModifier) {
  * @param {number} saveValue - Target value to roll against (roll must be >= this value to succeed)
  * @param {string} saveKey - Key identifier for the save type (e.g., "death_ray")
  */
-window.rollSavingThrow = function(saveName, saveValue, saveKey) {
+window.rollSavingThrow = async function(saveName, saveValue, saveKey) {
     console.log(`Rolling saving throw for ${saveName} (Target: ${saveValue})`);
     
     // Roll 1d20
@@ -409,6 +420,17 @@ window.rollSavingThrow = function(saveName, saveValue, saveKey) {
         message = `Failure! Rolled ${roll} (needed ≥ ${saveValue})`;
     }
     
+    if (window.becmiApp && window.becmiApp.modules && window.becmiApp.modules.diceRoller) {
+        await window.becmiApp.modules.diceRoller.rollDie({
+            sides: 20,
+            title: `${saveName} Save`,
+            result: roll,
+            needed: `Need >= ${saveValue}`,
+            text: `Saving throw target ${saveValue}`,
+            outcome: roll === 20 ? 'critical' : (roll === 1 ? 'fumble' : (success ? 'success' : 'failure'))
+        });
+    }
+
     // Show result notification
     const resultText = `${saveName} Save: ${message}`;
     

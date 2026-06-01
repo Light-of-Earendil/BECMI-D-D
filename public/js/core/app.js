@@ -79,6 +79,7 @@ class BECMIApp {
         this.modules.notificationManager = new NotificationManager(this);
         this.modules.errorHandler = new ErrorHandler(this);
         this.modules.offlineDetector = new OfflineDetector(this);
+        this.modules.diceRoller = new DiceRoller(this);
         
         // Initialize feature modules
         this.modules.auth = new AuthModule(this);
@@ -119,14 +120,9 @@ class BECMIApp {
      */
     async checkAuthentication() {
         try {
-            const token = localStorage.getItem('auth_token');
-            if (!token) {
-                // No token - show login without error noise
-                this.showLoginModal();
-                return false;
-            }
+            const hasLegacyToken = Boolean(localStorage.getItem('auth_token'));
             
-            // Verify token with server (with explicit timeout handling)
+            // Verify the current cookie-backed session with the server.
             let response;
             try {
                 response = await Promise.race([
@@ -139,8 +135,9 @@ class BECMIApp {
                 ]);
             } catch (fetchError) {
                 console.warn('Authentication request failed:', fetchError);
-                // If request fails, clear token and show login
-                localStorage.removeItem('auth_token');
+                if (hasLegacyToken) {
+                    localStorage.removeItem('auth_token');
+                }
                 this.showLoginModal();
                 return false;
             }
@@ -153,6 +150,10 @@ class BECMIApp {
                 this.state.user = user;
                 this.state.csrfToken = csrfToken;
 
+                if (hasLegacyToken) {
+                    localStorage.removeItem('auth_token');
+                }
+
                 this.updateUserInterface();
                 await this.loadUserData();
                 
@@ -160,15 +161,15 @@ class BECMIApp {
                 this.navigateToView('dashboard');
                 return true;
             } else {
-                // Invalid response - clear token and show login
-                localStorage.removeItem('auth_token');
+                if (hasLegacyToken) {
+                    localStorage.removeItem('auth_token');
+                }
                 this.showLoginModal();
                 return false;
             }
             
         } catch (error) {
             console.warn('Authentication check failed:', error);
-            // Clear token if it exists
             if (localStorage.getItem('auth_token')) {
                 localStorage.removeItem('auth_token');
             }
@@ -572,6 +573,9 @@ class BECMIApp {
     showLoginModal() {
         $('#app').removeClass('loaded');
         $('#login-modal').addClass('show');
+        if (this.modules.auth && typeof this.modules.auth.setupGoogleLogin === 'function') {
+            this.modules.auth.setupGoogleLogin();
+        }
     }
     
     /**

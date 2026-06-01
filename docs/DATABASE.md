@@ -64,7 +64,7 @@ Character data and stats.
 - `user_id` (INT, FK -> users.user_id, NOT NULL)
 - `session_id` (INT, FK -> game_sessions.session_id, NULL)
 - `character_name` (VARCHAR(50), NOT NULL)
-- `class` (ENUM, NOT NULL)
+- `class` (ENUM: `fighter`, `magic_user`, `cleric`, `thief`, `dwarf`, `elf`, `halfling`, `druid`, `mystic`, `barbarian`; NOT NULL)
 - `level` (INT, DEFAULT 1)
 - `experience_points` (INT, DEFAULT 0)
 - `current_hp` (INT, NOT NULL)
@@ -361,7 +361,7 @@ SELECT monster_id, name, armor_class, hit_dice, move_ground,
        move_flying, move_swimming, attacks, damage, no_appearing,
        save_as, morale, treasure_type, intelligence, alignment,
        xp_value, description, image_url, monster_type, terrain,
-       load, created_at, updated_at
+       `load`, created_at, updated_at
 FROM monsters WHERE monster_id = ?;
 ```
 

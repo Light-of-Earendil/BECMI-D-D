@@ -1,0 +1,7 @@
+interface:
+  display_name: "BECMI VTT Context"
+  short_description: "Codex workflow for BECMI VTT tasks"
+  default_prompt: "Use $becmi-vtt-project-context before changing code or documentation in the BECMI VTT repository. Read AGENTS.md, PLAN.md, MEMORY.md, and TOOLS.md first."
+
+policy:
+  allow_implicit_invocation: true

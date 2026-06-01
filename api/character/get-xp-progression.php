@@ -69,7 +69,7 @@ try {
     
     // Get XP progression for the character's class
     $xpProgression = [];
-    $maxLevel = 36; // Most classes can go to 36
+    $maxLevel = BECMIRulesEngine::getMaxLevelForClass($character['class']);
     
     for ($level = 1; $level <= $maxLevel; $level++) {
         $requiredXp = BECMIRulesEngine::getExperienceForNextLevel($character['class'], $level);

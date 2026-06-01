@@ -53,8 +53,6 @@ try {
     $loginIdentifier = Security::sanitizeInput($input['username']);
     $password = $input['password'];
     
-    error_log("LOGIN ATTEMPT: Identifier: $loginIdentifier, Password length: " . strlen($password));
-    
     // Check rate limiting (more lenient for development)
     require_once '../../app/core/constants.php';
     $rateLimitKey = "login_" . Security::getClientIP();
@@ -68,6 +66,9 @@ try {
     
     // Determine if identifier is email or username
     $isEmail = Security::validateEmail($loginIdentifier);
+    Security::debugLog('Login attempt received', [
+        'identifier_type' => $isEmail ? 'email' : 'username'
+    ]);
     
     // Find user by username or email (include is_moderator)
     if ($isEmail) {
@@ -75,48 +76,51 @@ try {
             "SELECT user_id, username, email, password_hash, is_active, is_moderator FROM users WHERE email = ?",
             [$loginIdentifier]
         );
-        error_log("LOGIN: Searching by email: $loginIdentifier");
     } else {
         // Validate username format if it's not an email
         if (!Security::validateUsername($loginIdentifier)) {
-            error_log("LOGIN FAILED: Invalid username format for: $loginIdentifier");
+            Security::logSecurityEvent('login_failed', ['reason' => 'invalid_username_format']);
             Security::sendValidationErrorResponse(['username' => 'Invalid username format']);
         }
         $user = $db->selectOne(
             "SELECT user_id, username, email, password_hash, is_active, is_moderator FROM users WHERE username = ?",
             [$loginIdentifier]
         );
-        error_log("LOGIN: Searching by username: $loginIdentifier");
     }
     
     if (!$user) {
-        error_log("LOGIN FAILED: User not found: $loginIdentifier");
-        Security::logSecurityEvent('login_failed', ['identifier' => $loginIdentifier, 'reason' => 'user_not_found']);
+        Security::logSecurityEvent('login_failed', [
+            'identifier_type' => $isEmail ? 'email' : 'username',
+            'reason' => 'user_not_found'
+        ]);
         Security::sendErrorResponse('Invalid username/email or password', 401);
     }
     
-    error_log("LOGIN: User found - user_id: {$user['user_id']}, is_active: {$user['is_active']}");
-    error_log("LOGIN: Password hash from DB: " . substr($user['password_hash'], 0, 50) . "...");
-    
     // Check if user is active
     if (!$user['is_active']) {
-        error_log("LOGIN FAILED: Account disabled for user_id: {$user['user_id']}");
-        Security::logSecurityEvent('login_failed', ['username' => $username, 'reason' => 'account_disabled']);
+        Security::logSecurityEvent('login_failed', [
+            'reason' => 'account_disabled',
+            'user_id' => (int) $user['user_id']
+        ]);
         Security::sendErrorResponse('Account is disabled', 403);
     }
     
     // Verify password
-    error_log("LOGIN: Verifying password...");
     $passwordVerified = Security::verifyPassword($password, $user['password_hash']);
-    error_log("LOGIN: Password verification result: " . ($passwordVerified ? 'SUCCESS' : 'FAILED'));
     
     if (!$passwordVerified) {
-        error_log("LOGIN FAILED: Invalid password for identifier: $loginIdentifier (user_id: {$user['user_id']})");
-        Security::logSecurityEvent('login_failed', ['identifier' => $loginIdentifier, 'reason' => 'invalid_password']);
+        Security::logSecurityEvent('login_failed', [
+            'identifier_type' => $isEmail ? 'email' : 'username',
+            'reason' => 'invalid_password',
+            'user_id' => (int) $user['user_id']
+        ]);
         Security::sendErrorResponse('Invalid username/email or password', 401);
     }
-    
-    error_log("LOGIN: Password verified successfully for user_id: {$user['user_id']}");
+
+    // Rotate the PHP session identifier on authentication to prevent fixation.
+    if (session_status() !== PHP_SESSION_ACTIVE || !@session_regenerate_id(true)) {
+        Security::sendErrorResponse('Failed to secure session', 500);
+    }
     
     // Create session
     $sessionId = Security::generateSessionId();
@@ -145,7 +149,7 @@ try {
     session_write_close();
     
     // Log successful login (after session is written)
-    Security::logSecurityEvent('login_success', ['username' => $user['username'], 'identifier' => $loginIdentifier]);
+    Security::logSecurityEvent('login_success', ['user_id' => (int) $user['user_id']]);
     
     // Clear output buffer
     while (ob_get_level()) {
@@ -159,6 +163,7 @@ try {
     echo json_encode([
         'status' => 'success',
         'message' => 'Login successful',
+        'request_id' => Security::getRequestId(),
         'data' => [
             'user_id' => $user['user_id'],
             'username' => $user['username'],
@@ -172,7 +177,11 @@ try {
     exit;
     
 } catch (Exception $e) {
-    error_log("Login error: " . $e->getMessage());
+    Security::debugLog('Login error', [
+        'message' => $e->getMessage(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine()
+    ]);
     Security::sendErrorResponse('An error occurred during login', 500);
 }
 ?>

@@ -108,6 +108,76 @@ Authenticate user and create session.
 - Case-insensitive username matching
 - Inactive users cannot login
 
+#### POST `/api/auth/google-login.php`
+Authenticate user via Google Identity Services credential and create the normal session cookie.
+
+**Auth**: None (public endpoint)
+
+**Request**:
+```json
+{
+  "credential": "string (Google ID token)"
+}
+```
+
+**Response (Success)**:
+```json
+{
+  "status": "success",
+  "message": "Google login successful",
+  "data": {
+    "user_id": 1,
+    "username": "player1",
+    "email": "player1@example.com",
+    "is_moderator": false,
+    "login_provider": "google",
+    "is_new_account": false
+  }
+}
+```
+
+**Status Codes**: 200, 403, 429, 500
+
+**Notes**:
+- Requires `GOOGLE_CLIENT_ID` to be configured on the server
+- Verified Google emails can auto-link to an existing local account with the same email
+
+#### POST `/api/auth/request-password-reset.php`
+Request a password reset email for an active account.
+
+**Auth**: None (public endpoint)
+
+**Request**:
+```json
+{
+  "email": "string"
+}
+```
+
+**Response (Success)**:
+```json
+{
+  "status": "success",
+  "message": "If the email exists in our records, a reset link has been sent."
+}
+```
+
+**Response (Rate Limited)**:
+```json
+{
+  "status": "error",
+  "message": "Too many password reset requests. Please wait before trying again."
+}
+```
+
+**Status Codes**: 200, 422, 429, 500
+
+**Rate Limiting**: 5 requests per 15 minutes per session/IP
+
+**Notes**:
+- Returns the same generic success message for unknown email addresses to avoid account enumeration
+- Returns HTTP 429 only when the password reset rate limit is exceeded
+
 ---
 
 ### Character Management
@@ -123,7 +193,7 @@ Create a new character.
 ```json
 {
   "character_name": "string (max 50 chars)",
-  "class": "fighter|cleric|magic_user|thief|dwarf|elf|halfling",
+  "class": "fighter|cleric|magic_user|thief|dwarf|elf|halfling|barbarian",
   "alignment": "lawful|neutral|chaotic",
   "strength": 3-18,
   "dexterity": 3-18,

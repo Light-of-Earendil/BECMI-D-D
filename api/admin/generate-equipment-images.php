@@ -84,7 +84,7 @@ try {
     $apiKey = $together_AI_api_key;
     
     $apiUrl = 'https://api.together.xyz/v1/images/generations';
-    $model = 'black-forest-labs/FLUX.1-schnell-Free';
+    $model = 'google/gemini-3-pro-image';
     $negativePrompt = "blurry, low quality, distorted, watermark, text, people, hands, background clutter, shadows, multiple items, cluttered";
     
     // Function to create prompt (matching Python version)
@@ -215,10 +215,6 @@ try {
         $requestData = [
             'model' => $model,
             'prompt' => $prompt,
-            'width' => 1024,
-            'height' => 1024,  // Square format better for items
-            'steps' => 8,  // Increased for better quality
-            'n' => 1,
             'response_format' => 'b64_json',
             'negative_prompt' => $negativePrompt
         ];

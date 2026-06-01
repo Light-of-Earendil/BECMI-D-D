@@ -49,13 +49,25 @@
   --bg: linear-gradient(180deg, var(--wood-400), var(--wood-600))
   --fg: var(--text-soft)
 
+.btn--info,
+.btn-info
+  --bg: linear-gradient(180deg, #d3e7e7, #9dc4c8)
+  --fg: var(--ink-900)
+
+.btn--warning,
+.btn-warning
+  --bg: linear-gradient(180deg, #efd79e, #c99b3f)
+  --fg: var(--wood-900)
+
+.btn--success,
+.btn-success
+  --bg: linear-gradient(180deg, #d6e7b7, #8eb86a)
+  --fg: var(--ink-900)
+
 .btn--danger,
+.btn-danger,
 .btn-error
   --bg: linear-gradient(180deg, #d86c5d, #b33a2b)
-  --fg: #fff
-
-.btn--success
-  --bg: linear-gradient(180deg, #9fcd85, #6dab4f)
   --fg: #fff
 
 .btn--ghost
@@ -68,8 +80,16 @@
 .btn-sm
   button-size-sm()
 
+.btn--xs,
+.btn-xs
+  padding: 4px 10px
+  font-size: 0.75rem
+
 .btn--lg
   button-size-lg()
+
+.btn-block
+  width: 100%
 
 // Icon Button
 .icon-btn
@@ -246,4 +266,3 @@ label
   border-radius: var(--radius-sm)
   border: 1px solid #123a12
   box-shadow: inset 0 0 12px rgba(142,242,126,0.25)
-

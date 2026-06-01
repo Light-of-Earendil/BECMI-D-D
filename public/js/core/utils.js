@@ -18,6 +18,108 @@ function escapeHtml(text) {
 }
 
 /**
+ * Resolve BECMI armor/shield display values for UI.
+ * Armor has a fixed descending AC value. Shields improve AC by subtracting 1.
+ *
+ * @param {Object} item - Equipment item
+ * @returns {Object} Display metadata
+ */
+function getBECMIArmorDisplay(item) {
+    const empty = {
+        kind: null,
+        label: '',
+        detailLabel: '',
+        detailValue: '',
+        effectiveArmorClass: null,
+        shieldAdjustment: null
+    };
+
+    if (!item || typeof item !== 'object') {
+        return empty;
+    }
+
+    const magicalBonus = Math.max(0, Number(item.magical_bonus || 0));
+    const baseArmorClass = resolveBECMIArmorClass(item);
+
+    if (baseArmorClass !== null) {
+        const effectiveArmorClass = baseArmorClass - magicalBonus;
+        return {
+            kind: 'armor',
+            label: `AC ${effectiveArmorClass}`,
+            detailLabel: 'Armor Class',
+            detailValue: `${effectiveArmorClass}`,
+            effectiveArmorClass,
+            shieldAdjustment: null
+        };
+    }
+
+    if (isBECMIShield(item)) {
+        const shieldAdjustment = -(1 + magicalBonus);
+        return {
+            kind: 'shield',
+            label: `Shield ${shieldAdjustment} AC`,
+            detailLabel: 'Shield Adjustment',
+            detailValue: `${shieldAdjustment} AC`,
+            effectiveArmorClass: null,
+            shieldAdjustment
+        };
+    }
+
+    return empty;
+}
+
+function resolveBECMIArmorClass(item) {
+    if (!item || item.item_type !== 'armor') {
+        return null;
+    }
+
+    const name = String(item.custom_name || item.name || '').toLowerCase();
+    const itemCategory = String(item.item_category || '').toLowerCase();
+    const armorType = String(item.armor_type || '').toLowerCase();
+    const description = String(item.description || '').toLowerCase();
+    const haystack = [name, itemCategory, armorType, description].join(' ');
+
+    if (haystack.includes('suit armor') || haystack.includes('suit armour') || itemCategory === 'suit' || armorType === 'suit') {
+        return 0;
+    }
+
+    if (haystack.includes('plate mail') || haystack.includes('plate armor') || haystack.includes('plate armour') || itemCategory === 'plate' || armorType === 'plate') {
+        return 3;
+    }
+
+    if (haystack.includes('banded mail') || haystack.includes('banded armor') || haystack.includes('banded armour') || itemCategory === 'banded' || armorType === 'banded') {
+        return 4;
+    }
+
+    if (haystack.includes('scale mail') || haystack.includes('scale armor') || haystack.includes('scale armour') || itemCategory === 'scale' || armorType === 'scale') {
+        return 6;
+    }
+
+    if (haystack.includes('chain mail') || itemCategory === 'chain' || armorType === 'chain') {
+        return 5;
+    }
+
+    if (haystack.includes('leather armor') || haystack.includes('leather armour') || itemCategory === 'leather' || armorType === 'leather') {
+        return 7;
+    }
+
+    const rawArmorClass = Number(item.ac_bonus);
+    if (Number.isFinite(rawArmorClass) && [0, 3, 4, 5, 6, 7, 9].includes(rawArmorClass)) {
+        return rawArmorClass;
+    }
+
+    return null;
+}
+
+function isBECMIShield(item) {
+    if (!item || typeof item !== 'object') {
+        return false;
+    }
+
+    return item.item_type === 'shield' || item.item_category === 'shield';
+}
+
+/**
  * Format relative time (e.g., "2 hours ago")
  * 
  * @param {string} dateString - ISO date string

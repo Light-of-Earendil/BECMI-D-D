@@ -28,6 +28,7 @@
 
 require_once '../../../app/core/database.php';
 require_once '../../../app/core/security.php';
+require_once '../../../app/services/session-map-library.php';
 
 // Disable output compression
 if (function_exists('apache_setenv')) {
@@ -83,35 +84,41 @@ try {
         Security::sendErrorResponse('You do not have access to this session', 403);
     }
     
-    // Get all maps for session
-    $maps = $db->select(
-        "SELECT map_id, session_id, map_name, image_path, image_width, image_height, 
-                is_active, created_at
-         FROM session_maps
-         WHERE session_id = ?
-         ORDER BY is_active DESC, created_at ASC",
-        [$sessionId]
-    );
-    
-    // Format response - ensure image_url path is correct
-    $formattedMaps = array_map(function($map) {
-        $imagePath = $map['image_path'];
-        $imageUrl = (strpos($imagePath, '/') === 0) ? $imagePath : '/' . $imagePath;
-        
+    $mapLibraryContext = getSessionMapLibraryContext($db, $sessionId);
+    $localMaps = getSessionLocalMaps($db, $sessionId);
+    $campaignLibraryMaps = ($session['dm_user_id'] == $userId && $mapLibraryContext !== null)
+        ? getCampaignLibraryMaps($db, $mapLibraryContext, $localMaps)
+        : [];
+
+    $formattedMaps = array_map(function ($map) use ($sessionId) {
+        $sourceSessionId = isset($map['source_session_id']) && $map['source_session_id']
+            ? (int) $map['source_session_id']
+            : (int) $map['session_id'];
+
         return [
             'map_id' => (int) $map['map_id'],
             'session_id' => (int) $map['session_id'],
             'map_name' => $map['map_name'],
-            'image_url' => $imageUrl,
-            'image_width' => (int) $map['image_width'],
-            'image_height' => (int) $map['image_height'],
+            'image_url' => normalizeSessionMapPublicPath($map['image_path']),
+            'image_width' => isset($map['image_width']) ? (int) $map['image_width'] : 0,
+            'image_height' => isset($map['image_height']) ? (int) $map['image_height'] : 0,
             'is_active' => (bool) $map['is_active'],
-            'created_at' => $map['created_at']
+            'created_at' => $map['created_at'],
+            'source_map_id' => isset($map['canonical_map_id']) ? (int) $map['canonical_map_id'] : (int) $map['map_id'],
+            'source_session_id' => $sourceSessionId,
+            'source_session_title' => $map['source_session_title'] ?? null,
+            'is_imported_from_campaign' => $sourceSessionId !== (int) $sessionId
         ];
-    }, $maps);
-    
+    }, $localMaps);
+
     Security::sendSuccessResponse([
-        'maps' => $formattedMaps
+        'maps' => $formattedMaps,
+        'campaign_library_maps' => $campaignLibraryMaps,
+        'library_scope' => [
+            'type' => $mapLibraryContext['scope_type'] ?? 'session',
+            'campaign_id' => $mapLibraryContext['campaign_id'] ?? null,
+            'feature_ready' => sessionMapLibraryFeatureReady($db)
+        ]
     ]);
     
 } catch (Exception $e) {

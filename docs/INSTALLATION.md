@@ -86,6 +86,12 @@
    - Required for character portrait generation feature
    - **Note**: Fallback is empty string (feature will fail gracefully if not set)
 
+4. **Google Login (Optional)**
+   - Set environment variable: `GOOGLE_CLIENT_ID`
+   - Optional toggle: `GOOGLE_LOGIN_ENABLED=0` to disable the feature without removing config
+   - Used by Google Identity Services on the login screen
+   - **Note**: This integration verifies Google ID tokens server-side and still creates the normal BECMI session cookie
+
 ### 6. Set File Permissions
 
 1. Ensure Apache has read/write access to the project directory

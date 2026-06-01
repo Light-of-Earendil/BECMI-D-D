@@ -55,17 +55,28 @@ try {
         Security::sendErrorResponse('Only the Dungeon Master can delete maps', 403);
     }
     
-    // Delete image file if it exists
-    $imagePath = dirname(dirname(dirname(__DIR__))) . '/public/' . $map['image_path'];
-    if (file_exists($imagePath)) {
-        @unlink($imagePath);
-    }
-    
+    $remainingReferences = $db->selectOne(
+        "SELECT COUNT(*) AS reference_count
+         FROM session_maps
+         WHERE image_path = ?
+           AND map_id <> ?",
+        [$map['image_path'], $mapId]
+    );
+
     // Delete map (cascade will delete drawings and tokens)
     $db->execute(
         "DELETE FROM session_maps WHERE map_id = ?",
         [$mapId]
     );
+
+    // Only delete the underlying image when no other session map rows reuse it.
+    $shouldDeleteImage = !$remainingReferences || (int) $remainingReferences['reference_count'] === 0;
+    if ($shouldDeleteImage) {
+        $imagePath = dirname(dirname(dirname(__DIR__))) . '/public/' . $map['image_path'];
+        if (file_exists($imagePath)) {
+            @unlink($imagePath);
+        }
+    }
     
     Security::sendSuccessResponse(null, 'Map deleted successfully');
     

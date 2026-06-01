@@ -55,6 +55,9 @@ try {
     }
 
     Security::requireAuth();
+    if (!Security::checkCSRFToken()) {
+        Security::sendErrorResponse('Invalid or missing CSRF token', 403);
+    }
     
     $db = getDB();
     $userId = Security::getCurrentUserId();
@@ -259,8 +262,11 @@ try {
     ], 'Map uploaded successfully');
     
 } catch (Exception $e) {
-    error_log("MAP UPLOAD ERROR: " . $e->getMessage());
-    error_log("MAP UPLOAD ERROR STACK TRACE: " . $e->getTraceAsString());
-    Security::sendErrorResponse('Failed to upload map: ' . $e->getMessage(), 500);
+    Security::debugLog('Map upload error', [
+        'message' => $e->getMessage(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine()
+    ]);
+    Security::sendErrorResponse('Failed to upload map', 500);
 }
 ?>

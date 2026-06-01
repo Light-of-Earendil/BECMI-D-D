@@ -53,7 +53,7 @@ try {
     
     // Verify character ownership
     $character = $db->selectOne(
-        "SELECT user_id FROM characters WHERE character_id = ? AND is_active = 1",
+        "SELECT user_id, class FROM characters WHERE character_id = ? AND is_active = 1",
         [$characterId]
     );
     
@@ -76,6 +76,17 @@ try {
     
     if (!$inventoryItem) {
         Security::sendErrorResponse('Item not found in inventory', 404);
+    }
+
+    if ($equip && $character['class'] === 'barbarian' && $inventoryItem['item_type'] === 'armor') {
+        $armorType = strtolower(trim($inventoryItem['armor_type'] ?? ''));
+        $armorName = strtolower(trim($inventoryItem['name'] ?? ''));
+
+        if ($armorType === 'plate' || strpos($armorName, 'plate') !== false || strpos($armorName, 'suit') !== false) {
+            Security::sendValidationErrorResponse([
+                'item_id' => 'Barbarians may not wear plate mail or heavier armor'
+            ]);
+        }
     }
     
     // Begin transaction
@@ -155,4 +166,3 @@ try {
     Security::sendErrorResponse('Failed to equip/unequip item', 500);
 }
 ?>
-

@@ -213,11 +213,12 @@ class BECMICalculations {
     }
     
     /**
-     * Calculate general skill success chance
+     * Estimate general skill success chance for a Rules Cyclopedia skill check.
      */
-    static getGeneralSkillSuccess(skillLevel, abilityModifier, difficulty = 0) {
-        const baseChance = 10 + (skillLevel * 5) + abilityModifier + difficulty;
-        return Math.max(5, Math.min(95, baseChance));
+    static getGeneralSkillSuccess(abilityScore) {
+        const normalizedScore = Math.max(0, Number(abilityScore) || 0);
+        const cappedScore = Math.min(19, normalizedScore);
+        return Math.max(0, Math.min(95, cappedScore * 5));
     }
     
     /**

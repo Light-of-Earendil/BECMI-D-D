@@ -1,0 +1,3 @@
+[GET] https://accounts.google.com/gsi/button?theme=outline&size=large&shape=pill&text=continue_with&width=320&is_fedcm_supported=true&client_id=393192737499-agjpmq79qctkssn1c18rdvrn6nu8vj6n.apps.googleusercontent.com&iframe_id=gsi_457631_405736&cas=1pBeQL7xNYlEC90VlNei1DDOV7UFWposvdNGWfWe%2FK8 => [FAILED] net::ERR_ABORTED
+[GET] https://becmi.snilld-api.dk/api/auth/verify.php?soft=1 => [200] 
+[GET] https://accounts.google.com/gsi/button?theme=outline&size=large&shape=pill&text=continue_with&width=320&is_fedcm_supported=true&client_id=393192737499-agjpmq79qctkssn1c18rdvrn6nu8vj6n.apps.googleusercontent.com&iframe_id=gsi_457631_405736&cas=1pBeQL7xNYlEC90VlNei1DDOV7UFWposvdNGWfWe%2FK8 => [FAILED] net::ERR_ABORTED

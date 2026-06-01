@@ -14,6 +14,7 @@ error_reporting(E_ALL);
 
 require_once '../../app/core/security.php';
 require_once '../../app/services/portrait-manager.php';
+require_once '../../app/services/portrait-prompt.php';
 require_once '../../config/together-ai.php';
 
 // Initialize security
@@ -45,7 +46,7 @@ try {
     }
     
     // Build portrait prompt from character details
-    $prompt = buildPortraitPrompt($data);
+    $prompt = PortraitPromptBuilder::build($data);
     
     // Call Together AI API
     $imageData = generatePortraitWithTogetherAI($prompt, $together_AI_api_key);
@@ -81,80 +82,14 @@ try {
 }
 
 /**
- * Build a descriptive prompt for character portrait generation
- */
-function buildPortraitPrompt($data) {
-    $parts = [];
-    
-    // Start with basic description
-    $parts[] = "Fotorealistic Medieval Low-fantasy realistic gritty character portrait";
-    
-    // Add gender if available
-    if (!empty($data['gender'])) {
-        $parts[] = strtolower($data['gender']);
-    }
-    
-    // Add class/race description
-    $classDescriptions = [
-        'fighter' => 'warrior in armor holding sword',
-        'magic_user' => 'wizard in flowing robes with mystical aura',
-        'cleric' => 'holy priest with religious symbols and divine light',
-        'thief' => 'cunning rogue in leather armor with daggers',
-        'dwarf' => 'stout dwarven warrior with thick beard',
-        'elf' => 'elegant elven adventurer with pointed ears and graceful features',
-        'halfling' => 'cheerful halfling adventurer',
-        'druid' => 'nature priest with wooden staff surrounded by natural elements',
-        'mystic' => 'martial artist monk in simple robes with peaceful expression'
-    ];
-    
-    if (!empty($data['class']) && isset($classDescriptions[$data['class']])) {
-        $parts[] = $classDescriptions[$data['class']];
-    }
-    
-    // Add physical details
-    if (!empty($data['hair_color'])) {
-        $parts[] = "with " . strtolower($data['hair_color']) . " hair";
-    }
-    
-    if (!empty($data['eye_color'])) {
-        $parts[] = strtolower($data['eye_color']) . " eyes";
-    }
-    
-    // Add age hint
-    if (!empty($data['age'])) {
-        $age = (int)$data['age'];
-        if ($age < 20) {
-            $parts[] = "youthful appearance";
-        } elseif ($age > 50) {
-            $parts[] = "mature and weathered features";
-        }
-    }
-    
-    // Style instructions for better quality
-    $parts[] = "professional fantasy art style";
-    $parts[] = "detailed facial features";
-    $parts[] = "dramatic lighting";
-    $parts[] = "head and shoulders portrait";
-    $parts[] = "looking at viewer";
-    $parts[] = "Dungeons and Dragons character art";
-    $parts[] = "heroic pose";
-    
-    return implode(', ', $parts);
-}
-
-/**
  * Call Together AI API to generate portrait
  */
 function generatePortraitWithTogetherAI($prompt, $apiKey) {
     $url = 'https://api.together.xyz/v1/images/generations';
     
     $data = [
-        'model' => 'black-forest-labs/FLUX.1-schnell-Free',
+        'model' => 'black-forest-labs/FLUX.2-pro',
         'prompt' => $prompt,
-        'width' => 512,
-        'height' => 512,
-        'steps' => 4,
-        'n' => 1
     ];
     
     error_log("Together AI request - Prompt: " . $prompt);
@@ -182,8 +117,29 @@ function generatePortraitWithTogetherAI($prompt, $apiKey) {
     error_log("Together AI response - HTTP $httpCode: " . substr($response, 0, 500));
     
     if ($httpCode !== 200) {
+        $errorMessage = "Together AI API returned HTTP $httpCode";
+        $errorDetails = '';
+        $errorResponse = json_decode($response, true);
+
+        if ($errorResponse && isset($errorResponse['error'])) {
+            if (is_string($errorResponse['error'])) {
+                $errorDetails = $errorResponse['error'];
+            } elseif (is_array($errorResponse['error']) && isset($errorResponse['error']['message'])) {
+                $errorDetails = $errorResponse['error']['message'];
+            } elseif (is_array($errorResponse['error'])) {
+                $errorDetails = json_encode($errorResponse['error']);
+            }
+        } elseif ($errorResponse && isset($errorResponse['message'])) {
+            $errorDetails = $errorResponse['message'];
+        } elseif (!empty($response)) {
+            $errorDetails = $response;
+        }
+
+        if ($errorDetails !== '') {
+            $errorMessage .= ' - ' . $errorDetails;
+        }
         error_log("Together AI API error - HTTP $httpCode: $response");
-        throw new Exception("Together AI API returned HTTP $httpCode");
+        throw new Exception($errorMessage);
     }
     
     $result = json_decode($response, true);
@@ -209,4 +165,3 @@ function generatePortraitWithTogetherAI($prompt, $apiKey) {
 }
 
 ?>
-

@@ -28,21 +28,12 @@ try {
         Security::sendErrorResponse('Invalid CSRF token', 403);
     }
     
-    // Get JSON input
-    $rawInput = file_get_contents('php://input');
-    error_log("CHARACTER DELETE - Raw input: " . $rawInput);
-    
-    $input = json_decode($rawInput, true);
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        error_log("CHARACTER DELETE - JSON decode error: " . json_last_error_msg());
-        Security::sendErrorResponse('Invalid JSON input', 400);
-    }
+    $input = Security::validateJSONInput();
     
     // Validate character_id
     $characterId = isset($input['character_id']) ? (int) $input['character_id'] : 0;
     
     if ($characterId <= 0) {
-        error_log("CHARACTER DELETE - Invalid character_id: $characterId");
         Security::sendValidationErrorResponse(['character_id' => 'Valid character ID is required']);
     }
     
@@ -59,13 +50,11 @@ try {
     );
     
     if (!$character) {
-        error_log("CHARACTER DELETE - Character not found: $characterId");
         Security::sendErrorResponse('Character not found', 404);
     }
     
     // Check if character is already deleted
     if ($character['is_active'] == 0) {
-        error_log("CHARACTER DELETE - Character already deleted: $characterId");
         Security::sendErrorResponse('Character has already been deleted', 410);
     }
     
@@ -74,7 +63,6 @@ try {
     
     if ($character['user_id'] == $userId) {
         $hasAccess = true;
-        error_log("CHARACTER DELETE - User owns character");
     }
     
     // Check if user is DM of the session
@@ -86,16 +74,12 @@ try {
         
         if ($session && $session['dm_user_id'] == $userId) {
             $hasAccess = true;
-            error_log("CHARACTER DELETE - User is DM of session");
         }
     }
     
     if (!$hasAccess) {
-        error_log("CHARACTER DELETE - Access denied for user $userId on character $characterId");
         Security::sendErrorResponse('Access denied - you do not own this character', 403);
     }
-    
-    error_log("CHARACTER DELETE - Deleting character: $characterId ({$character['character_name']}, Level {$character['level']} {$character['class']})");
     
     // Begin transaction
     $db->beginTransaction();
@@ -106,8 +90,6 @@ try {
             "UPDATE characters SET is_active = 0, updated_at = NOW() WHERE character_id = ?",
             [$characterId]
         );
-        
-        error_log("CHARACTER DELETE - Character marked as inactive");
         
         // Log character deletion
         $db->insert(
@@ -123,12 +105,8 @@ try {
             ]
         );
         
-        error_log("CHARACTER DELETE - Audit log created");
-        
         // Commit transaction
         $db->commit();
-        
-        error_log("CHARACTER DELETE - Transaction committed successfully");
         
         // Log security event
         Security::logSecurityEvent('character_deleted', [
@@ -148,19 +126,26 @@ try {
         
     } catch (Exception $e) {
         $db->rollback();
-        error_log("CHARACTER DELETE - Transaction rolled back");
+        Security::debugLog('Character delete transaction rolled back', [
+            'character_id' => $characterId,
+            'message' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'trace' => $e->getTraceAsString()
+        ]);
         throw $e;
     }
     
 } catch (Exception $e) {
-    error_log("=== CHARACTER DELETE ERROR ===");
-    error_log("Error message: " . $e->getMessage());
-    error_log("Error code: " . $e->getCode());
-    error_log("Error file: " . $e->getFile() . " (line " . $e->getLine() . ")");
-    error_log("Stack trace: " . $e->getTraceAsString());
-    error_log("=== END ERROR ===");
-    
-    Security::sendErrorResponse('Failed to delete character: ' . $e->getMessage(), 500);
+    Security::debugLog('Character delete error', [
+        'message' => $e->getMessage(),
+        'code' => $e->getCode(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine(),
+        'trace' => $e->getTraceAsString()
+    ]);
+
+    Security::sendErrorResponse('Failed to delete character', 500);
 }
 ?>
 

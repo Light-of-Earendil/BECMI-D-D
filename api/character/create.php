@@ -51,8 +51,10 @@ try {
     // Sanitize input
     $characterData = Security::sanitizeInput($input);
     
-    error_log("CHARACTER CREATE - Input received: " . json_encode($input));
-    error_log("CHARACTER CREATE - After sanitize: " . json_encode($characterData));
+    Security::debugLog('Character create payload received', [
+        'input_keys' => array_keys($input),
+        'sanitized_keys' => array_keys($characterData)
+    ]);
     
     // Validate character data
     $validationErrors = validateCharacterData($characterData);
@@ -167,8 +169,7 @@ try {
             }
         }
         
-        // Debug: Log the values being inserted
-        error_log("Character data being inserted: " . json_encode([
+        Security::debugLog('Character data being inserted', [
             'user_id' => $userId,
             'session_id' => $characterData['session_id'],
             'character_name' => $characterData['character_name'],
@@ -176,7 +177,7 @@ try {
             'alignment' => $characterData['alignment'],
             'ability_adjustments' => $abilityAdjustmentsJSON,
             'original_abilities' => $originalAbilities
-        ]));
+        ]);
         $valuesArray = [
             $userId,
             $characterData['session_id'] ?? null,
@@ -229,8 +230,10 @@ try {
             $characterData['portrait_url'] ?? null
         ];
         
-        error_log("Values count: " . count($valuesArray) . " (should be 46)");
-        error_log("Values array: " . json_encode($valuesArray));
+        Security::debugLog('Character insert values prepared', [
+            'expected_value_count' => 46,
+            'actual_value_count' => count($valuesArray)
+        ]);
         
         // Verify counts match before insert
         $columnCount = 46; // Manually counted from INSERT statement
@@ -284,7 +287,10 @@ try {
                 );
             }
             
-            error_log("Saved " . count($characterData['equipment']) . " items to inventory for character " . $characterId);
+            Security::debugLog('Character starting equipment saved', [
+                'character_id' => $characterId,
+                'equipment_count' => count($characterData['equipment'])
+            ]);
             
             // Log equipment purchase
             $db->insert(
@@ -303,7 +309,10 @@ try {
         
         // Save weapon masteries
         if (!empty($characterData['weapon_masteries']) && is_array($characterData['weapon_masteries'])) {
-            error_log("Saving weapon masteries: " . json_encode($characterData['weapon_masteries']));
+            Security::debugLog('Saving weapon masteries', [
+                'character_id' => $characterId,
+                'mastery_count' => count($characterData['weapon_masteries'])
+            ]);
             
             // Mapping from integer rank to string rank
             $rankMap = [
@@ -328,7 +337,11 @@ try {
                     $masteryRank = $masteryRankInput; // Already a string
                 }
                 
-                error_log("Saving weapon mastery: item_id=$itemId, mastery_rank=$masteryRank");
+                Security::debugLog('Saving weapon mastery', [
+                    'character_id' => $characterId,
+                    'item_id' => $itemId,
+                    'mastery_rank' => $masteryRank
+                ]);
                 
                 $db->insert(
                     "INSERT INTO character_weapon_mastery (character_id, item_id, mastery_rank, learned_at_level)
@@ -342,7 +355,10 @@ try {
                 );
             }
             
-            error_log("Saved " . count($characterData['weapon_masteries']) . " weapon masteries for character " . $characterId);
+            Security::debugLog('Weapon masteries saved', [
+                'character_id' => $characterId,
+                'mastery_count' => count($characterData['weapon_masteries'])
+            ]);
         }
         
         // Save general skills
@@ -359,7 +375,10 @@ try {
                 );
             }
             
-            error_log("Saved " . count($characterData['skills']) . " skills for character " . $characterId);
+            Security::debugLog('Character skills saved', [
+                'character_id' => $characterId,
+                'skill_count' => count($characterData['skills'])
+            ]);
         }
         
         // BECMI: Grant starting spells for Magic-Users and Elves
@@ -395,7 +414,11 @@ try {
                     }
                 }
                 
-                error_log("Granted {$numStartingSpells} starting spells to {$characterData['class']} character {$characterId}");
+                Security::debugLog('Starting spells granted', [
+                    'character_id' => $characterId,
+                    'class' => $characterData['class'],
+                    'spell_count' => $numStartingSpells
+                ]);
             }
         }
         
@@ -447,7 +470,7 @@ function validateCharacterData($data) {
     }
     
     // Validate class
-    $validClasses = ['fighter', 'cleric', 'magic_user', 'thief', 'dwarf', 'elf', 'halfling'];
+    $validClasses = ['fighter', 'cleric', 'magic_user', 'thief', 'dwarf', 'elf', 'halfling', 'barbarian'];
     if (!in_array($data['class'], $validClasses)) {
         $errors['class'] = 'Invalid character class';
     }
@@ -478,6 +501,16 @@ function validateCharacterData($data) {
     if ($data['class'] === 'halfling' && ($data['dexterity'] < 9 || $data['constitution'] < 9)) {
         $errors['ability_scores'] = 'Halflings require Dexterity 9+ and Constitution 9+';
     }
+
+    if ($data['class'] === 'barbarian') {
+        if ($data['strength'] < 9 || $data['constitution'] < 9) {
+            $errors['ability_scores'] = 'Barbarians require Strength 9+ and Constitution 9+';
+        }
+
+        if ($data['alignment'] === 'lawful') {
+            $errors['alignment'] = 'Barbarians must be neutral or chaotic';
+        }
+    }
     
     return $errors;
 }
@@ -495,7 +528,10 @@ function calculateCharacterStats($characterData) {
     $stats['thac0'] = BECMIRulesEngine::calculateTHAC0($characterData);
     
     // Calculate movement rates
-    $stats['movement'] = BECMIRulesEngine::calculateMovementRates($characterData);
+    $movementCharacter = array_merge($characterData, [
+        'inventory' => $characterData['equipment'] ?? []
+    ]);
+    $stats['movement'] = BECMIRulesEngine::calculateMovementRates($movementCharacter);
     
     // Calculate saving throws
     $stats['saving_throws'] = BECMIRulesEngine::calculateSavingThrows($characterData);
@@ -506,4 +542,3 @@ function calculateCharacterStats($characterData) {
     return $stats;
 }
 ?>
-

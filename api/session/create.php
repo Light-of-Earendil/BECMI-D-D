@@ -8,6 +8,7 @@
 
 require_once '../../app/core/database.php';
 require_once '../../app/core/security.php';
+require_once '../../app/services/campaign-player-sync.php';
 
 header('Content-Type: application/json');
 
@@ -24,6 +25,8 @@ try {
 
     $payload = Security::validateJSONInput();
     $errors = [];
+    $userId = Security::getCurrentUserId();
+    $db = getDB();
 
     $title = Security::sanitizeInput($payload['session_title'] ?? '');
     $description = Security::sanitizeInput($payload['session_description'] ?? '');
@@ -74,7 +77,6 @@ try {
 
     // Validate campaign_id if provided
     if ($campaignId !== null && $campaignId > 0) {
-        $db = getDB();
         $campaign = $db->selectOne(
             "SELECT campaign_id, dm_user_id FROM campaigns WHERE campaign_id = ?",
             [$campaignId]
@@ -93,9 +95,6 @@ try {
     if (!empty($errors)) {
         Security::sendValidationErrorResponse($errors);
     }
-
-    $userId = Security::getCurrentUserId();
-    $db = getDB();
 
     $sessionId = $db->insert(
         'INSERT INTO game_sessions (
@@ -124,6 +123,11 @@ try {
         ]
     );
 
+    $autoInvitedCampaignPlayers = 0;
+    if ($campaignId !== null && $campaignId > 0) {
+        $autoInvitedCampaignPlayers = syncCampaignPlayersToSession($db, $campaignId, (int) $sessionId);
+    }
+
     Security::logSecurityEvent('session_created', [
         'session_id' => $sessionId,
         'dm_user_id' => $userId
@@ -131,6 +135,7 @@ try {
 
     Security::sendSuccessResponse([
         'session_id' => $sessionId,
+        'auto_invited_campaign_players' => $autoInvitedCampaignPlayers,
         'session' => [
             'session_id' => $sessionId,
             'dm_user_id' => $userId,

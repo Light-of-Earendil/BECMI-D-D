@@ -9,6 +9,7 @@ class OfflineDetector {
     constructor(app) {
         this.app = app;
         this.isOnline = navigator.onLine;
+        this.isInitialized = false;
         
         this.init();
         
@@ -19,6 +20,12 @@ class OfflineDetector {
      * Initialize offline detection
      */
     init() {
+        if (this.isInitialized) {
+            return;
+        }
+
+        this.isInitialized = true;
+
         // Listen for online event
         window.addEventListener('online', () => {
             this.handleOnline();
@@ -107,11 +114,8 @@ class OfflineDetector {
     async checkConnection() {
         try {
             // Try to fetch a small resource
-            const response = await fetch('/api/auth/verify.php', {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-                }
+            const response = await fetch('/api/auth/verify.php?soft=1', {
+                method: 'GET'
             });
             
             if (!this.isOnline && response.ok) {

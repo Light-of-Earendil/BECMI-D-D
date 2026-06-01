@@ -3,7 +3,6 @@
  * 
  * Handles character sheet display, editing, and real-time calculations.
  */
-
 class CharacterSheetModule {
     constructor(app) {
         this.app = app;
@@ -297,7 +296,8 @@ class CharacterSheetModule {
             'thief': { color: 'thief-color', icon: 'fas fa-mask' },
             'dwarf': { color: 'dwarf-color', icon: 'fas fa-hammer' },
             'elf': { color: 'elf-color', icon: 'fas fa-leaf' },
-            'halfling': { color: 'halfling-color', icon: 'fas fa-home' }
+            'halfling': { color: 'halfling-color', icon: 'fas fa-home' },
+            'barbarian': { color: 'fighter-color', icon: 'fas fa-fire' }
         };
         
         return classData[className] || { color: 'default-color', icon: 'fas fa-user' };
@@ -486,6 +486,8 @@ class CharacterSheetModule {
                     ${this.renderSavingThrows(character)}
                 </div>
             </div>
+
+            ${this.renderClassFeatures(character)}
             
             <div class="character-section">
                 <h3>Weapon Masteries</h3>
@@ -519,6 +521,60 @@ class CharacterSheetModule {
                 <h3>Equipment & Inventory</h3>
                 <div class="equipment">
                     ${this.renderEquipment(character)}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Render class-specific feature summaries used during play.
+     */
+    renderClassFeatures(character) {
+        if (character.class !== 'barbarian') {
+            return '';
+        }
+
+        const rage = this.rulesEngine && typeof this.rulesEngine.getBarbarianRageStats === 'function'
+            ? this.rulesEngine.getBarbarianRageStats(character.level)
+            : { uses_per_day: character.level >= 12 ? 4 : character.level >= 8 ? 3 : character.level >= 4 ? 2 : 1, duration_rounds: Math.max(3, character.level), temporary_hp: character.level };
+        const wilderness = this.rulesEngine && typeof this.rulesEngine.getBarbarianWildernessMastery === 'function'
+            ? this.rulesEngine.getBarbarianWildernessMastery(character.level)
+            : null;
+
+        return `
+            <div class="character-section">
+                <h3>Barbarian Features</h3>
+                <div class="class-features">
+                    <div class="combat-stat">
+                        <span class="stat-label">Rage:</span>
+                        <span class="stat-value">${rage.uses_per_day}/day, ${rage.duration_rounds} rounds, +${rage.temporary_hp} temp HP</span>
+                    </div>
+                    <div class="combat-stat">
+                        <span class="stat-label">Rage Effects:</span>
+                        <span class="stat-value">+2 hit/damage, +2 Death/Poison and Breath saves, AC +2 penalty</span>
+                    </div>
+                    <div class="combat-stat">
+                        <span class="stat-label">Danger Sense:</span>
+                        <span class="stat-value">Surprise only on 1 on d6 while leading; +2 saves vs traps/hazards</span>
+                    </div>
+                    <div class="combat-stat">
+                        <span class="stat-label">Iron Constitution:</span>
+                        <span class="stat-value">+2 saves vs poison/disease; +1 natural healing HP/day</span>
+                    </div>
+                    <div class="combat-stat">
+                        <span class="stat-label">Fleet of Foot:</span>
+                        <span class="stat-value">+10 ft no armor/leather, +5 ft chain, through moderate encumbrance</span>
+                    </div>
+                    ${wilderness ? `
+                        <div class="combat-stat">
+                            <span class="stat-label">Wilderness:</span>
+                            <span class="stat-value">Track ${wilderness.track_percent}%, Forage ${wilderness.forage}, Hunt ${wilderness.hunt}, Navigate ${wilderness.navigate}, Hide ${wilderness.hide_percent}%</span>
+                        </div>
+                    ` : ''}
+                    <div class="combat-stat">
+                        <span class="stat-label">Armor Taboo:</span>
+                        <span class="stat-value">Leather, chain mail, and shields only; plate or heavier disables class features</span>
+                    </div>
                 </div>
             </div>
         `;
@@ -761,9 +817,10 @@ class CharacterSheetModule {
         
         // Use BECMI rules engine to calculate movement rates
         let movementData;
-        if (this.app.modules.becmiRules) {
+        const movementEngine = this.app.modules.becmiRules || this.app.modules.rulesEngine || this.rulesEngine;
+        if (movementEngine && typeof movementEngine.calculateMovementRates === 'function') {
             console.log('Using BECMI rules engine for movement calculation');
-            movementData = this.app.modules.becmiRules.calculateMovementRates({
+            movementData = movementEngine.calculateMovementRates({
                 ...character,
                 inventory: this.currentInventory
             });
@@ -812,6 +869,18 @@ class CharacterSheetModule {
                         <i class="fas fa-fire"></i>
                         <span>Running: ${movementData.running || movementData.normal}'</span>
                     </div>
+                    ${movementData.overland ? `
+                    <div class="movement-rate-item">
+                        <i class="fas fa-map"></i>
+                        <span>Overland: ${movementData.overland} miles/day</span>
+                    </div>
+                    ` : ''}
+                    ${movementData.fleet_bonus ? `
+                    <div class="movement-rate-item">
+                        <i class="fas fa-bolt"></i>
+                        <span>Fleet: +${movementData.fleet_bonus}'</span>
+                    </div>
+                    ` : ''}
                 </div>
             </div>
             
@@ -861,7 +930,7 @@ class CharacterSheetModule {
         const magicalClass = item.is_magical ? 'magical-item' : '';
         const magicalBonus = item.magical_bonus || 0;
         const effectiveDamage = this.calculateEffectiveDamage(item);
-        const effectiveAC = this.calculateEffectiveAC(item);
+        const armorDisplay = this.getArmorDisplay(item);
         
         // Get weapon mastery info if it's a weapon
         const weaponMastery = this.getWeaponMasteryForItem(item, characterId);
@@ -901,9 +970,9 @@ class CharacterSheetModule {
                                 </button>
                             </span>
                         ` : ''}
-                        ${item.ac_bonus > 0 ? `
+                        ${armorDisplay.label ? `
                             <span class="stat-badge ac">
-                                <i class="fas fa-shield"></i> AC +${effectiveAC}
+                                <i class="fas fa-shield"></i> ${this.escapeHtml(armorDisplay.label)}
                             </span>
                         ` : ''}
                         <span class="stat-badge weight">
@@ -978,20 +1047,13 @@ class CharacterSheetModule {
     }
 
     /**
-     * Calculate effective AC bonus including magical bonuses
-     * 
+     * Get BECMI armor display data for an item.
+     *
      * @param {Object} item - Equipment item
-     * @returns {number} Effective AC bonus
+     * @returns {Object}
      */
-    calculateEffectiveAC(item) {
-        let ac = item.ac_bonus || 0;
-        
-        // Add magical bonus for armor/shields
-        if (item.magical_bonus && (item.item_type === 'armor' || item.item_type === 'shield')) {
-            ac += item.magical_bonus;
-        }
-        
-        return ac;
+    getArmorDisplay(item) {
+        return getBECMIArmorDisplay(item);
     }
 
     /**
@@ -1196,6 +1258,7 @@ class CharacterSheetModule {
         }
         
         const hasImage = imageUrl !== null;
+        const armorDisplay = this.getArmorDisplay(item);
         
         return `
             <div class="item-details-container">
@@ -1241,10 +1304,10 @@ class CharacterSheetModule {
                             <span>${this.calculateEffectiveDamage(item)} ${item.damage_type}</span>
                         </div>
                         ` : ''}
-                        ${item.ac_bonus ? `
+                        ${armorDisplay.label ? `
                         <div class="property">
-                            <label>AC Bonus:</label>
-                            <span>+${this.calculateEffectiveAC(item)}</span>
+                            <label>${armorDisplay.detailLabel}:</label>
+                            <span>${this.escapeHtml(armorDisplay.detailValue)}</span>
                         </div>
                         ` : ''}
                         ${item.magical_bonus ? `
@@ -1546,8 +1609,7 @@ class CharacterSheetModule {
                                     ` : ''}
                                     <button class="btn btn-xs btn-secondary skill-roll-btn" 
                                             data-skill-name="${this.escapeHtml(skill.skill_name)}" 
-                                            data-ability-score="${skill.ability_score}" 
-                                            data-ability-modifier="${skill.ability_modifier || 0}">
+                                            data-ability-score="${skill.ability_score}">
                                         <i class="fas fa-dice-d20"></i> Roll
                                     </button>
                                 </div>
@@ -2443,21 +2505,29 @@ class CharacterSheetModule {
         });
         
         // Skill roll button
-        $(document).on('click', '.skill-roll-btn', (e) => {
+        $(document).on('click', '.skill-roll-btn', async (e) => {
             e.preventDefault();
             const $btn = $(e.currentTarget);
             const skillName = $btn.data('skill-name');
             const abilityScore = parseInt($btn.data('ability-score'));
-            const abilityModifier = parseInt($btn.data('ability-modifier')) || 0;
             
             if (!skillName || isNaN(abilityScore)) {
-                console.error('Invalid skill roll data:', { skillName, abilityScore, abilityModifier });
+                console.error('Invalid skill roll data:', { skillName, abilityScore });
                 this.app.showError('Invalid skill data');
                 return;
             }
             
             if (typeof window.rollSkillCheck === 'function') {
-                window.rollSkillCheck(skillName, abilityScore, abilityModifier);
+                if ($btn.prop('disabled')) {
+                    return;
+                }
+
+                try {
+                    $btn.prop('disabled', true);
+                    await window.rollSkillCheck(skillName, abilityScore);
+                } finally {
+                    $btn.prop('disabled', false);
+                }
             } else {
                 console.error('rollSkillCheck function not found');
                 this.app.showError('Roll function not available');
@@ -2465,7 +2535,7 @@ class CharacterSheetModule {
         });
         
         // Saving throw roll button
-        $(document).on('click', '.saving-throw-roll-btn', (e) => {
+        $(document).on('click', '.saving-throw-roll-btn', async (e) => {
             e.preventDefault();
             const $btn = $(e.currentTarget);
             const saveName = $btn.data('save-name');
@@ -2479,7 +2549,16 @@ class CharacterSheetModule {
             }
             
             if (typeof window.rollSavingThrow === 'function') {
-                window.rollSavingThrow(saveName, saveValue, saveKey);
+                if ($btn.prop('disabled')) {
+                    return;
+                }
+
+                try {
+                    $btn.prop('disabled', true);
+                    await window.rollSavingThrow(saveName, saveValue, saveKey);
+                } finally {
+                    $btn.prop('disabled', false);
+                }
             } else {
                 console.error('rollSavingThrow function not found');
                 this.app.showError('Roll function not available');
@@ -2487,7 +2566,7 @@ class CharacterSheetModule {
         });
         
         // Damage roll button
-        $(document).on('click', '.damage-roll-btn', (e) => {
+        $(document).on('click', '.damage-roll-btn', async (e) => {
             e.stopPropagation();
             e.preventDefault();
             const $btn = $(e.currentTarget);
@@ -2502,7 +2581,16 @@ class CharacterSheetModule {
                 return;
             }
             
-            this.rollDamage(damageDie, magicalBonus, masteryBonus, itemName);
+            if ($btn.prop('disabled')) {
+                return;
+            }
+
+            try {
+                $btn.prop('disabled', true);
+                await this.rollDamage(damageDie, magicalBonus, masteryBonus, itemName);
+            } finally {
+                $btn.prop('disabled', false);
+            }
         });
         
         // Identify magical item
@@ -2660,7 +2748,7 @@ class CharacterSheetModule {
     showEditModal(character) {
         const editForm = this.renderEditForm(character);
         $('#character-edit-content').html(editForm);
-        $('#character-edit-modal').show();
+        $('#character-edit-modal').addClass('show');
         
         // Setup form handlers
         this.setupEditFormHandlers(character.character_id);
@@ -2670,7 +2758,7 @@ class CharacterSheetModule {
      * Hide character edit modal
      */
     hideEditModal() {
-        $('#character-edit-modal').hide();
+        $('#character-edit-modal').removeClass('show');
         $('#character-edit-content').empty();
     }
     
@@ -2678,7 +2766,8 @@ class CharacterSheetModule {
      * Render character edit form
      */
     renderEditForm(character) {
-        return `<form id="character-edit-form" class="character-form">
+        return `<form id="character-edit-form" class="character-form character-edit-form">
+                <div class="character-edit-form-body">
                 <div class="form-section">
                     <h3>Basic Information</h3>
                     
@@ -2792,8 +2881,9 @@ class CharacterSheetModule {
                         </div>
                     </div>
                 </div>
-                
-                <div class="form-actions">
+                </div>
+
+                <div class="form-actions character-edit-actions">
                     <button type="button" class="btn btn-secondary" id="cancel-edit">Cancel</button>
                     <button type="submit" class="btn btn-primary" id="save-character">Save Changes</button>
                 </div>
@@ -2807,6 +2897,10 @@ class CharacterSheetModule {
     setupEditFormHandlers(characterId) {
         // Cancel button
         $('#cancel-edit').off('click').on('click', () => {
+            this.hideEditModal();
+        });
+
+        $('#close-character-edit-modal').off('click').on('click', () => {
             this.hideEditModal();
         });
         
@@ -2963,7 +3057,9 @@ class CharacterSheetModule {
     /**
      * Generate portrait for existing character (edit modal)
      */
+
     async generatePortraitForEdit(characterId) {
+        console.log('Generating portrait for edit with character ID:', characterId);
         try {
             const $btn = $('#edit-generate-portrait-btn');
             const $preview = $('#edit-portrait-preview');
@@ -2989,6 +3085,18 @@ class CharacterSheetModule {
                 hair_color: $('#edit-hair-color').val(),
                 eye_color: $('#edit-eye-color').val(),
                 background: $('#edit-background').val(),
+                strength: this.currentCharacter ? this.currentCharacter.strength : null,
+                dexterity: this.currentCharacter ? this.currentCharacter.dexterity : null,
+                constitution: this.currentCharacter ? this.currentCharacter.constitution : null,
+                intelligence: this.currentCharacter ? this.currentCharacter.intelligence : null,
+                wisdom: this.currentCharacter ? this.currentCharacter.wisdom : null,
+                charisma: this.currentCharacter ? this.currentCharacter.charisma : null,
+                equipment: $('.equipment-list.equipped .item-name').map(function() {
+                    return $(this).text();
+                }).get().join(', ') || 'No equipment equipped',
+                inventory: $('.equipment-list:not(.equipped) .item-name').map(function() {
+                    return $(this).text();
+                }).get().join(', ') || 'No inventory items'
             };
             
             console.log('Generating portrait for edit with data:', portraitData);
@@ -3039,7 +3147,7 @@ class CharacterSheetModule {
      * @param {number} masteryBonus - Weapon mastery bonus to damage
      * @param {string} itemName - Name of the item
      */
-    rollDamage(damageDie, magicalBonus, masteryBonus, itemName) {
+    async rollDamage(damageDie, magicalBonus, masteryBonus, itemName) {
         console.log(`Rolling damage for ${itemName}: ${damageDie} + ${magicalBonus} (magical) + ${masteryBonus} (mastery)`);
         
         // Parse damage die (e.g., "1d6", "1d8+1", "2d4")
@@ -3053,18 +3161,29 @@ class CharacterSheetModule {
         const numDice = parseInt(dieMatch[1]);
         const dieSize = parseInt(dieMatch[2]);
         const dieBonus = dieMatch[3] ? parseInt(dieMatch[3]) : 0;
+        const totalBonus = dieBonus + magicalBonus + masteryBonus;
         
-        // Roll dice
         let total = 0;
-        const rolls = [];
-        for (let i = 0; i < numDice; i++) {
-            const roll = Math.floor(Math.random() * dieSize) + 1;
-            rolls.push(roll);
-            total += roll;
+        let rolls = [];
+
+        if (this.app.modules.diceRoller) {
+            const diceResult = await this.app.modules.diceRoller.rollExpression({
+                expression: `${numDice}d${dieSize}${dieBonus > 0 ? `+${dieBonus}` : dieBonus < 0 ? dieBonus : ''}`,
+                title: `${itemName} Damage`,
+                modifier: magicalBonus + masteryBonus,
+                text: damageDie
+            });
+
+            rolls = diceResult.rolls;
+            total = rolls.reduce((sum, roll) => sum + roll, 0);
+        } else {
+            for (let i = 0; i < numDice; i++) {
+                const roll = Math.floor(Math.random() * dieSize) + 1;
+                rolls.push(roll);
+                total += roll;
+            }
         }
         
-        // Add bonuses
-        const totalBonus = dieBonus + magicalBonus + masteryBonus;
         const finalDamage = total + totalBonus;
         
         // Build message

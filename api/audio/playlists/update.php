@@ -29,6 +29,7 @@
 
 require_once '../../../app/core/database.php';
 require_once '../../../app/core/security.php';
+require_once '../../../app/services/audio-library.php';
 
 Security::init();
 header('Content-Type: application/json; charset=utf-8');
@@ -75,6 +76,11 @@ try {
     if ($playlist['dm_user_id'] != $userId) {
         Security::sendErrorResponse('Only the Dungeon Master can update playlists', 403);
     }
+
+    $audioLibrary = getAudioLibraryContext($db, (int) $playlist['session_id']);
+    if (!$audioLibrary) {
+        Security::sendErrorResponse('Session not found', 404);
+    }
     
     // Update playlist name if provided
     if (isset($data['playlist_name'])) {
@@ -100,17 +106,21 @@ try {
             [$playlistId]
         );
         
-        // Verify all tracks belong to the same session
+        // Verify all tracks belong to the same campaign-scoped library when available
         if (!empty($data['tracks'])) {
             $trackIds = array_map(function($t) {
                 return (int) $t['track_id'];
             }, $data['tracks']);
+
+            $scopeSessionIds = $audioLibrary['scope_session_ids'];
+            $trackIdPlaceholders = implode(',', array_fill(0, count($trackIds), '?'));
+            $scopePlaceholders = buildAudioLibraryPlaceholders($scopeSessionIds);
             
             $validTracks = $db->select(
                 "SELECT track_id FROM session_audio_tracks 
-                 WHERE track_id IN (" . implode(',', array_fill(0, count($trackIds), '?')) . ")
-                 AND session_id = ?",
-                array_merge($trackIds, [$playlist['session_id']])
+                 WHERE track_id IN ($trackIdPlaceholders)
+                 AND session_id IN ($scopePlaceholders)",
+                array_merge($trackIds, $scopeSessionIds)
             );
             
             $validTrackIds = array_map(function($t) {
@@ -144,28 +154,34 @@ try {
     
     $tracks = $db->select(
         "SELECT pt.playlist_track_id, pt.track_id, pt.track_order,
-                t.track_name, t.track_type, t.file_path, t.duration_seconds
+                t.track_name, t.track_type, t.file_path, t.duration_seconds,
+                t.session_id, s.session_title
          FROM session_audio_playlist_tracks pt
          JOIN session_audio_tracks t ON pt.track_id = t.track_id
+         JOIN game_sessions s ON t.session_id = s.session_id
          WHERE pt.playlist_id = ?
          ORDER BY pt.track_order ASC",
         [$playlistId]
     );
     
-    $formattedTracks = array_map(function($track) {
-        $filePath = $track['file_path'];
-        $fileUrl = (strpos($filePath, '/') === 0) ? $filePath : '/' . $filePath;
+    $formattedTracks = array_map(function($track) use ($audioLibrary, $playlist) {
+        $fileUrl = normalizeAudioPublicPath($track['file_path']);
         
         return [
             'playlist_track_id' => (int) $track['playlist_track_id'],
             'track_id' => (int) $track['track_id'],
             'track_order' => (int) $track['track_order'],
+            'source_session_id' => (int) $track['session_id'],
+            'source_session_title' => $track['session_title'],
             'track' => [
                 'track_id' => (int) $track['track_id'],
                 'track_name' => $track['track_name'],
                 'track_type' => $track['track_type'],
                 'file_path' => $fileUrl,
-                'duration_seconds' => $track['duration_seconds'] !== null ? (int) $track['duration_seconds'] : null
+                'duration_seconds' => $track['duration_seconds'] !== null ? (int) $track['duration_seconds'] : null,
+                'source_session_id' => (int) $track['session_id'],
+                'source_session_title' => $track['session_title'],
+                'is_shared_from_campaign' => $audioLibrary['scope_type'] === 'campaign' && (int) $track['session_id'] !== (int) $playlist['session_id']
             ]
         ];
     }, $tracks);

@@ -23,8 +23,12 @@ try {
     // Get JSON input
     $input = Security::validateJSONInput();
     
-    // Debug: Log input data
-    error_log("Registration attempt - Input data: " . json_encode($input));
+    Security::debugLog('Registration attempt received', [
+        'has_username' => !empty($input['username']),
+        'has_email' => !empty($input['email']),
+        'password_length' => strlen((string) ($input['password'] ?? '')),
+        'confirm_password_length' => strlen((string) ($input['confirm_password'] ?? ''))
+    ]);
     
     // Validate required fields
     $errors = [];
@@ -46,7 +50,9 @@ try {
     }
     
     if (!empty($errors)) {
-        error_log("Registration required field errors: " . json_encode($errors));
+        Security::debugLog('Registration required field errors', [
+            'fields' => array_keys($errors)
+        ]);
         Security::sendValidationErrorResponse($errors);
     }
     
@@ -77,7 +83,9 @@ try {
     }
     
     if (!empty($errors)) {
-        error_log("Registration validation errors: " . json_encode($errors));
+        Security::debugLog('Registration validation errors', [
+            'fields' => array_keys($errors)
+        ]);
         Security::sendValidationErrorResponse($errors);
     }
     

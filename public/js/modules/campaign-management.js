@@ -660,36 +660,337 @@ class CampaignManagementModule {
             this.app.showError('Failed to update campaign: ' + error.message);
         }
     }
-    
+
+    hideCampaignDetailModal() {
+        $('#campaign-detail-modal').remove();
+    }
+
+    async loadCampaignPlayers(campaignId) {
+        try {
+            const response = await this.apiClient.get(`/api/campaigns/players.php?campaign_id=${campaignId}`);
+            if (response.status === 'success') {
+                return response.data;
+            }
+        } catch (error) {
+            console.error('Failed to load campaign players:', error);
+        }
+
+        return {
+            campaign_id: campaignId,
+            players: [],
+            player_count: 0,
+            feature_ready: false,
+            feature_message: 'Campaign player roster is not available yet.'
+        };
+    }
+
+    renderCampaignDetailPlayers(campaignId, playersData) {
+        const players = playersData.players || [];
+
+        if (playersData.feature_ready === false) {
+            return `
+                <div class="empty-text">
+                    ${this.escapeHtml(playersData.feature_message || 'Campaign player roster is not available yet.')}
+                </div>
+            `;
+        }
+
+        return `
+            <div class="invite-form">
+                <input type="hidden" id="campaign-detail-id" value="${campaignId}">
+
+                <div class="form-group">
+                    <label for="campaign-player-search">Add player to campaign roster</label>
+                    <input type="text"
+                           id="campaign-player-search"
+                           placeholder="Type at least 2 characters..."
+                           autocomplete="off">
+                    <p class="help-text">Players on this roster are automatically invited to every scheduled or active session in the campaign.</p>
+                </div>
+
+                <div id="campaign-player-search-results" class="search-results"></div>
+
+                <div class="form-group">
+                    <h4>Campaign Players (${players.length})</h4>
+                    ${players.length > 0 ? `
+                        <ul class="current-players-list">
+                            ${players.map(player => `
+                                <li data-user-id="${player.user_id}">
+                                    <div>
+                                        <strong>${this.escapeHtml(player.username)}</strong>
+                                        <span class="character-count">${player.auto_invite_session_count} auto-invited session${player.auto_invite_session_count === 1 ? '' : 's'}</span>
+                                    </div>
+                                    <button class="btn btn-sm btn-danger"
+                                            data-action="remove-campaign-player"
+                                            data-campaign-id="${campaignId}"
+                                            data-user-id="${player.user_id}"
+                                            data-username="${this.escapeHtml(player.username)}">
+                                        <i class="fas fa-user-minus"></i> Remove
+                                    </button>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    ` : '<p class="empty-text">No campaign players added yet</p>'}
+                </div>
+            </div>
+        `;
+    }
+
+    renderCampaignDetailSessions(sessions) {
+        if (!sessions || sessions.length === 0) {
+            return '<p class="empty-text">No sessions linked to this campaign yet.</p>';
+        }
+
+        return `
+            <ul class="current-players-list">
+                ${sessions.map(session => `
+                    <li>
+                        <div>
+                            <strong>${this.escapeHtml(session.session_title)}</strong>
+                            <span class="character-count">${this.escapeHtml(session.status)}</span>
+                        </div>
+                        <span class="character-count">${this.escapeHtml(session.session_datetime || 'No date set')}</span>
+                    </li>
+                `).join('')}
+            </ul>
+        `;
+    }
+
+    renderCampaignDetailContent(campaign, sessions, playersData) {
+        return `
+            <div class="campaign-detail-view">
+                <div class="campaign-description" style="margin-bottom: 1rem;">
+                    <h3>${this.escapeHtml(campaign.campaign_name)}</h3>
+                    <p>${this.escapeHtml(campaign.campaign_description || 'No description provided.')}</p>
+                </div>
+
+                <div class="campaign-stats" style="margin-bottom: 1rem;">
+                    <div class="stat-item">
+                        <i class="fas fa-calendar"></i>
+                        <span>${sessions.length} linked session${sessions.length === 1 ? '' : 's'}</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-users"></i>
+                        <span>${playersData.player_count || 0} campaign player${(playersData.player_count || 0) === 1 ? '' : 's'}</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-link"></i>
+                        <span>Session maps and audio can be shared across this campaign</span>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <h4>Campaign Roster</h4>
+                    ${this.renderCampaignDetailPlayers(campaign.campaign_id, playersData)}
+                </div>
+
+                <div class="form-group">
+                    <h4>Linked Sessions</h4>
+                    <p class="help-text">New sessions inherit campaign-player invitations automatically. Session acceptance is still handled per session.</p>
+                    ${this.renderCampaignDetailSessions(sessions)}
+                </div>
+            </div>
+        `;
+    }
+
+    bindCampaignDetailHandlers(campaignId, playersData) {
+        $('.campaign-detail-close').off('click').on('click', () => this.hideCampaignDetailModal());
+        $('#campaign-detail-modal').off('click').on('click', (e) => {
+            if (e.target.id === 'campaign-detail-modal') {
+                this.hideCampaignDetailModal();
+            }
+        });
+
+        if (playersData.feature_ready === false) {
+            return;
+        }
+
+        const existingPlayerIds = (playersData.players || []).map(player => player.user_id);
+        let searchTimeout = null;
+
+        $('#campaign-player-search').off('input').on('input', (e) => {
+            clearTimeout(searchTimeout);
+            const query = e.target.value.trim();
+
+            if (query.length < 2) {
+                $('#campaign-player-search-results').html('');
+                return;
+            }
+
+            searchTimeout = setTimeout(() => {
+                this.searchCampaignUsers(query, campaignId, existingPlayerIds);
+            }, 300);
+        });
+
+        $('[data-action="remove-campaign-player"]').off('click').on('click', async (e) => {
+            const button = $(e.currentTarget);
+            await this.removeCampaignPlayer(
+                campaignId,
+                parseInt(button.data('user-id'), 10),
+                button.data('username'),
+                button
+            );
+        });
+    }
+
+    async searchCampaignUsers(query, campaignId, existingPlayerIds) {
+        try {
+            $('#campaign-player-search-results').html('<div class="loading"><i class="fas fa-spinner fa-spin"></i> Searching...</div>');
+
+            const response = await this.apiClient.get(`/api/user/search.php?q=${encodeURIComponent(query)}`);
+            if (response.status !== 'success') {
+                $('#campaign-player-search-results').html('<p class="error-text">Search failed</p>');
+                return;
+            }
+
+            const users = (response.data.users || []).filter(user => !existingPlayerIds.includes(user.user_id));
+            if (users.length === 0) {
+                $('#campaign-player-search-results').html('<p class="empty-text">No users found matching your search</p>');
+                return;
+            }
+
+            $('#campaign-player-search-results').html(`
+                <div class="user-results">
+                    <h4>Search Results (${users.length})</h4>
+                    <div class="user-list">
+                        ${users.map(user => `
+                            <div class="user-card" data-user-id="${user.user_id}">
+                                <div class="user-avatar">
+                                    <i class="fas fa-user"></i>
+                                </div>
+                                <div class="user-info">
+                                    <div class="user-name">${this.escapeHtml(user.username)}</div>
+                                    <div class="user-email">${this.escapeHtml(user.email_display)}</div>
+                                    <div class="user-member">Member since ${this.escapeHtml(user.member_since)}</div>
+                                </div>
+                                <div class="user-actions">
+                                    <button class="btn btn-primary btn-invite"
+                                            data-action="invite-campaign-user"
+                                            data-campaign-id="${campaignId}"
+                                            data-user-id="${user.user_id}"
+                                            data-username="${this.escapeHtml(user.username)}">
+                                        <i class="fas fa-user-plus"></i> <span>Add to Campaign</span>
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `);
+
+            $('[data-action="invite-campaign-user"]').off('click').on('click', async (e) => {
+                const button = $(e.currentTarget);
+                await this.inviteCampaignPlayer(
+                    campaignId,
+                    parseInt(button.data('user-id'), 10),
+                    button.data('username'),
+                    button
+                );
+            });
+        } catch (error) {
+            console.error('Campaign user search failed:', error);
+            $('#campaign-player-search-results').html('<p class="error-text">Search failed. Please try again.</p>');
+        }
+    }
+
+    async inviteCampaignPlayer(campaignId, userId, username, button) {
+        try {
+            if (button) {
+                button.prop('disabled', true);
+                button.html('<i class="fas fa-spinner fa-spin"></i> Adding...');
+            }
+
+            const response = await this.apiClient.post('/api/campaigns/invite-player.php', {
+                campaign_id: campaignId,
+                user_id: userId
+            });
+
+            if (response.status !== 'success') {
+                throw new Error(response.message || 'Failed to add player to campaign');
+            }
+
+            const seededCount = response.data?.seeded_session_invites || 0;
+            const message = seededCount > 0
+                ? `${username} added to campaign. Auto-invited to ${seededCount} session${seededCount === 1 ? '' : 's'}.`
+                : `${username} added to campaign roster.`;
+            this.app.showSuccess(message);
+            await this.viewCampaign(campaignId);
+        } catch (error) {
+            console.error('Failed to invite campaign player:', error);
+            this.app.showError('Failed to add player to campaign: ' + error.message);
+            if (button) {
+                button.prop('disabled', false);
+                button.html('<i class="fas fa-user-plus"></i> <span>Add to Campaign</span>');
+            }
+        }
+    }
+
+    async removeCampaignPlayer(campaignId, userId, username, button) {
+        if (!confirm(`Remove ${username} from this campaign roster?\n\nPending auto-invites for linked sessions will also be removed.`)) {
+            return;
+        }
+
+        try {
+            if (button) {
+                button.prop('disabled', true);
+                button.html('<i class="fas fa-spinner fa-spin"></i> Removing...');
+            }
+
+            const response = await this.apiClient.post('/api/campaigns/remove-player.php', {
+                campaign_id: campaignId,
+                user_id: userId
+            });
+
+            if (response.status !== 'success') {
+                throw new Error(response.message || 'Failed to remove player from campaign');
+            }
+
+            this.app.showSuccess(`${username} removed from the campaign roster`);
+            await this.viewCampaign(campaignId);
+        } catch (error) {
+            console.error('Failed to remove campaign player:', error);
+            this.app.showError('Failed to remove player from campaign: ' + error.message);
+            if (button) {
+                button.prop('disabled', false);
+                button.html('<i class="fas fa-user-minus"></i> Remove');
+            }
+        }
+    }
+     
     /**
      * View a campaign (show details and sessions)
      */
     async viewCampaign(campaignId) {
         try {
-            const response = await this.apiClient.get(`/api/campaigns/get.php?campaign_id=${campaignId}`);
-            
-            if (response.status === 'success') {
-                const campaign = response.data.campaign;
-                const sessions = response.data.sessions || [];
-                
-                // Navigate to sessions view filtered by campaign
-                // For now, just show an alert with campaign info
-                let sessionsList = '';
-                if (sessions.length > 0) {
-                    sessionsList = '<ul>' + sessions.map(s => `<li>${this.escapeHtml(s.session_title)} - ${s.session_datetime}</li>`).join('') + '</ul>';
-                } else {
-                    sessionsList = '<p>No sessions in this campaign yet.</p>';
-                }
-                
-                this.app.showModal('Campaign Details', `
-                    <h3>${this.escapeHtml(campaign.campaign_name)}</h3>
-                    <p>${this.escapeHtml(campaign.campaign_description || 'No description.')}</p>
-                    <h4>Sessions (${sessions.length}):</h4>
-                    ${sessionsList}
-                `);
-            } else {
-                throw new Error(response.message || 'Failed to load campaign');
+            const [campaignResponse, playersData] = await Promise.all([
+                this.apiClient.get(`/api/campaigns/get.php?campaign_id=${campaignId}`),
+                this.loadCampaignPlayers(campaignId)
+            ]);
+
+            if (campaignResponse.status !== 'success') {
+                throw new Error(campaignResponse.message || 'Failed to load campaign');
             }
+
+            const campaign = campaignResponse.data.campaign;
+            const sessions = campaignResponse.data.sessions || [];
+
+            if ($('#campaign-detail-modal').length === 0) {
+                $('body').append(`
+                    <div id="campaign-detail-modal" class="modal" style="display: none;">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h2>Campaign Details</h2>
+                                <button class="modal-close campaign-detail-close">&times;</button>
+                            </div>
+                            <div id="campaign-detail-content"></div>
+                        </div>
+                    </div>
+                `);
+            }
+
+            $('#campaign-detail-content').html(this.renderCampaignDetailContent(campaign, sessions, playersData));
+            $('#campaign-detail-modal').show();
+            this.bindCampaignDetailHandlers(campaignId, playersData);
         } catch (error) {
             console.error('Failed to view campaign:', error);
             this.app.showError('Failed to load campaign: ' + error.message);

@@ -22,6 +22,7 @@
 require_once '../../../app/core/database.php';
 require_once '../../../app/core/security.php';
 require_once '../../../app/services/event-broadcaster.php';
+require_once '../../../app/services/audio-library.php';
 
 Security::init();
 header('Content-Type: application/json; charset=utf-8');
@@ -78,22 +79,21 @@ try {
     if ($session['dm_user_id'] != $userId) {
         Security::sendErrorResponse('Only the Dungeon Master can play sound effects', 403);
     }
+
+    $audioLibrary = getAudioLibraryContext($db, $sessionId);
+    if (!$audioLibrary) {
+        Security::sendErrorResponse('Session not found', 404);
+    }
     
-    // Verify track exists, belongs to session, and is a sound effect
-    $track = $db->selectOne(
-        "SELECT track_id, track_name, track_type, file_path, duration_seconds
-         FROM session_audio_tracks
-         WHERE track_id = ? AND session_id = ? AND track_type = 'sound'",
-        [$trackId, $sessionId]
-    );
+    // Verify track exists in this audio library and is a sound effect
+    $track = fetchAudioTrackInLibrary($db, $trackId, $audioLibrary, 'sound');
     
     if (!$track) {
-        Security::sendErrorResponse('Sound effect not found or does not belong to this session', 404);
+        Security::sendErrorResponse('Sound effect not found in this session or linked campaign', 404);
     }
     
     // Prepare event data
-    $filePath = $track['file_path'];
-    $fileUrl = (strpos($filePath, '/') === 0) ? $filePath : '/' . $filePath;
+    $fileUrl = normalizeAudioPublicPath($track['file_path']);
     
     $eventData = [
         'session_id' => $sessionId,

@@ -22,6 +22,7 @@
 require_once '../../../app/core/database.php';
 require_once '../../../app/core/security.php';
 require_once '../../../app/services/event-broadcaster.php';
+require_once '../../../app/services/audio-library.php';
 
 Security::init();
 header('Content-Type: application/json; charset=utf-8');
@@ -78,27 +79,20 @@ try {
     if ($session['dm_user_id'] != $userId) {
         Security::sendErrorResponse('Only the Dungeon Master can play ambiance', 403);
     }
+
+    $audioLibrary = getAudioLibraryContext($db, $sessionId);
+    if (!$audioLibrary) {
+        Security::sendErrorResponse('Session not found', 404);
+    }
     
     // Get track info
-    $track = $db->selectOne(
-        "SELECT track_id, track_name, track_type, file_path, duration_seconds
-         FROM session_audio_tracks
-         WHERE track_id = ? AND session_id = ? AND track_type = 'ambiance'",
-        [$trackId, $sessionId]
-    );
+    $track = fetchAudioTrackInLibrary($db, $trackId, $audioLibrary, 'ambiance');
     
     if (!$track) {
-        Security::sendErrorResponse('Ambiance track not found', 404);
+        Security::sendErrorResponse('Ambiance track not found in this session or linked campaign', 404);
     }
     
-    // Normalize file path (ensure it starts with / and remove public/ prefix if present)
-    $filePath = $track['file_path'];
-    if (strpos($filePath, 'public/') === 0) {
-        $filePath = substr($filePath, 7); // Remove 'public/' prefix
-    }
-    if (strpos($filePath, '/') !== 0) {
-        $filePath = '/' . $filePath;
-    }
+    $filePath = normalizeAudioPublicPath($track['file_path']);
     
     // Broadcast real-time event
     $broadcaster = new EventBroadcaster();
